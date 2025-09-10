@@ -51,6 +51,41 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     window.addEventListener('beforeunload', () => setUserOnlineStatus(false));
 
+    /* ------------------ Accept / Reject Friend Requests ------------------ */
+    async function acceptRequest(requestId, senderId) {
+        if (!requestId) return;
+
+        // Update request status
+        const { error } = await client
+            .from("requests")
+            .update({ status: "accepted" })
+            .eq("id", requestId);
+
+        if (error) return console.error("Error accepting request:", error.message);
+
+        // Add both users as friends
+        const { error: friendError } = await client.from("friends").insert([
+            { user1_id: currentUserId, user2_id: senderId }
+        ]);
+        if (friendError) console.error("Error adding friend:", friendError.message);
+
+        alert("Friend request accepted!");
+        fetchFriends(); // Refresh friend list
+    }
+
+    async function rejectRequest(requestId) {
+        if (!requestId) return;
+
+        const { error } = await client
+            .from("requests")
+            .update({ status: "rejected" })
+            .eq("id", requestId);
+
+        if (error) return console.error("Error rejecting request:", error.message);
+
+        alert("Friend request rejected!");
+    }
+
     /* ------------------ Messages Popup ------------------ */
     function renderMessages() {
         const messageList = document.getElementById("message-list");
@@ -261,11 +296,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Send Friend Request
-
     async function sendFriendRequest(username) {
         if (!username) return alert("Enter a username.");
 
-        // 1. Get the user ID of the person by username
         const { data: user, error: userError } = await client
             .from("user_profiles")
             .select("user_id")
@@ -283,116 +316,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (requestError) return alert("Failed to send friend request: " + requestError.message);
 
         alert("Friend request sent!");
-    }
-
-
-    /* ------------------ Realtime Messages & Online Status ------------------ */
-
-    function subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator) {
-
-        // Realtime messages
-        client.channel(`chat:${currentUserId}:${friendId}`)
-            .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, payload => {
-                const newMsg = payload.new;
-                if ((newMsg.sender_id === currentUserId && newMsg.receiver_id === friendId) ||
-                    (newMsg.sender_id === friendId && newMsg.receiver_id === currentUserId)) {
-
-                    oldMessages.push(newMsg);
-                    renderChatMessages(chatBox, oldMessages, friendAvatar);
-                }
-            }).subscribe();
-
-        // Typing indicator (shows "Friend is typing..." temporarily)
-        client.channel(`typing:${currentUserId}:${friendId}`)
-            .on("broadcast", { event: "typing" }, payload => {
-                if (payload.userId === friendId) {
-                    typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
-                    setTimeout(async () => {
-                        // After typing, show online/offline
-                        const { data: profile } = await client
-                            .from('user_profiles')
-                            .select('is_online')
-                            .eq('user_id', friendId)
-                            .maybeSingle();
-                        typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
-                    }, 1500);
-                }
-            }).subscribe();
-
-        // Listen for online/offline changes
-        client.channel('user_status')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles' }, payload => {
-                const updatedUser = payload.new;
-                if (updatedUser.user_id === friendId) {
-                    typingIndicator.textContent = updatedUser.is_online ? "Online" : "Offline";
-                }
-            }).subscribe();
-    }
-
-    /* ------------------ Open Chat ------------------ */
-    async function openChat(friendId, friendName, friendAvatar) {
-        const chatContainer = document.querySelector(".chat-area");
-        const sidebar = document.querySelector('.sidebar');
-        if (!chatContainer) return;
-
-        if (window.innerWidth <= 700) {
-            sidebar.style.display = 'none';
-            chatContainer.style.display = 'flex';
-        }
-
-        chatContainer.innerHTML = `
-            <div class="chat-header">
-                <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
-                <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
-                <div>
-                    <h4>${friendName || 'Unknown'}</h4>
-                    <p id="typing-indicator">Online</p>
-                </div>
-            </div>
-            <div class="messages"></div>
-            <div class="chat-input">
-                <input type="text" placeholder="Type a message...">
-                <button disabled class='sendBtn'>➤</button>
-            </div>
-        `;
-
-        const chatBox = chatContainer.querySelector(".messages");
-        const typingIndicator = chatContainer.querySelector("#typing-indicator");
-        const input = chatContainer.querySelector("input");
-        const sendBtn = chatContainer.querySelector(".sendBtn");
-
-        const oldMessages = await fetchMessages(friendId);
-        renderChatMessages(chatBox, oldMessages, friendAvatar);
-
-        subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
-
-        input.addEventListener("input", () => {
-            sendBtn.disabled = !input.value.trim();
-            client.channel(`typing:${currentUserId}:${friendId}`).send({
-                type: "broadcast",
-                event: "typing",
-                payload: { userId: currentUserId, userName: "You" }
-            });
-        });
-
-        async function handleSend() {
-            const content = input.value.trim();
-            if (!content) return;
-            await sendMessage(friendId, content);
-            input.value = "";
-            sendBtn.disabled = true;
-        }
-
-        sendBtn.addEventListener("click", handleSend);
-        input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
-
-        const backBtn = chatContainer.querySelector('.backBtn');
-        if (backBtn) {
-            backBtn.addEventListener('click', () => {
-                sidebar.style.display = 'flex';
-                chatContainer.style.display = 'none';
-            });
-        }
     }
 
     /* ------------------ Button Listener ------------------ */
