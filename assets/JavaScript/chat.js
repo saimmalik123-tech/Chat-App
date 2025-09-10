@@ -261,7 +261,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     /* ------------------ Realtime Messages & Online Status ------------------ */
-    // Realtime messages & online status (typing indicator only)
+    
     function subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator) {
 
         // Realtime messages
