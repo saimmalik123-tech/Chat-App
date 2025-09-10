@@ -1,8 +1,6 @@
 import { client } from "../../supabase.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
-
-    /* ------------------ Current User Avatar ------------------ */
     async function fetchCurrentUserAvatar(profileImageSelector = '.profile-pic') {
         const profileImage = document.querySelector(profileImageSelector);
         if (!profileImage) return;
@@ -16,13 +14,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             .eq("user_id", user.id)
             .maybeSingle();
 
-        let avatarUrl = './assets/icon/download.jpeg';
-        if (!profileError && profile?.profile_image_url) {
-            avatarUrl = profile.profile_image_url;
-        }
+        let avatarUrl = './assets/icon/download.jpeg'; // fallback
+        if (!profileError && profile?.profile_image_url) avatarUrl = profile.profile_image_url;
 
         profileImage.src = avatarUrl;
     }
+
     fetchCurrentUserAvatar();
 
     let currentUserId = null;
@@ -33,121 +30,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         const { data: { user }, error } = await client.auth.getUser();
         if (error || !user) {
             alert("User not logged in");
-            window.location.href = 'signup.html';
             return;
         }
         currentUserId = user.id;
         console.log("Current user ID:", currentUserId);
-
-        // Set user online
-        setUserOnlineStatus(true);
-    }
-
-    /* ------------------ Set User Online/Offline ------------------ */
-    async function setUserOnlineStatus(isOnline) {
-        if (!currentUserId) return;
-        await client.from('user_profiles')
-            .upsert({ user_id: currentUserId, is_online: isOnline }, { onConflict: 'user_id' });
-    }
-    window.addEventListener('beforeunload', () => setUserOnlineStatus(false));
-
-    /* ------------------ Accept / Reject Friend Requests ------------------ */
-    async function acceptRequest(requestId, senderId) {
-        if (!requestId) return;
-
-        const { error } = await client
-            .from("requests")
-            .update({ status: "accepted" })
-            .eq("id", requestId);
-
-        if (error) return console.error("Error accepting request:", error.message);
-
-        const { error: friendError } = await client.from("friends").insert([
-            { user1_id: currentUserId, user2_id: senderId }
-        ]);
-        if (friendError) console.error("Error adding friend:", friendError.message);
-
-        alert("Friend request accepted!");
-        fetchFriends(); // Refresh friend list
-    }
-
-    async function rejectRequest(requestId) {
-        if (!requestId) return;
-
-        const { error } = await client
-            .from("requests")
-            .update({ status: "rejected" })
-            .eq("id", requestId);
-
-        if (error) return console.error("Error rejecting request:", error.message);
-
-        alert("Friend request rejected!");
-    }
-
-    /* ------------------ Open Chat ------------------ */
-    async function openChat(friendId, friendName, friendAvatar) {
-        const chatContainer = document.querySelector(".chat-area");
-        const sidebar = document.querySelector('.sidebar');
-        if (!chatContainer) return;
-
-        if (window.innerWidth <= 700) {
-            sidebar.style.display = 'none';
-            chatContainer.style.display = 'flex';
-        }
-
-        chatContainer.innerHTML = `
-            <div class="chat-header">
-                <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
-                <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
-                <div>
-                    <h4>${friendName || 'Unknown'}</h4>
-                    <p id="typing-indicator">Online</p>
-                </div>
-            </div>
-            <div class="messages"></div>
-            <div class="chat-input">
-                <input type="text" placeholder="Type a message...">
-                <button disabled class='sendBtn'>➤</button>
-            </div>
-        `;
-
-        const chatBox = chatContainer.querySelector(".messages");
-        const typingIndicator = chatContainer.querySelector("#typing-indicator");
-        const input = chatContainer.querySelector("input");
-        const sendBtn = chatContainer.querySelector(".sendBtn");
-
-        const oldMessages = await fetchMessages(friendId);
-        renderChatMessages(chatBox, oldMessages, friendAvatar);
-
-        subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
-
-        input.addEventListener("input", () => {
-            sendBtn.disabled = !input.value.trim();
-            client.channel(`typing:${currentUserId}:${friendId}`).send({
-                type: "broadcast",
-                event: "typing",
-                payload: { userId: currentUserId, userName: "You" }
-            });
-        });
-
-        async function handleSend() {
-            const content = input.value.trim();
-            if (!content) return;
-            await sendMessage(friendId, content);
-            input.value = "";
-            sendBtn.disabled = true;
-        }
-
-        sendBtn.addEventListener("click", handleSend);
-        input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
-
-        const backBtn = chatContainer.querySelector('.backBtn');
-        if (backBtn) {
-            backBtn.addEventListener('click', () => {
-                sidebar.style.display = 'flex';
-                chatContainer.style.display = 'none';
-            });
-        }
     }
 
     /* ------------------ Messages Popup ------------------ */
@@ -164,14 +50,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const li = document.createElement("li");
                 li.className = "message-item";
                 li.innerHTML = `
-                    <img src="${msg.avatar}" alt="User" class="msg-avatar" style="width:30px;height:30px;border-radius:50%;object-fit:cover;">
-                    <div class="message-text">${msg.text}</div>
-                    <div class="message-time">${msg.time}</div>
-                    <div class="message-actions">
-                        <button class="accept-btn">Accept</button>
-                        <button class="reject-btn">Reject</button>
-                    </div>
-                `;
+                <div class="message-text">${msg.text}</div>
+                <div class="message-time">${msg.time}</div>
+                <div class="message-actions">
+                    <button class="accept-btn">Accept</button>
+                    <button class="reject-btn">Reject</button>
+                </div>
+            `;
                 li.querySelector(".accept-btn").addEventListener("click", async () => {
                     await acceptRequest(msg.requestId, msg.senderId);
                     messages.splice(index, 1);
@@ -189,23 +74,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         unreadBadge.textContent = messages.length;
     }
 
-    function addMessage(text, requestId, senderId, avatar) {
+    function addMessage(text, requestId, senderId) {
         if (!messages.some(m => m.requestId === requestId)) {
-            messages.push({
-                text,
-                time: new Date().toLocaleTimeString(),
-                requestId,
-                senderId,
-                avatar
-            });
+            messages.push({ text, time: new Date().toLocaleTimeString(), requestId, senderId });
             renderMessages();
         }
     }
 
-    /* ------------------ Toggle Message Popup ------------------ */
     document.getElementById("message")?.addEventListener("click", () => {
         const popup = document.getElementById("message-popup");
-        if (popup) popup.style.display = popup.style.display === "block" ? "none" : "block";
+        if (popup) {
+            popup.style.display = popup.style.display === "block" ? "none" : "block";
+        }
     });
 
     document.addEventListener("click", (e) => {
@@ -222,7 +102,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const { data: requests, error } = await client
             .from("requests")
-            .select("id, sender_id, status, private_users!requests_sender_id_fkey(name)")
+            .select("id, sender_id, status, user_profiles!requests_sender_id_fkey(user_name)")
             .eq("receiver_id", currentUserId)
             .eq("status", "pending");
 
@@ -231,24 +111,16 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        messages = [];
+        messages = []; // reset old messages
+
         if (requests) {
-            for (const req of requests) {
-                const { data: senderProfile } = await client
-                    .from("user_profiles")
-                    .select("profile_image_url")
-                    .eq("user_id", req.sender_id)
-                    .maybeSingle();
-
-                const avatarUrl = senderProfile?.profile_image_url || "./assets/icon/user.png";
-
+            requests.forEach(req => {
                 addMessage(
-                    `${req.private_users?.name || "Unknown"} sent you a friend request`,
+                    `${req.user_profiles?.user_name || "Unknown"} sent you a friend request`,
                     req.id,
-                    req.sender_id,
-                    avatarUrl
+                    req.sender_id
                 );
-            }
+            });
         }
     }
 
@@ -273,32 +145,117 @@ document.addEventListener("DOMContentLoaded", async () => {
         for (const f of friends) {
             const friendId = f.user1_id === currentUserId ? f.user2_id : f.user1_id;
 
-            const { data: userProfile } = await client
+            const { data: profile } = await client
                 .from("user_profiles")
-                .select("user_name, profile_image_url, is_online")
+                .select("user_name, avatar_url")
                 .eq("user_id", friendId)
                 .maybeSingle();
 
-            const friendName = userProfile?.user_name || "Unknown";
-            const avatarUrl = userProfile?.profile_image_url || "./assets/icon/user.png";
-
             const li = document.createElement("li");
             li.classList.add("chat");
-            li.setAttribute("data-friend-id", friendId);
             li.innerHTML = `
-                <div class="avatar-wrapper" style="position:relative;">
-                    <img src="${avatarUrl}" alt="User" style="object-fit: cover; border-radius:50%;">
-                    ${userProfile?.is_online ? '<span class="online-dot"></span>' : ''}
-                </div>
-                <div>
-                    <h4>${friendName}</h4>
-                </div>
-            `;
+            <img src="${profile?.avatar_url || './assets/icon/user.png'}" alt="User">
+            <div>
+                <h4>${profile?.user_name || 'Unknown'}</h4>
+                <p>Say hi! 👋</p>
+            </div>
+            <span class="time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        `;
 
-            li.addEventListener("click", () => openChat(friendId, friendName, avatarUrl));
+            li.addEventListener("click", () => openChat(li, friendId, profile?.user_name));
             chatList.appendChild(li);
         }
     }
+
+    /* ------------------ Send Friend Request ------------------ */
+    async function sendFriendRequest(username) {
+        if (!username) return alert("Enter a username");
+
+        const { data: userData } = await client
+            .from("user_profiles")
+            .select("user_id,user_name")
+            .eq("user_name", username)
+            .maybeSingle();
+
+        if (!userData) return alert("User not found");
+        if (userData.user_id === currentUserId) return alert("Cannot send request to yourself");
+
+        const { data: existing } = await client
+            .from("requests")
+            .select("*")
+            .or(
+                `and(sender_id.eq.${currentUserId},receiver_id.eq.${userData.user_id}),` +
+                `and(sender_id.eq.${userData.user_id},receiver_id.eq.${currentUserId})`
+            )
+            .maybeSingle();
+
+        if (existing) return alert("Request already exists!");
+
+        await client.from("requests").insert([{
+            sender_id: currentUserId,
+            receiver_id: userData.user_id,
+            status: "pending"
+        }]);
+
+        alert(`Friend request sent to ${userData.user_name}!`);
+        fetchFriendRequests();
+    }
+
+    /* ------------------ Accept / Reject ------------------ */
+    async function acceptRequest(requestId, senderId) {
+        await client.from("requests").update({ status: "accepted" }).eq("id", requestId);
+        await client.from("friends").insert([{ user1_id: currentUserId, user2_id: senderId }]);
+        fetchFriends();
+    }
+
+    async function rejectRequest(requestId) {
+        await client.from("requests").update({ status: "rejected" }).eq("id", requestId);
+    }
+
+    /* ------------------ Open Chat ------------------ */
+    function openChat(li, friendId, friendName) {
+        const chatContainer = document.querySelector(".chat-area");
+        const sidebar = document.querySelector('.sidebar');
+        const chatArea = document.querySelector('.chat-area');
+        const chatLi = document.querySelectorAll('.chat');
+        if (!chatContainer) return;
+
+        chatLi.forEach(chat => {
+            chat.addEventListener('click', () => {
+                chatContainer.innerHTML = `
+        <div class="chat-header">
+            <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
+            <img src="${li.querySelector('img')?.src || ''}" alt="User">
+            <div>
+                <h4>${friendName || 'Unknown'}</h4>
+                <p>Online</p>
+            </div>
+        </div>
+        <div class="messages">
+            <div class="message received">Hello ${friendName || 'User'}! 👋</div>
+        </div>
+        <div class="chat-input">
+            <input type="text" placeholder="Type a message...">
+            <button>➤</button>
+        </div>
+    `;
+
+                const backBtn = chatContainer.querySelector('.backBtn');
+                if (backBtn) {
+                    backBtn.addEventListener('click', () => {
+                        sidebar.style.display = 'flex';
+                        chatArea.style.display = 'none';
+                    });
+                }
+            });
+        });
+    }
+
+    /* ------------------ Button Listener ------------------ */
+    document.querySelector(".submit-friend")?.addEventListener("click", () => {
+        const username = document.querySelector(".friend-input").value.trim();
+        sendFriendRequest(username);
+    });
 
     /* ------------------ Initial Load ------------------ */
     await getCurrentUser();
