@@ -11,7 +11,7 @@ async function signUp() {
         password: signPassword,
         options: {
             data: { name: signName },
-            emailRedirectTo: 'http://127.0.0.1:3002/setupProfile.html',
+            emailRedirectTo: 'http://chatrsaim.netlify.app/setupProfile.html',
         }
     });
 
@@ -50,7 +50,7 @@ signUpBtn?.addEventListener('click', async e => {
 async function checkProfileAndRedirect() {
     const { data: { user }, error: userError } = await client.auth.getUser();
     if (userError || !user) {
-        // alert("User not logged in.");
+        alert("User not logged in.");
         return;
     }
 
