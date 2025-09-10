@@ -109,14 +109,14 @@ const googleSignUpBtn = document.querySelector('.googleSignUpBtn');
 googleSignUpBtn?.addEventListener('click', async e => {
     e.preventDefault();
     googleSignUpBtn.innerHTML = '<div class="loader"></div>';
-    await handleGoogleAuth('http://127.0.0.1:3000/oauthHandler.html');
+    await handleGoogleAuth('http://chatrsaim.netlify.app/oauthHandler.html');
 });
 
 const googleLoginBtn = document.querySelector('.googleLoginBtn');
 googleLoginBtn?.addEventListener('click', async e => {
     e.preventDefault();
     googleLoginBtn.innerHTML = '<div class="loader"></div>';
-    await handleGoogleAuth('http://127.0.0.1:3000/oauthHandler.html');
+    await handleGoogleAuth('http://chatrsaim.netlify.app/oauthHandler.html');
 });
 
 
