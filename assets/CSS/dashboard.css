@@ -285,8 +285,7 @@ nav h2 a {
   border-top: 1px solid var(--input-border);
   width: 100%;
   background: var(--input-bg);
-  bottom: 10px;
-  position: relative;
+  /* bottom: 10px; */
 }
 
 .chat-input input {
