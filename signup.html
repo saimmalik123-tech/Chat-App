@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signup - ChatrSaim</title>
+    <link rel="stylesheet" href="./assets/CSS/sign.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="shortcut icon" href="./assets/icon/fav-icon.png" type="image/x-icon">
+</head>
+
+<body>
+    <header>
+        <nav>
+            <h2><a href="index.html">ChatrSaim</a></h2>
+            <button id="themeToggle">☽</button>
+        </nav>
+    </header>
+
+    <main>
+        <form class="auth-box">
+            <h2>Create Account</h2>
+            <input type="text" placeholder="Full Name" id="name" required>
+            <input type="email" placeholder="Email Address" id="email" required>
+            <input type="password" placeholder="Password" id="password" required>
+            <button type="submit" class="signUpBtn">Sign Up</button>
+
+            <div class="divider"><span>or</span></div>
+
+            <button type="button" class="google-btn googleSignUpBtn">
+                <i class="fab fa-google"></i> Continue with Google
+            </button>
+
+            <p>Already have an account? <a href="login.html">Login</a></p>
+        </form>
+    </main>
+
+    <footer>Created By Saim Malik</footer>
+
+    <script src="https://unpkg.com/@supabase/supabase-js"></script>
+    <script type="module" src="./assets/JavaScript/auth.js"></script>
+    <script src="./assets/JavaScript/main.js"></script>
+</body>
+
+</html>

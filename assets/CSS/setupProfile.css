@@ -1,0 +1,136 @@
+@import url("./main.css");
+
+main h1 {
+  font-size: 1.8rem;
+  margin-bottom: 8px;
+}
+
+main p {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  max-width: 400px;
+}
+
+.profile-box {
+  background: var(--input-bg);
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 400px;
+  width: 100%;
+  animation: fadeUp 0.8s ease-in;
+}
+
+.avatar-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.avatar-upload img {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--accent);
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.avatar-upload img:hover {
+  transform: scale(1.05);
+}
+
+.avatar-upload span {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.profile-box input,
+.profile-box textarea {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--input-border);
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 1rem;
+  width: 100%;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.profile-box textarea {
+  resize: none;
+  height: 80px;
+}
+
+.profile-box input:focus,
+.profile-box textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3);
+  outline: none;
+}
+
+.profile-box button {
+  margin-top: 10px;
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+  main h1 {
+    font-size: 1.6rem;
+  }
+
+  main p {
+    font-size: 0.95rem;
+  }
+
+  .profile-box {
+    padding: 20px;
+    gap: 14px;
+  }
+
+  .avatar-upload img {
+    width: 90px;
+    height: 90px;
+  }
+}
+
+@media (max-width: 480px) {
+  main h1 {
+    font-size: 1.4rem;
+  }
+
+  main p {
+    font-size: 0.9rem;
+  }
+
+  .profile-box {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .avatar-upload img {
+    width: 80px;
+    height: 80px;
+  }
+
+  .profile-box input,
+  .profile-box textarea {
+    font-size: 0.9rem;
+    padding: 10px;
+  }
+
+  .profile-box button {
+    width: 100%;
+    max-width: 260px;
+    padding: 10px;
+    font-size: 0.9rem;
+    align-self: center;
+  }
+}

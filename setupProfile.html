@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Profile - ChatrSaim</title>
+    <link rel="stylesheet" href="./assets/CSS/setupProfile.css">
+    <link rel="shortcut icon" href="./assets/icon/fav-icon.png" type="image/x-icon">
+</head>
+
+<body>
+    <header>
+        <nav>
+            <h2><a href="index.html">ChatrSaim</a></h2>
+            <button id="themeToggle">☽</button>
+        </nav>
+    </header>
+
+    <main>
+        <h1>Setup Your Profile</h1>
+        <p>Complete your profile to start connecting with friends and communities on ChatrSaim.</p>
+
+        <form class="profile-box">
+            <div class="avatar-upload">
+                <label for="avatar">
+                    <img id="avatarPreview" src="./assets/icon/download.jpeg" alt="Avatar">
+                    <span>Upload Avatar</span>
+                </label>
+                <input type="file" id="avatar" accept="image/*" hidden>
+            </div>
+
+            <input type="text" id="name" placeholder="Full Name" required>
+            <input type="text" id="username" placeholder="Username" required>
+            <textarea id="bio" placeholder="Write a short bio..."></textarea>
+
+            <button type="submit" id="setUpBtn">Save Profile</button>
+        </form>
+    </main>
+
+    <footer>Created By Saim Malik</footer>
+
+    <script src="https://unpkg.com/@supabase/supabase-js"></script>
+    <script src="./assets/JavaScript/main.js"></script>
+    <script type="module" src="./assets/JavaScript/auth.js"></script>
+</body>
+
+</html>

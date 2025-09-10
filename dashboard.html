@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatrSaim - Dashboard</title>
+    <link rel="stylesheet" href="./assets/CSS/dashboard.css">
+    <link rel="shortcut icon" href="./assets/icon/fav-icon.png" type="image/x-icon">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css"
+        integrity="sha512-DxV+EoADOkOygM4IR9yXP8Sb2qwgidEmeqAEmDKIOfPRQZOWbXCzLC6vjbZyy0vPisbH2SyW27+ddLVCN+OMzQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+
+<body>
+    <header>
+        <nav>
+            <h2><a href="index.html">ChatrSaim</a></h2>
+            <button id="themeToggle">☽</button>
+        </nav>
+    </header>
+
+    <main class="chat-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <img src="./assets/icon/download.jpeg" alt="Profile" class="profile-pic">
+                <input type="text" placeholder="Search Friends">
+                <button class="addFriends">Add Friends</button>
+            </div>
+            <ul class="chat-list">
+                <!-- <li class="chat">
+                    <img src="./assets/icon/user.png" alt="User">
+                    <div>
+                        <h4>John Doe</h4>
+                        <p>Hey! How are you?</p>
+                    </div>
+                    <span class="time">12:30</span>
+                    <span class="unread">3</span>
+                </li>
+
+                <li class="chat">
+                    <img src="./assets/icon/user.png" alt="User">
+                    <div>
+                        <h4>Jane Smith</h4>
+                        <p>See you tomorrow 👋</p>
+                    </div>
+                    <span class="time">11:45</span>
+                </li>
+
+                <li class="chat">
+                    <img src="./assets/icon/user2.png" alt="User">
+                    <div>
+                        <h4>Mike Johnson</h4>
+                        <p>Are you coming to the meeting?</p>
+                    </div>
+                    <span class="time">10:15</span>
+                    <span class="unread">1</span>
+                </li>
+
+                <li class="chat">
+                    <img src="./assets/icon/user3.png" alt="User">
+                    <div>
+                        <h4>Emily Clark</h4>
+                        <p>Thanks for your help!</p>
+                    </div>
+                    <span class="time">09:50</span>
+                </li>
+
+                <li class="chat">
+                    <img src="./assets/icon/user4.png" alt="User">
+                    <div>
+                        <h4>David Lee</h4>
+                        <p>Let’s catch up later.</p>
+                    </div>
+                    <span class="time">08:30</span>
+                    <span class="unread">2</span>
+                </li>
+
+                <li class="chat">
+                    <img src="./assets/icon/user5.png" alt="User">
+                    <div>
+                        <h4>Sophia Brown</h4>
+                        <p>Good morning! ☀️</p>
+                    </div>
+                    <span class="time">07:20</span>
+                </li> -->
+
+            </ul>
+        </aside>
+
+        <!-- Chat Area -->
+        <section class="chat-area">
+            <div class="default">
+                <i class="fa-solid fa-comment-dots"></i>
+                <p>Start a conversation by typing a message above and connect with your friends instantly!</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal -->
+    <div id="friendModal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Add a Friend</h3>
+            <input type="text" class="friend-input" placeholder="Enter username">
+            <button class="submit-friend">Send Request</button>
+        </div>
+    </div>
+
+    <div id="message">
+        ✉︎
+        <span id="unread-count">0</span>
+    </div>
+
+    <!-- Popup for messages -->
+    <div id="message-popup">
+        <ul id="message-list">
+            No Request!
+        </ul>
+    </div>
+    
+    <script src="https://unpkg.com/@supabase/supabase-js"></script>
+    <script src="./assets/JavaScript/main.js"></script>
+    <script type="module" src="./assets/JavaScript/chat.js"></script>
+</body>
+
+</html>
