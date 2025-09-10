@@ -260,8 +260,35 @@ document.addEventListener("DOMContentLoaded", async () => {
         chatBox.scrollTop = chatBox.scrollHeight;
     }
 
+    // Send Friend Request
+
+    async function sendFriendRequest(username) {
+        if (!username) return alert("Enter a username.");
+
+        // 1. Get the user ID of the person by username
+        const { data: user, error: userError } = await client
+            .from("user_profiles")
+            .select("user_id")
+            .eq("user_name", username)
+            .maybeSingle();
+
+        if (userError || !user) return alert("User not found.");
+
+        const receiverId = user.user_id;
+
+        // 2. Insert friend request into 'requests' table
+        const { error: requestError } = await client
+            .from("requests")
+            .insert([{ sender_id: currentUserId, receiver_id: receiverId, status: "pending" }]);
+
+        if (requestError) return alert("Failed to send friend request: " + requestError.message);
+
+        alert("Friend request sent!");
+    }
+
+
     /* ------------------ Realtime Messages & Online Status ------------------ */
-    
+
     function subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator) {
 
         // Realtime messages
@@ -302,7 +329,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             }).subscribe();
     }
-    
+
     /* ------------------ Open Chat ------------------ */
     async function openChat(friendId, friendName, friendAvatar) {
         const chatContainer = document.querySelector(".chat-area");
