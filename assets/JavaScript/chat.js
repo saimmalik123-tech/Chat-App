@@ -276,7 +276,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const receiverId = user.user_id;
 
-        // 2. Insert friend request into 'requests' table
         const { error: requestError } = await client
             .from("requests")
             .insert([{ sender_id: currentUserId, receiver_id: receiverId, status: "pending" }]);
