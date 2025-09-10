@@ -55,7 +55,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function acceptRequest(requestId, senderId) {
         if (!requestId) return;
 
-        // Update request status
         const { error } = await client
             .from("requests")
             .update({ status: "accepted" })
@@ -63,7 +62,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (error) return console.error("Error accepting request:", error.message);
 
-        // Add both users as friends
         const { error: friendError } = await client.from("friends").insert([
             { user1_id: currentUserId, user2_id: senderId }
         ]);
@@ -84,6 +82,72 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (error) return console.error("Error rejecting request:", error.message);
 
         alert("Friend request rejected!");
+    }
+
+    /* ------------------ Open Chat ------------------ */
+    async function openChat(friendId, friendName, friendAvatar) {
+        const chatContainer = document.querySelector(".chat-area");
+        const sidebar = document.querySelector('.sidebar');
+        if (!chatContainer) return;
+
+        if (window.innerWidth <= 700) {
+            sidebar.style.display = 'none';
+            chatContainer.style.display = 'flex';
+        }
+
+        chatContainer.innerHTML = `
+            <div class="chat-header">
+                <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
+                <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
+                <div>
+                    <h4>${friendName || 'Unknown'}</h4>
+                    <p id="typing-indicator">Online</p>
+                </div>
+            </div>
+            <div class="messages"></div>
+            <div class="chat-input">
+                <input type="text" placeholder="Type a message...">
+                <button disabled class='sendBtn'>➤</button>
+            </div>
+        `;
+
+        const chatBox = chatContainer.querySelector(".messages");
+        const typingIndicator = chatContainer.querySelector("#typing-indicator");
+        const input = chatContainer.querySelector("input");
+        const sendBtn = chatContainer.querySelector(".sendBtn");
+
+        const oldMessages = await fetchMessages(friendId);
+        renderChatMessages(chatBox, oldMessages, friendAvatar);
+
+        subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
+
+        input.addEventListener("input", () => {
+            sendBtn.disabled = !input.value.trim();
+            client.channel(`typing:${currentUserId}:${friendId}`).send({
+                type: "broadcast",
+                event: "typing",
+                payload: { userId: currentUserId, userName: "You" }
+            });
+        });
+
+        async function handleSend() {
+            const content = input.value.trim();
+            if (!content) return;
+            await sendMessage(friendId, content);
+            input.value = "";
+            sendBtn.disabled = true;
+        }
+
+        sendBtn.addEventListener("click", handleSend);
+        input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
+
+        const backBtn = chatContainer.querySelector('.backBtn');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                sidebar.style.display = 'flex';
+                chatContainer.style.display = 'none';
+            });
+        }
     }
 
     /* ------------------ Messages Popup ------------------ */
@@ -217,20 +281,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const friendName = userProfile?.user_name || "Unknown";
             const avatarUrl = userProfile?.profile_image_url || "./assets/icon/user.png";
-            const isOnline = userProfile?.is_online ? "Online" : "Offline";
-
-            const { data: lastMsgData } = await client
-                .from("messages")
-                .select("*")
-                .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
-                .order("created_at", { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-            const lastMessageText = lastMsgData?.content || "Say hi! 👋";
-            const lastMessageTime = lastMsgData
-                ? new Date(lastMsgData.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
             const li = document.createElement("li");
             li.classList.add("chat");
@@ -242,87 +292,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
                 <div>
                     <h4>${friendName}</h4>
-                    <p class="last-message" title="${lastMessageText}">${lastMessageText}</p>
                 </div>
-                <span class="time">${lastMessageTime}</span>
             `;
 
             li.addEventListener("click", () => openChat(friendId, friendName, avatarUrl));
             chatList.appendChild(li);
         }
     }
-
-    /* ------------------ Send Message ------------------ */
-    async function sendMessage(friendId, content) {
-        if (!content.trim()) return;
-
-        const { error } = await client.from("messages").insert([{
-            sender_id: currentUserId,
-            receiver_id: friendId,
-            content
-        }]);
-        if (error) console.error("Error sending message:", error.message);
-    }
-
-    /* ------------------ Fetch Messages ------------------ */
-    async function fetchMessages(friendId) {
-        const { data, error } = await client
-            .from("messages")
-            .select("*")
-            .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
-            .order("created_at", { ascending: true });
-
-        if (error) {
-            console.error("Error fetching messages:", error);
-            return [];
-        }
-        return data || [];
-    }
-
-    /* ------------------ Render Chat Messages ------------------ */
-    function renderChatMessages(chatBox, msgs, friendAvatar) {
-        chatBox.innerHTML = "";
-        msgs.forEach(msg => {
-            const isMe = msg.sender_id === currentUserId;
-            const msgDiv = document.createElement("div");
-            msgDiv.className = `message ${isMe ? "sent" : "received"}`;
-            msgDiv.innerHTML = `
-                ${!isMe ? `<img src="${friendAvatar}" class="msg-avatar" style="width:25px;height:25px;border-radius:50%;margin-right:6px;">` : ""}
-                <span>${msg.content}</span>
-            `;
-            chatBox.appendChild(msgDiv);
-        });
-        chatBox.scrollTop = chatBox.scrollHeight;
-    }
-
-    // Send Friend Request
-    async function sendFriendRequest(username) {
-        if (!username) return alert("Enter a username.");
-
-        const { data: user, error: userError } = await client
-            .from("user_profiles")
-            .select("user_id")
-            .eq("user_name", username)
-            .maybeSingle();
-
-        if (userError || !user) return alert("User not found.");
-
-        const receiverId = user.user_id;
-
-        const { error: requestError } = await client
-            .from("requests")
-            .insert([{ sender_id: currentUserId, receiver_id: receiverId, status: "pending" }]);
-
-        if (requestError) return alert("Failed to send friend request: " + requestError.message);
-
-        alert("Friend request sent!");
-    }
-
-    /* ------------------ Button Listener ------------------ */
-    document.querySelector(".submit-friend")?.addEventListener("click", () => {
-        const username = document.querySelector(".friend-input").value.trim();
-        sendFriendRequest(username);
-    });
 
     /* ------------------ Initial Load ------------------ */
     await getCurrentUser();
