@@ -638,13 +638,9 @@ nav h2 a {
   .sidebar {
     width: 100%;
   }
-  .chat-area {
-    width: 100%;
-    display: none;
-  }
-  .chat-area.active {
+  /* .chat-area.active {
     display: flex;
-  }
+  } */
   .backBtn {
     display: flex;
   }
