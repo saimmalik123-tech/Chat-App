@@ -243,7 +243,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 <span class="time">${lastMessageTime}</span>
             `;
 
-            li.addEventListener("click", () => openChat(friendId, friendName, avatarUrl));
+            li.addEventListener("click", () => {
+                openChat(friendId, friendName, avatarUrl);
+                document.querySelector('#message-popup').style.display = 'none';
+            });
             chatList.appendChild(li);
         }
     }

@@ -346,7 +346,8 @@ nav h2 a {
 }
 
 #addFriendsSVG{
-  font-size: 2rem;
+  width: 32px;
+  height: 32px;
   filter: invert(1);
 }
 
