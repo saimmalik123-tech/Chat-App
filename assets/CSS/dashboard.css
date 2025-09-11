@@ -340,7 +340,7 @@ nav h2 a {
   padding: 12px;
   border-top: 1px solid var(--input-border);
   background: var(--input-bg);
-  position: sticky;
+  position: fixed;
   bottom: 0;
   width: 100%;
 }
@@ -610,6 +610,24 @@ nav h2 a {
 }
 
 @media (max-width: 768px) {
+  .chat-input {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    z-index: 100;
+    padding: 10px;
+    box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .chat-area {
+    padding-bottom: 70px;
+  }
+
+  .messages {
+    overflow-y: scroll;
+    max-height: calc(100vh - 64px - 70px);
+  }
   .sidebar {
     width: 100%;
   }
