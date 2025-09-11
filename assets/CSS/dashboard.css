@@ -18,6 +18,12 @@
   --footer-bg: #f1f5f9;
 }
 
+body,html{
+  height: 100vh;
+  width: 100vh;
+  overflow: hidden;
+}
+
 body.dark {
   --bg: #0f172a;
   --text-primary: #f8fafc;
@@ -38,7 +44,7 @@ body {
   display: flex;
   flex-direction: column;
   transition: background-color 0.5s ease, color 0.5s ease;
-  /* overflow: hidden; */
+  overflow: auto;
 }
 
 header nav {
@@ -507,7 +513,7 @@ nav h2 a {
   position: absolute;
   width: 70px;
   height: 70px;
-  bottom: 20px;
+  bottom: 70px;
   left: 20px;
   border-radius: 50%;
   background-color: var(--bg);
