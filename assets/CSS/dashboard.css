@@ -253,7 +253,7 @@ nav h2 a {
 
 #message-popup {
   display: none;
-  position: relative;
+  position: absolute;
   top: 80px;
   right: 20px;
   width: 320px;
@@ -346,8 +346,8 @@ nav h2 a {
 }
 
 #addFriendsSVG {
-  width: 32px;
-  height: 32px;
+  width: 20px;
+  height: 20px;
   filter: invert(1);
 }
 
@@ -438,7 +438,7 @@ nav h2 a {
 .addFriends {
   background: var(--accent);
   color: #fff;
-  padding: 10px 20px;
+  padding: 5px 15px;
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -627,7 +627,7 @@ nav h2 a {
     flex: 1 1 auto;
     min-height: 0;
     width: 100%;
-    height: calc(100vh - 60px);
+    height: calc(100vh - 100px);
   }
 
   .messages {
