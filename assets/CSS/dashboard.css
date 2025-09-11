@@ -345,6 +345,11 @@ nav h2 a {
   width: 100%;
 }
 
+#addFriendsSVG{
+  font-size: 2rem;
+  filter: invert(1);
+}
+
 .chat-input input {
   flex: 1;
   padding: 12px;
