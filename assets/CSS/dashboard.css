@@ -610,31 +610,30 @@ nav h2 a {
 }
 
 @media (max-width: 768px) {
-  .chat-area {
-    display: flex;
+  .chat-container {
     flex-direction: column;
-    height: 100vh;
+    height: 100%;
+  }
+
+  .chat-area {
+    display: flex !important;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   .messages {
     flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
-    padding-bottom: 10px;
+    padding: 10px;
   }
 
   .chat-input {
     position: relative;
-    bottom: auto;
+    bottom: 0;
     width: 100%;
-    padding: 10px;
-    border-top: 1px solid var(--input-border);
-    background: var(--input-bg);
     flex-shrink: 0;
-  }
-
-  .chat-input input {
-    width: 100%;
-    box-sizing: border-box;
   }
   .sidebar {
     width: 100%;
