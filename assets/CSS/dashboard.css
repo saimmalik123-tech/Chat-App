@@ -340,7 +340,7 @@ nav h2 a {
   padding: 12px;
   border-top: 1px solid var(--input-border);
   background: var(--input-bg);
-  position: fixed;
+  position: sticky;
   bottom: 0;
   width: 100%;
 }
