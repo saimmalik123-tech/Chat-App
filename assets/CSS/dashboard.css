@@ -634,13 +634,12 @@ nav h2 a {
     bottom: 0;
     width: 100%;
     flex-shrink: 0;
+    padding-bottom: env(safe-area-inset-bottom);
   }
   .sidebar {
     width: 100%;
   }
-  /* .chat-area.active {
-    display: flex;
-  } */
+
   .backBtn {
     display: flex;
   }
