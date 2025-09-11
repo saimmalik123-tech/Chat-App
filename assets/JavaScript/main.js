@@ -57,7 +57,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const input = document.querySelector('.chat-input input');
 
-    input.addEventListener('focus', () => {
+    input?.addEventListener('focus', () => {
         setTimeout(() => {
             input.scrollIntoView({ behavior: 'smooth', block: 'end' });
         }, 300);
