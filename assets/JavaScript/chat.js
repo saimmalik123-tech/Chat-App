@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function getCurrentUser() {
         const { data: { user }, error } = await client.auth.getUser();
         if (error || !user) {
-            alert("User not logged in");
+            showPopup("User not logged in", "error");
             window.location.href = 'signup.html';
             return;
         }
@@ -53,7 +53,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (updateError) {
                 console.error("Error updating request:", updateError.message);
-                return alert("Failed to accept request.");
+                return showPopup("Failed to accept request.");
             }
 
             const { error: insertError } = await client
@@ -62,10 +62,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (insertError) {
                 console.error("Error inserting into friends:", insertError.message);
-                return alert("Failed to add friend.");
+                return showPopup("Failed to add friend.");
             }
 
-            alert("Friend request accepted!");
+            showPopup("Friend request accepted!", "success");
             fetchFriends();
 
         } catch (err) {
@@ -294,7 +294,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Send Friend Request
 
     async function sendFriendRequest(username) {
-        if (!username) return alert("Enter a username.");
+        if (!username) return showPopup("Enter a username.");
 
         // 1. Get the user ID of the person by username
         const { data: user, error: userError } = await client
@@ -303,7 +303,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             .eq("user_name", username)
             .maybeSingle();
 
-        if (userError || !user) return alert("User not found.");
+        if (userError || !user) return showPopup("User not found.");
 
         const receiverId = user.user_id;
 
@@ -311,9 +311,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             .from("requests")
             .insert([{ sender_id: currentUserId, receiver_id: receiverId, status: "pending" }]);
 
-        if (requestError) return alert("Failed to send friend request: " + requestError.message);
+        if (requestError) return showPopup("Failed to send friend request: " + requestError.message);
 
-        alert("Friend request sent!");
+        showPopup("Friend request sent!");
     }
 
 
@@ -431,6 +431,23 @@ document.addEventListener("DOMContentLoaded", async () => {
         const username = document.querySelector(".friend-input").value.trim();
         sendFriendRequest(username);
     });
+
+    // Modal PopUp
+
+    function showPopup(message, type = "info") {
+        const popup = document.getElementById("popup");
+        const msgBox = document.getElementById("popup-message");
+        popup.className = `popup ${type}`; // add type (success, error, info)
+        msgBox.textContent = message;
+        popup.classList.remove("hidden");
+
+        setTimeout(() => popup.classList.add("hidden"), 3000);
+    }
+
+    document.querySelector(".popup-close").addEventListener("click", () => {
+        document.getElementById("popup").classList.add("hidden");
+    });
+
 
     /* ------------------ Initial Load ------------------ */
     await getCurrentUser();

@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Google Auth Handler</title>
+    <link rel="stylesheet" href="./assets/CSS/dashboard.css">
 
     <script src="https://unpkg.com/@supabase/supabase-js"></script>
     <script type="module">
@@ -13,7 +14,7 @@
             const { data: { user }, error } = await client.auth.getUser();
 
             if (error || !user) {
-                alert("Google login failed.");
+                showPopup("Google login failed.");
                 window.location.href = "login.html";
                 return;
             }
@@ -28,7 +29,7 @@
                 .maybeSingle();
 
             if (checkError) {
-                alert("Error checking user: " + checkError.message);
+                showPopup("Error checking user: " + checkError.message);
                 return;
             }
 
@@ -42,7 +43,7 @@
                 .insert([{ name, email }]);
 
             if (insertError) {
-                alert("Error saving to table: " + insertError.message);
+                showPopup("Error saving to table: " + insertError.message);
                 return;
             }
 
@@ -51,10 +52,19 @@
 
         handleGoogleAuth();
     </script>
+    <script src="./assets/JavaScript/chat.js""></script>
 </head>
 
 <body>
     <p>Processing Google login...</p>
+
+    <!-- Popup Container -->
+    <div id=" popup" class="popup hidden">
+        <div class="popup-content">
+            <span class="popup-close">&times;</span>
+            <p id="popup-message"></p>
+        </div>
+    </div>
 </body>
 
 </html>
