@@ -296,7 +296,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function sendFriendRequest(username) {
         if (!username) return showPopup("Enter a username.");
 
-        // 1. Get the user ID of the person by username
         const { data: user, error: userError } = await client
             .from("user_profiles")
             .select("user_id")
@@ -333,7 +332,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             }).subscribe();
 
-        // Typing indicator (shows "Friend is typing..." temporarily)
         client.channel(`typing:${currentUserId}:${friendId}`)
             .on("broadcast", { event: "typing" }, payload => {
                 if (payload.userId === friendId) {
@@ -350,7 +348,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             }).subscribe();
 
-        // Listen for online/offline changes
         client.channel('user_status')
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles' }, payload => {
                 const updatedUser = payload.new;
