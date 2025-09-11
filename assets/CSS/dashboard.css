@@ -24,7 +24,7 @@ body {
   height: 100%;
   background-color: var(--bg);
   color: var(--text-primary);
-  overflow: hidden;
+  overflow: auto;
 }
 
 body {
@@ -340,6 +340,8 @@ nav h2 a {
   padding: 12px;
   border-top: 1px solid var(--input-border);
   background: var(--input-bg);
+  position: sticky;
+  bottom: 0;
   width: 100%;
 }
 
@@ -636,8 +638,10 @@ nav h2 a {
   }
 
   .chat-input {
+    position: sticky;
+    bottom: 0;
     width: 100%;
-    height: calc(100dvh - 60px);
+    flex-shrink: 0;
     padding-bottom: env(safe-area-inset-bottom);
     background: var(--bg);
   }
