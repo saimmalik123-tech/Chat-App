@@ -639,7 +639,7 @@ nav h2 a {
 
   .chat-input {
     position: sticky;
-    bottom: 0;
+    bottom: 20px;
     width: 100%;
     flex-shrink: 0;
     padding-bottom: env(safe-area-inset-bottom);
