@@ -55,12 +55,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Mobile
 
-    const input = document.querySelector('.chat-input');
+    const inputField = document.querySelector('.chat-input input');
 
-    input?.addEventListener('focus', () => {
+    inputField?.addEventListener('focus', () => {
         setTimeout(() => {
-            input.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            inputField.scrollIntoView({
+                behavior: 'smooth',
+                block: 'end'
+            });
         }, 300);
     });
+
 
 });
