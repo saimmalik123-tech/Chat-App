@@ -44,8 +44,6 @@ document.addEventListener("DOMContentLoaded", () => {
             contactCon.style.display = 'flex';
             chatContainer.style.display = 'none';
             chatContainer.classList.add('width');
-            const msg = document.getElementById("message");
-            if (msg) msg.style.display = 'none';
         } else {
             contactCon.style.display = 'flex';
             chatContainer.style.display = 'flex';

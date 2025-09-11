@@ -43,6 +43,37 @@ document.addEventListener("DOMContentLoaded", async () => {
         setUserOnlineStatus(true);
     }
 
+    /* ------------------ Accept Friend Request ------------------ */
+    async function acceptRequest(requestId, senderId) {
+        try {
+            const { error: updateError } = await client
+                .from("requests")
+                .update({ status: "accepted" })
+                .eq("id", requestId);
+
+            if (updateError) {
+                console.error("Error updating request:", updateError.message);
+                return alert("Failed to accept request.");
+            }
+
+            const { error: insertError } = await client
+                .from("friends")
+                .insert([{ user1_id: currentUserId, user2_id: senderId }]);
+
+            if (insertError) {
+                console.error("Error inserting into friends:", insertError.message);
+                return alert("Failed to add friend.");
+            }
+
+            alert("Friend request accepted!");
+            fetchFriends();
+
+        } catch (err) {
+            console.error("Unexpected error:", err.message);
+        }
+    }
+
+
     /* ------------------ Set User Online/Offline ------------------ */
     async function setUserOnlineStatus(isOnline) {
         if (!currentUserId) return;
