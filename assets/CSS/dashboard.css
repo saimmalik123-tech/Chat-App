@@ -638,7 +638,7 @@ nav h2 a {
   }
 
   .chat-input {
-    position: relative;
+    position: sticky;
     bottom: 0;
     width: 100%;
     flex-shrink: 0;

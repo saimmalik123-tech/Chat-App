@@ -245,7 +245,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             li.addEventListener("click", () => {
                 openChat(friendId, friendName, avatarUrl);
-                document.querySelector('#message-popup').classList.add("hidden");
+                document.querySelector('#message').classList.add("hidden");
             });
             chatList.appendChild(li);
         }
