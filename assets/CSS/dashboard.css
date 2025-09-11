@@ -616,7 +616,7 @@ nav h2 a {
   }
 
   .chat-area {
-    display: flex !important;
+    display: none !important;
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;
