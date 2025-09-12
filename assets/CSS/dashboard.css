@@ -654,7 +654,7 @@ emoji-picker {
   }
 
   .chat-area {
-    display: flex;
+    display: none;
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;
