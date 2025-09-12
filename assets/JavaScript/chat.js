@@ -291,7 +291,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const { data, error } = await client
                 .from("messages")
-                .update({ seen: true, updated_at: new Date().toISOString() })
+                .update({ seen: true})
                 .eq("sender_id", friendId)
                 .eq("receiver_id", currentUserId)
                 .eq("seen", false)
@@ -408,7 +408,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     try {
                         const { error } = await client
                             .from("messages")
-                            .update({ seen: true, updated_at: new Date().toISOString() })
+                            .update({ seen: true})
                             .eq("id", newMsg.id);
 
                         if (error) console.error("Error marking single incoming message seen:", error.message);
