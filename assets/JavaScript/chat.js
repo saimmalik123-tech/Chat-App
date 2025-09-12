@@ -309,22 +309,35 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
     /* ------------------ Mark Messages as Seen ------------------ */
-    async function markMessagesAsSeen(friendId) {
+    async function markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar) {
         if (!currentUserId) return;
         try {
-            const { error } = await client
+            const { data, error } = await client
                 .from("messages")
                 .update({ seen: true })
                 .eq("receiver_id", currentUserId)
                 .eq("sender_id", friendId)
                 .eq("seen", false);
 
-            if (error) console.error("Error marking messages as seen:", error.message);
-            else console.log(`Messages from ${friendId} marked as seen.`);
+            if (error) {
+                console.error("Error marking messages as seen:", error.message);
+            } else {
+                console.log(`Messages from ${friendId} marked as seen ✓✓`);
+
+                // Update local array and UI
+                if (data && data.length) {
+                    data.forEach(msg => {
+                        const idx = oldMessages.findIndex(m => m.id === msg.id);
+                        if (idx !== -1) oldMessages[idx].seen = true;
+                    });
+                    renderChatMessages(chatBox, oldMessages, friendAvatar);
+                }
+            }
         } catch (err) {
             console.error("Unexpected error marking messages as seen:", err.message);
         }
     }
+
 
 
     /* ------------------ Fetch Messages ------------------ */
@@ -348,10 +361,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             const isMe = msg.sender_id === currentUserId;
             const msgDiv = document.createElement("div");
             msgDiv.className = `message ${isMe ? "sent" : "received"}`;
-
-            if (msg.seen && isMe) {
-                msgDiv.classList.add("seen");
-            }
 
             msgDiv.innerHTML = `
             ${!isMe ? `<img src="${friendAvatar}" class="msg-avatar" style="width:25px;height:25px;border-radius:50%;margin-right:6px;">` : ""}
@@ -505,12 +514,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         const sendBtn = chatContainer.querySelector(".sendBtn");
 
         const oldMessages = await fetchMessages(friendId);
-
         renderChatMessages(chatBox, oldMessages, friendAvatar);
 
         subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
-        await markMessagesAsSeen(friendId);
+        await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
 
         input.addEventListener("input", () => {
             sendBtn.disabled = !input.value.trim();
