@@ -279,7 +279,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             li.addEventListener("click", () => {
                 openChat(friendId, friendName, avatarUrl);
-                if (innerWidth <= 700) {
+                if (innerWidth <= 768) {
                     document.querySelector('#message').classList.add("hidden");
                 }
             });
@@ -537,40 +537,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     const typingIndicator = chatContainer.querySelector("#typing-indicator");
     const input = chatContainer.querySelector("input");
     const sendBtn = chatContainer.querySelector(".sendBtn");
-    const emojiBtn = chatContainer.querySelector(".emojiBtn");
-    const fileBtn = chatContainer.querySelector(".fileBtn");
-
-    // Initialize Emoji Picker
-    const picker = document.createElement("emoji-picker");
-    picker.style.position = "absolute";
-    picker.style.bottom = "60px";
-    picker.style.right = "10px";
-    picker.style.display = "none";
-    chatContainer.appendChild(picker);
-
-    emojiBtn.addEventListener("click", () => {
-        picker.style.display = picker.style.display === "none" ? "block" : "none";
-    });
-
-    picker.addEventListener("emoji-click", event => {
-        input.value += event.detail.unicode;
-        sendBtn.disabled = !input.value.trim();
-    });
-
-    // File upload
-    fileBtn.addEventListener("click", () => {
-        const fileInput = document.createElement("input");
-        fileInput.type = "file";
-        fileInput.accept = "*/*";
-        fileInput.click();
-        fileInput.onchange = async () => {
-            if (fileInput.files.length > 0) {
-                const file = fileInput.files[0];
-                console.log("File selected:", file.name);
-                showPopup(`File selected: ${file.name}`, "success");
-            }
-        };
-    });
 
     const oldMessages = await fetchMessages(friendId);
     renderChatMessages(chatBox, oldMessages, friendAvatar);

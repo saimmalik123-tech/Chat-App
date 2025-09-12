@@ -40,7 +40,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function smallScreen() {
         if (!contactCon || !chatContainer) return;
-        if (window.innerWidth <= 700) {
+        if (window.innerWidth <= 768) {
             contactCon.style.display = 'flex';
             chatContainer.style.display = 'none';
             chatContainer.classList.add('width');
