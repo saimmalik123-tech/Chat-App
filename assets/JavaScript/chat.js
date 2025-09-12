@@ -507,9 +507,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
-        await markMessagesAsSeen(friendId);
+        await markSingleMessageAsSeen(friendId);
 
-        // 5) Keep existing typing/send handlers
         input.addEventListener("input", () => {
             sendBtn.disabled = !input.value.trim();
             client.channel(`typing:${currentUserId}:${friendId}`).send({
