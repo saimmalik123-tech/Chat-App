@@ -309,17 +309,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
     /* ------------------ Mark Messages as Seen ------------------ */
-    async function markSingleMessageAsSeen(messageId) {
+    async function markMessagesAsSeen(friendId) {
+        if (!currentUserId) return;
         try {
             const { error } = await client
                 .from("messages")
                 .update({ seen: true })
-                .eq("id", messageId);
+                .eq("receiver_id", currentUserId)
+                .eq("sender_id", friendId)
+                .eq("seen", false);
 
-            if (error) console.error("Error marking message seen:", error.message);
-            else console.log("Message marked as seen:", messageId);
+            if (error) console.error("Error marking messages as seen:", error.message);
+            else console.log(`Messages from ${friendId} marked as seen.`);
         } catch (err) {
-            console.error("Unexpected error marking message seen:", err.message);
+            console.error("Unexpected error marking messages as seen:", err.message);
         }
     }
 
@@ -507,7 +510,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
-        await markSingleMessageAsSeen(friendId);
+        await markMessagesAsSeen(friendId);
 
         input.addEventListener("input", () => {
             sendBtn.disabled = !input.value.trim();
