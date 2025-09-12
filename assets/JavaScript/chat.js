@@ -265,6 +265,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (error) console.error("Error sending message:", error.message);
     }
 
+    /* ------------------ Mark Messages as Seen ------------------ */
+    async function markMessagesAsSeen(friendId) {
+        const { error } = await client
+            .from("messages")
+            .update({ seen: true })
+            .eq("sender_id", friendId)        // messages sent by friend
+            .eq("receiver_id", currentUserId) // received by me
+            .eq("seen", false);               // only unseen ones
+
+        if (error) console.error("Error marking seen:", error.message);
+    }
+
+
     /* ------------------ Fetch Messages ------------------ */
     async function fetchMessages(friendId) {
         const { data, error } = await client
@@ -286,11 +299,22 @@ document.addEventListener("DOMContentLoaded", async () => {
         msgs.forEach(msg => {
             const isMe = msg.sender_id === currentUserId;
             const msgDiv = document.createElement("div");
+
             msgDiv.className = `message ${isMe ? "sent" : "received"}`;
+
+            if (msg.seen && isMe) {
+                msgDiv.classList.add("seen");
+            }
+
             msgDiv.innerHTML = `
-                ${!isMe ? `<img src="${friendAvatar}" class="msg-avatar" style="width:25px;height:25px;border-radius:50%;margin-right:6px;">` : ""}
-                <span>${msg.content}</span>
-            `;
+            ${!isMe ? `<img src="${friendAvatar}" class="msg-avatar" style="width:25px;height:25px;border-radius:50%;margin-right:6px;">` : ""}
+            <span>${msg.content}</span>
+        `;
+
+            if (isMe) {
+                msgDiv.innerHTML += `<small class="seen-status">${msg.seen ? "✓✓" : "✓"}</small>`;
+            }
+
             chatBox.appendChild(msgDiv);
         });
         chatBox.scrollTop = chatBox.scrollHeight;
@@ -374,20 +398,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         chatContainer.innerHTML = `
-            <div class="chat-header">
-                <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
-                <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
-                <div>
-                    <h4>${friendName || 'Unknown'}</h4>
-                    <p id="typing-indicator">Online</p>
-                </div>
+        <div class="chat-header">
+            <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
+            <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
+            <div>
+                <h4>${friendName || 'Unknown'}</h4>
+                <p id="typing-indicator">Online</p>
             </div>
-            <div class="messages"></div>
-            <div class="chat-input">
-                <input type="text" placeholder="Type a message..." inputmode="text" >
-                <button disabled class='sendBtn'>➤</button>
-            </div>
-        `;
+        </div>
+        <div class="messages"></div>
+        <div class="chat-input">
+            <input type="text" placeholder="Type a message..." inputmode="text" >
+            <button disabled class='sendBtn'>➤</button>
+        </div>
+    `;
 
         const chatBox = chatContainer.querySelector(".messages");
         const typingIndicator = chatContainer.querySelector("#typing-indicator");
@@ -395,6 +419,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         const sendBtn = chatContainer.querySelector(".sendBtn");
 
         const oldMessages = await fetchMessages(friendId);
+
+        await markMessagesAsSeen(friendId);
+
         renderChatMessages(chatBox, oldMessages, friendAvatar);
 
         subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
@@ -427,6 +454,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         }
     }
+
 
     /* ------------------ Button Listener ------------------ */
     document.querySelector(".submit-friend")?.addEventListener("click", () => {

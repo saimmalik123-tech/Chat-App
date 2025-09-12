@@ -235,6 +235,15 @@ nav h2 a {
   background: var(--bubble-sent);
   color: #fff;
 }
+.sent.seen {
+  background-color: #2563eb;
+}
+
+.seen-status {
+  font-size: 10px;
+  margin-left: 6px;
+  opacity: 0.7;
+}
 
 .received {
   align-self: flex-start;
