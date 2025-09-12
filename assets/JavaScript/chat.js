@@ -39,7 +39,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         currentUserId = user.id;
         console.log("Current user ID:", currentUserId);
 
-        // Set user online
         setUserOnlineStatus(true);
     }
 
@@ -313,7 +312,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!currentUserId) return;
 
         try {
-            // First, fetch messages that are unseen
             const { data: unseenMessages, error: fetchError } = await client
                 .from("messages")
                 .select("*")
@@ -331,7 +329,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            // Mark messages as seen
             const { error: updateError } = await client
                 .from("messages")
                 .update({ seen: true })
@@ -345,7 +342,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.log(`Messages from ${friendId} marked as seen ✓✓`);
             }
 
-            // Update UI optimistically
             unseenMessages.forEach(msg => {
                 const idx = oldMessages.findIndex(m => m.id === msg.id);
                 if (idx !== -1) oldMessages[idx].seen = true;
