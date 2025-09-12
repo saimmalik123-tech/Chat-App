@@ -384,7 +384,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             </div>
             <div class="messages"></div>
             <div class="chat-input">
-                <input type="text" placeholder="Type a message..." inputmode="text" >
+                <input type="text" placeholder="Type a message..." inputmode="none" >
                 <button disabled class='sendBtn'>➤</button>
             </div>
         `;
