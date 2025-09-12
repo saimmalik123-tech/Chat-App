@@ -265,6 +265,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     <p class="last-message" title="${lastMessageText}">${lastMessageText}</p>
                 </div>
                 <span class="time">${lastMessageTime}</span>
+                <p id='NonSeenMsg'>4</p>
             `;
 
             li.addEventListener("click", () => {

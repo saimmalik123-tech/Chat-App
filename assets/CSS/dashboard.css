@@ -153,6 +153,17 @@ nav h2 a {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
+#NonSeenMsg{
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background-color: var(--accent);
+  color: var(--text-secondary);
+  position: relative;
+  right: 5px;
+  border: 50%;
+}
+
 .chat img {
   width: 45px;
   height: 45px;
