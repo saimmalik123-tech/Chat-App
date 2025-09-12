@@ -324,11 +324,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             } else {
                 console.log(`Messages from ${friendId} marked as seen ✓✓`);
 
-                // Update local array and UI
                 if (data && data.length) {
                     data.forEach(msg => {
                         const idx = oldMessages.findIndex(m => m.id === msg.id);
                         if (idx !== -1) oldMessages[idx].seen = true;
+                        console.log(msg);
+                        
                     });
                     renderChatMessages(chatBox, oldMessages, friendAvatar);
                 }
