@@ -317,7 +317,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .eq("id", messageId);
 
             if (error) console.error("Error marking message seen:", error.message);
-            console.log(data);
+            else console.log("Message marked as seen:", messageId);
         } catch (err) {
             console.error("Unexpected error marking message seen:", err.message);
         }
