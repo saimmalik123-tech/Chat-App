@@ -313,42 +313,46 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!currentUserId) return;
 
         try {
-            const { data: unseenMessages, error: fetchError } = await client
-                .from("messages")
-                .select("*")
-                .eq("receiver_id", currentUserId)
-                .eq("sender_id", friendId)
-                .eq("seen", false);
-
-            if (fetchError) {
-                console.error("Error fetching unseen messages:", fetchError.message);
-                return;
-            }
-
-            if (!unseenMessages || unseenMessages.length === 0) {
-                console.log(`No unseen messages from ${friendId}`);
-                return;
-            }
-
-            const { error: updateError } = await client
+            // 1️⃣ Update unseen messages and return updated rows
+            const { data: updatedMessages, error } = await client
                 .from("messages")
                 .update({ seen: true })
                 .eq("receiver_id", currentUserId)
                 .eq("sender_id", friendId)
-                .eq("seen", false);
+                .eq("seen", false)
+                .select("*"); // fetch updated rows
 
-            if (updateError) {
-                console.error("Error marking messages as seen:", updateError.message);
-            } else {
-                console.log(`Messages from ${friendId} marked as seen ✓✓`);
+            if (error) {
+                console.error("Error marking messages as seen:", error.message);
+                return;
             }
 
-            unseenMessages.forEach(msg => {
-                const idx = oldMessages.findIndex(m => m.id === msg.id);
-                if (idx !== -1) oldMessages[idx].seen = true;
-            });
+            if (!updatedMessages || updatedMessages.length === 0) {
+                console.log(`No unseen messages from ${friendId}`);
+            } else {
+                console.log(`Messages from ${friendId} marked as seen ✓✓`, updatedMessages);
 
-            renderChatMessages(chatBox, oldMessages, friendAvatar);
+                // Update local oldMessages array
+                updatedMessages.forEach(msg => {
+                    const idx = oldMessages.findIndex(m => m.id === msg.id);
+                    if (idx !== -1) oldMessages[idx].seen = true;
+                });
+
+                // Re-render chat
+                renderChatMessages(chatBox, oldMessages, friendAvatar);
+            }
+
+            // 2️⃣ Log the entire messages table
+            const { data: allMessages, error: tableError } = await client
+                .from("messages")
+                .select("*")
+                .order("created_at", { ascending: true });
+
+            if (tableError) {
+                console.error("Error fetching full messages table:", tableError.message);
+            } else {
+                console.log("📌 Full messages table:", allMessages);
+            }
 
         } catch (err) {
             console.error("Unexpected error marking messages as seen:", err.message);
