@@ -342,8 +342,8 @@ nav h2 a {
   padding: 12px;
   border-top: 1px solid var(--input-border);
   background: var(--input-bg);
-  position: sticky;
-  bottom: 0;
+  /* position: sticky;
+  bottom: 0; */
   width: 100%;
 }
 
@@ -640,10 +640,10 @@ nav h2 a {
   }
 
   .chat-input {
-    position: sticky;
-    bottom: 0;
+    /* position: sticky;
+    bottom: 0; */
     width: 100%;
-    flex-shrink: 0;
+    /* flex-shrink: 0; */
     /* padding-bottom: env(safe-area-inset-bottom); */
     background: var(--bg);
   }
