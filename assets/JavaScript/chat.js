@@ -237,8 +237,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const friendName = userProfile?.user_name || "Unknown";
             const avatarUrl = userProfile?.profile_image_url || "./assets/icon/user.png";
-            const isOnline = userProfile?.is_online ? "Online" : "Offline";
 
+            // Fetch last message
             const { data: lastMsgData } = await client
                 .from("messages")
                 .select("*")
@@ -252,21 +252,31 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ? new Date(lastMsgData.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
                 : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+            // Fetch count of unseen messages
+            const { count: unseenCount, error: unseenError } = await client
+                .from("messages")
+                .select("*", { count: "exact", head: true }) // head:true for count only
+                .eq("sender_id", friendId) // messages sent by friend
+                .eq("receiver_id", currentUserId) // messages received by current user
+                .eq("seen", false); // not seen
+
+            if (unseenError) console.error("Error fetching unseen messages:", unseenError);
+
             const li = document.createElement("li");
             li.classList.add("chat");
             li.setAttribute("data-friend-id", friendId);
             li.innerHTML = `
-                <div class="avatar-wrapper" style="position:relative;">
-                    <img src="${avatarUrl}" alt="User" style="object-fit: cover; border-radius:50%;">
-                    ${userProfile?.is_online ? '<span class="online-dot"></span>' : ''}
-                </div>
-                <div>
-                    <h4>${friendName}</h4>
-                    <p class="last-message" title="${lastMessageText}">${lastMessageText}</p>
-                </div>
-                <span class="time">${lastMessageTime}</span>
-                <p id='NonSeenMsg'>4</p>
-            `;
+            <div class="avatar-wrapper" style="position:relative;">
+                <img src="${avatarUrl}" alt="User" style="object-fit: cover; border-radius:50%;">
+                ${userProfile?.is_online ? '<span class="online-dot"></span>' : ''}
+            </div>
+            <div>
+                <h4>${friendName}</h4>
+                <p class="last-message" title="${lastMessageText}">${lastMessageText}</p>
+            </div>
+            <span class="time">${lastMessageTime}</span>
+            ${unseenCount > 0 ? `<p class="non-seen-msg">${unseenCount}</p>` : ''}
+        `;
 
             li.addEventListener("click", () => {
                 openChat(friendId, friendName, avatarUrl);
@@ -274,6 +284,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     document.querySelector('#message').classList.add("hidden");
                 }
             });
+
             chatList.appendChild(li);
         }
     }
@@ -518,7 +529,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         </div>
         <div class="messages"></div>
         <div class="chat-input">
-            <input type="text" placeholder="Type a message..." inputmode="text" >
+            <button class="emojiBtn" title="Insert emoji"><i class="fa-regular fa-face-smile"></i></button>
+            <button class="fileBtn" title="Send file"><i class="fa-solid fa-paperclip"></i></button>
+            <input type="text" placeholder="Type a message..." inputmode="text">
             <button disabled class='sendBtn'>➤</button>
         </div>
     `;
@@ -527,16 +540,51 @@ document.addEventListener("DOMContentLoaded", async () => {
         const typingIndicator = chatContainer.querySelector("#typing-indicator");
         const input = chatContainer.querySelector("input");
         const sendBtn = chatContainer.querySelector(".sendBtn");
+        const emojiBtn = chatContainer.querySelector(".emojiBtn");
+        const fileBtn = chatContainer.querySelector(".fileBtn");
+
+        const picker = document.createElement("emoji-picker");
+        picker.style.position = "absolute";
+        picker.style.bottom = "60px";
+        picker.style.right = "10px";
+        picker.style.display = "none";
+        chatContainer.appendChild(picker);
+
+        emojiBtn.addEventListener("click", () => {
+            picker.style.display = picker.style.display === "none" ? "block" : "none";
+        });
+
+        picker.addEventListener("emoji-click", event => {
+            input.value += event.detail.unicode;
+            sendBtn.disabled = !input.value.trim();
+        });
+
+        fileBtn.addEventListener("click", () => {
+            const fileInput = document.createElement("input");
+            fileInput.type = "file";
+            fileInput.accept = "*/*";
+            fileInput.click();
+            fileInput.onchange = async () => {
+                if (fileInput.files.length > 0) {
+                    const file = fileInput.files[0];
+                    console.log("File selected:", file.name);
+                    showPopup(`File selected: ${file.name}`, "success");
+                }
+            };
+        });
 
         const oldMessages = await fetchMessages(friendId);
         renderChatMessages(chatBox, oldMessages, friendAvatar);
-
         subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
-
         await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
 
         input.addEventListener("input", () => {
-            sendBtn.disabled = !input.value.trim();
+            if (input.value.trim() === "") {
+                sendBtn.innerHTML = '🎙️';
+            } else {
+                sendBtn.innerHTML = '➤';
+            }
+            sendBtn.disabled = false;
             client.channel(`typing:${currentUserId}:${friendId}`).send({
                 type: "broadcast",
                 event: "typing",
@@ -546,10 +594,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         async function handleSend() {
             const content = input.value.trim();
-            if (!content) return;
-            await sendMessage(friendId, content);
-            input.value = "";
-            sendBtn.disabled = true;
+
+            if (!content) {
+                voiceBtn.click(); 
+            } else {
+                await sendMessage(friendId, content);
+                input.value = "";
+                sendBtn.disabled = true;
+                sendBtn.innerHTML = '🎙️'; 
+            }
         }
 
         sendBtn.addEventListener("click", handleSend);
@@ -563,6 +616,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         }
     }
+
 
     /* ------------------ Button Listener ------------------ */
     document.querySelector(".submit-friend")?.addEventListener("click", () => {
