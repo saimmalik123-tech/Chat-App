@@ -560,20 +560,37 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         chatContainer.innerHTML = `
-        <div class="chat-header">
-            <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
-            <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
-            <div>
-                <h4>${friendName || 'Unknown'}</h4>
-                <p id="typing-indicator">Online</p>
-            </div>
+    <div class="chat-header">
+        <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
+        <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
+        <div>
+            <h4>${friendName || 'Unknown'}</h4>
+            <p id="typing-indicator">Online</p>
         </div>
-        <div class="messages"></div>
-        <div class="chat-input"><i class="fa-regular fa-face-smile"></i>
-            <input type="text" placeholder="Type a message..." inputmode="text">
-            <button disabled class='sendBtn'>➤</button>
-        </div>
-    `;
+    </div>
+    <div class="messages"></div>
+    <div class="chat-input" style="position:relative;">
+        <i class="fa-regular fa-face-smile" id='emoji-btn'></i>
+        <input id='input' type="text" placeholder="Type a message..." inputmode="text">
+        <button disabled class='sendBtn'>➤</button>
+        <emoji-picker id="emoji-picker" style="position:absolute; bottom:50px; left:0; display:none; z-index:1000;"></emoji-picker>
+    </div>
+`;
+
+        const emojiBtn = chatContainer.querySelector("#emoji-btn");
+        const emojiPicker = chatContainer.querySelector("#emoji-picker");
+
+        emojiBtn.addEventListener("click", () => {
+            emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
+        });
+
+        emojiPicker.addEventListener("emoji-click", event => {
+            input.value += event.detail.unicode;
+            input.focus();
+            chatContainer.querySelector(".sendBtn").disabled = !input.value.trim();
+        });
+
+
 
         const chatBox = chatContainer.querySelector(".messages");
         const typingIndicator = chatContainer.querySelector("#typing-indicator");
