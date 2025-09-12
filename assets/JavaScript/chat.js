@@ -584,6 +584,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
         });
 
+        window.addEventListener('click', ()=>{
+            emojiPicker.style.display = 'none';
+        })
+
         emojiPicker.addEventListener("emoji-click", event => {
             input.value += event.detail.unicode;
             input.focus();
