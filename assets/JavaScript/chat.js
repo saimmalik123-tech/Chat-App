@@ -317,21 +317,20 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .update({ seen: true })
                 .eq("receiver_id", currentUserId)
                 .eq("sender_id", friendId)
-                .eq("seen", false);
+                .eq("seen", false)
+                .select();
 
             if (error) {
                 console.error("Error marking messages as seen:", error.message);
             } else {
                 console.log(`Messages from ${friendId} marked as seen ✓✓`);
                 console.log(data);
-                
 
                 if (data && data.length) {
                     data.forEach(msg => {
                         const idx = oldMessages.findIndex(m => m.id === msg.id);
                         if (idx !== -1) oldMessages[idx].seen = true;
                         console.log(msg);
-                        
                     });
                     renderChatMessages(chatBox, oldMessages, friendAvatar);
                 }
@@ -340,8 +339,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.error("Unexpected error marking messages as seen:", err.message);
         }
     }
-
-
 
     /* ------------------ Fetch Messages ------------------ */
     async function fetchMessages(friendId) {
