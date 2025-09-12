@@ -24,7 +24,8 @@ body {
   height: 100%;
   background-color: var(--bg);
   color: var(--text-primary);
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 body {
@@ -75,7 +76,8 @@ nav h2 a {
   width: 100%;
   height: calc(100vh - 64px);
   background: var(--bg);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .sidebar {
