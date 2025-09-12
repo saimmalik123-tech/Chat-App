@@ -265,6 +265,24 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (error) console.error("Error sending message:", error.message);
     }
 
+    async function logMessagesTable() {
+        try {
+            const { data, error } = await client
+                .from("messages")
+                .select("*")
+                .order("created_at", { ascending: true });
+
+            if (error) {
+                console.error("Error fetching messages table:", error.message);
+                return;
+            }
+            console.log("📌 Current messages table:", data);
+        } catch (err) {
+            console.error("Unexpected error logging messages table:", err.message);
+        }
+    }
+
+
     /* ------------------ Mark Messages as Seen ------------------ */
     async function markMessagesAsSeen(friendId) {
         try {
