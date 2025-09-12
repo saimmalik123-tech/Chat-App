@@ -440,12 +440,12 @@ nav h2 a {
 .addFriends {
   background: var(--accent);
   color: #fff;
-  padding: 5px 15px;
+  padding: 7px 15px;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.3s ease;
-  width: 30%;
+  width: 25%;
   font-size: 0.85rem;
   font-weight: 500;
 }
@@ -639,12 +639,13 @@ nav h2 a {
   }
 
   .chat-input {
-    position: sticky;
-    bottom: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
     width: 100%;
     flex-shrink: 0;
-    /* padding-bottom: env(safe-area-inset-bottom); */
     background: var(--bg);
+    min-height: 70px;
+    height: auto;
   }
   .sidebar {
     width: 100%;
