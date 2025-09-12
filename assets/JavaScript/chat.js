@@ -323,6 +323,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.error("Error marking messages as seen:", error.message);
             } else {
                 console.log(`Messages from ${friendId} marked as seen ✓✓`);
+                console.log(data);
+                
 
                 if (data && data.length) {
                     data.forEach(msg => {
