@@ -268,25 +268,33 @@ document.addEventListener("DOMContentLoaded", async () => {
     /* ------------------ Mark Messages as Seen ------------------ */
     async function markMessagesAsSeen(friendId) {
         try {
+            console.log("🔎 Before update:");
+            await logMessagesTable();
+
             const { data, error } = await client
                 .from("messages")
                 .update({ seen: true, updated_at: new Date().toISOString() })
                 .eq("sender_id", friendId)
                 .eq("receiver_id", currentUserId)
-                .eq("seen", false);
+                .eq("seen", false)
+                .select();
 
             if (error) {
                 console.error("Error marking seen:", error.message);
                 return null;
             }
-            return data; // updated rows
+
+            console.log("✅ Updated rows:", data);
+
+            console.log("📌 After update:");
+            await logMessagesTable();
+
+            return data;
         } catch (err) {
             console.error("Unexpected error marking seen:", err.message);
             return null;
         }
     }
-
-
 
     /* ------------------ Fetch Messages ------------------ */
     async function fetchMessages(friendId) {
@@ -466,16 +474,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         const input = chatContainer.querySelector("input");
         const sendBtn = chatContainer.querySelector(".sendBtn");
 
-        // 1) Fetch existing messages
         const oldMessages = await fetchMessages(friendId);
 
-        // 2) Render them locally
         renderChatMessages(chatBox, oldMessages, friendAvatar);
 
-        // 3) Subscribe to realtime INSERT/UPDATE for this chat (keeps oldMessages in sync)
         subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
-        // 4) Mark any unseen messages as seen (so sender receives UPDATE)
         await markMessagesAsSeen(friendId);
 
         // 5) Keep existing typing/send handlers
