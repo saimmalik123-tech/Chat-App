@@ -73,13 +73,38 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Reject Friend Rquest
+
+    async function rejectRequest(requestId) {
+        try {
+            const { error } = await client
+                .from("requests")
+                .update({ status: "rejected" })
+                .eq("id", requestId);
+
+            if (error) {
+                console.error("Error rejecting request:", error.message);
+                return showPopup("Failed to reject request.", "error");
+            }
+
+            showPopup("Friend request rejected!", "info");
+        } catch (err) {
+            console.error("Unexpected error rejecting request:", err.message);
+        }
+    }
+
 
     /* ------------------ Set User Online/Offline ------------------ */
     async function setUserOnlineStatus(isOnline) {
         if (!currentUserId) return;
-        await client.from('user_profiles')
-            .upsert({ user_id: currentUserId, is_online: isOnline }, { onConflict: 'user_id' });
+        try {
+            await client.from('user_profiles')
+                .upsert({ user_id: currentUserId, is_online: isOnline }, { onConflict: 'user_id' });
+        } catch (err) {
+            console.error("Error updating online status:", err.message);
+        }
     }
+
     window.addEventListener('beforeunload', () => setUserOnlineStatus(false));
 
     /* ------------------ Messages Popup ------------------ */
@@ -284,35 +309,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
     /* ------------------ Mark Messages as Seen ------------------ */
-    async function markMessagesAsSeen(friendId) {
+    async function markSingleMessageAsSeen(messageId) {
         try {
-            console.log("🔎 Before update:");
-            await logMessagesTable();
-
-            const { data, error } = await client
+            const { error } = await client
                 .from("messages")
-                .update({ seen: true})
-                .eq("sender_id", friendId)
-                .eq("receiver_id", currentUserId)
-                .eq("seen", false)
-                .select();
+                .update({ seen: true })
+                .eq("id", messageId);
 
-            if (error) {
-                console.error("Error marking seen:", error.message);
-                return null;
-            }
-
-            console.log("✅ Updated rows:", data);
-
-            console.log("📌 After update:");
-            await logMessagesTable();
-
-            return data;
+            if (error) console.error("Error marking message seen:", error.message);
+            console.log(data);
         } catch (err) {
-            console.error("Unexpected error marking seen:", err.message);
-            return null;
+            console.error("Unexpected error marking message seen:", err.message);
         }
     }
+
 
     /* ------------------ Fetch Messages ------------------ */
     async function fetchMessages(friendId) {
@@ -383,7 +393,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     /* ------------------ Realtime Messages & Online Status ------------------ */
     function subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator) {
 
-        function upsertMessageAndRender(msgObj) {
+        function upsertMessageAndRender(oldMessages, msgObj, chatBox, friendAvatar) {
             const idx = oldMessages.findIndex(m => m.id === msgObj.id);
             if (idx === -1) oldMessages.push(msgObj);
             else oldMessages[idx] = { ...oldMessages[idx], ...msgObj };
@@ -408,7 +418,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     try {
                         const { error } = await client
                             .from("messages")
-                            .update({ seen: true})
+                            .update({ seen: true })
                             .eq("id", newMsg.id);
 
                         if (error) console.error("Error marking single incoming message seen:", error.message);
@@ -428,7 +438,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     (updated.sender_id === friendId && updated.receiver_id === currentUserId);
                 if (!isRelevant) return;
 
-                upsertMessageAndRender(updated);
+                upsertMessageAndRender(oldMessages, updated, chatBox, friendAvatar);
             }
         );
 
@@ -449,9 +459,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const statusChannel = client.channel('user_status')
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles' }, payload => {
-                const updatedUser = payload.new;
-                if (updatedUser.user_id === friendId) {
-                    typingIndicator.textContent = updatedUser.is_online ? "Online" : "Offline";
+                if (payload.new.user_id === friendId) {
+                    typingIndicator.textContent = payload.new.is_online ? "Online" : "Offline";
                 }
             });
 
