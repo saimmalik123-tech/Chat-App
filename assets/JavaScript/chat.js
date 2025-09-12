@@ -318,7 +318,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .eq("receiver_id", currentUserId)
                 .eq("sender_id", friendId)
                 .eq("seen", false)
-                .select();
+                .select('*');
 
             if (error) {
                 console.error("Error marking messages as seen:", error.message);
