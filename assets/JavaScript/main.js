@@ -55,16 +55,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Mobile
 
-    // const inputField = document.querySelector('.chat-input input');
+    window.addEventListener("resize", () => {
+        const messages = document.querySelector(".messages");
+        messages.scrollTop = messages.scrollHeight; // keep scroll pinned
+    });
 
-    // inputField?.addEventListener('focus', () => {
-    //     setTimeout(() => {
-    //         inputField.scrollIntoView({
-    //             behavior: 'smooth',
-    //             block: 'end'
-    //         });
-    //     }, 300);
-    // });
 
 
 });
