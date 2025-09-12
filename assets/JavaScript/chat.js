@@ -580,13 +580,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         const emojiBtn = chatContainer.querySelector("#emoji-btn");
         const emojiPicker = chatContainer.querySelector("#emoji-picker");
 
-        emojiBtn.addEventListener("click", () => {
+        emojiBtn.addEventListener("click", (e) => {
+            e.stopPropagation(); // prevent window click from firing
             emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
         });
 
-        window.addEventListener('click', ()=>{
+        emojiPicker.addEventListener("click", (e) => {
+            e.stopPropagation();
+        });
+
+        window.addEventListener('click', () => {
             emojiPicker.style.display = 'none';
-        })
+        });
 
         emojiPicker.addEventListener("emoji-click", event => {
             input.value += event.detail.unicode;
