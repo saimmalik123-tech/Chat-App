@@ -179,7 +179,7 @@ nav h2 a {
 /* Chat Area */
 .chat-area {
   width: 70%;
-  height: 100dvh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -629,7 +629,7 @@ nav h2 a {
     flex: 1 1 auto;
     min-height: 0;
     width: 100%;
-    height: calc(100vh - 100px);
+    height: 100vh;
   }
 
   .messages {
