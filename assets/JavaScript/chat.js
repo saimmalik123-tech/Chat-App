@@ -509,16 +509,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     /* ------------------ Open Chat ------------------ */
     async function openChat(friendId, friendName, friendAvatar) {
-        const chatContainer = document.querySelector(".chat-area");
-        const sidebar = document.querySelector('.sidebar');
-        if (!chatContainer) return;
+    const chatContainer = document.querySelector(".chat-area");
+    const sidebar = document.querySelector('.sidebar');
+    if (!chatContainer) return;
 
-        if (window.innerWidth <= 700) {
-            sidebar.style.display = 'none';
-            chatContainer.style.display = 'flex';
-        }
+    if (window.innerWidth <= 700) {
+        sidebar.style.display = 'none';
+        chatContainer.style.display = 'flex';
+    }
 
-        chatContainer.innerHTML = `
+    chatContainer.innerHTML = `
         <div class="chat-header">
             <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
             <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
@@ -536,86 +536,78 @@ document.addEventListener("DOMContentLoaded", async () => {
         </div>
     `;
 
-        const chatBox = chatContainer.querySelector(".messages");
-        const typingIndicator = chatContainer.querySelector("#typing-indicator");
-        const input = chatContainer.querySelector("input");
-        const sendBtn = chatContainer.querySelector(".sendBtn");
-        const emojiBtn = chatContainer.querySelector(".emojiBtn");
-        const fileBtn = chatContainer.querySelector(".fileBtn");
+    const chatBox = chatContainer.querySelector(".messages");
+    const typingIndicator = chatContainer.querySelector("#typing-indicator");
+    const input = chatContainer.querySelector("input");
+    const sendBtn = chatContainer.querySelector(".sendBtn");
+    const emojiBtn = chatContainer.querySelector(".emojiBtn");
+    const fileBtn = chatContainer.querySelector(".fileBtn");
 
-        const picker = document.createElement("emoji-picker");
-        picker.style.position = "absolute";
-        picker.style.bottom = "60px";
-        picker.style.right = "10px";
-        picker.style.display = "none";
-        chatContainer.appendChild(picker);
+    // Initialize Emoji Picker
+    const picker = document.createElement("emoji-picker");
+    picker.style.position = "absolute";
+    picker.style.bottom = "60px";
+    picker.style.right = "10px";
+    picker.style.display = "none";
+    chatContainer.appendChild(picker);
 
-        emojiBtn.addEventListener("click", () => {
-            picker.style.display = picker.style.display === "none" ? "block" : "none";
-        });
+    emojiBtn.addEventListener("click", () => {
+        picker.style.display = picker.style.display === "none" ? "block" : "none";
+    });
 
-        picker.addEventListener("emoji-click", event => {
-            input.value += event.detail.unicode;
-            sendBtn.disabled = !input.value.trim();
-        });
+    picker.addEventListener("emoji-click", event => {
+        input.value += event.detail.unicode;
+        sendBtn.disabled = !input.value.trim();
+    });
 
-        fileBtn.addEventListener("click", () => {
-            const fileInput = document.createElement("input");
-            fileInput.type = "file";
-            fileInput.accept = "*/*";
-            fileInput.click();
-            fileInput.onchange = async () => {
-                if (fileInput.files.length > 0) {
-                    const file = fileInput.files[0];
-                    console.log("File selected:", file.name);
-                    showPopup(`File selected: ${file.name}`, "success");
-                }
-            };
-        });
-
-        const oldMessages = await fetchMessages(friendId);
-        renderChatMessages(chatBox, oldMessages, friendAvatar);
-        subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
-        await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
-
-        input.addEventListener("input", () => {
-            if (input.value.trim() === "") {
-                sendBtn.innerHTML = '🎙️';
-            } else {
-                sendBtn.innerHTML = '➤';
+    // File upload
+    fileBtn.addEventListener("click", () => {
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.accept = "*/*";
+        fileInput.click();
+        fileInput.onchange = async () => {
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                console.log("File selected:", file.name);
+                showPopup(`File selected: ${file.name}`, "success");
             }
-            sendBtn.disabled = false;
-            client.channel(`typing:${currentUserId}:${friendId}`).send({
-                type: "broadcast",
-                event: "typing",
-                payload: { userId: currentUserId, userName: "You" }
-            });
+        };
+    });
+
+    const oldMessages = await fetchMessages(friendId);
+    renderChatMessages(chatBox, oldMessages, friendAvatar);
+    subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
+    await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
+
+    input.addEventListener("input", () => {
+        sendBtn.disabled = !input.value.trim();
+        client.channel(`typing:${currentUserId}:${friendId}`).send({
+            type: "broadcast",
+            event: "typing",
+            payload: { userId: currentUserId, userName: "You" }
         });
+    });
 
-        async function handleSend() {
-            const content = input.value.trim();
-
-            if (!content) {
-                voiceBtn.click(); 
-            } else {
-                await sendMessage(friendId, content);
-                input.value = "";
-                sendBtn.disabled = true;
-                sendBtn.innerHTML = '🎙️'; 
-            }
-        }
-
-        sendBtn.addEventListener("click", handleSend);
-        input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
-
-        const backBtn = chatContainer.querySelector('.backBtn');
-        if (backBtn) {
-            backBtn.addEventListener('click', () => {
-                sidebar.style.display = 'flex';
-                chatContainer.style.display = 'none';
-            });
-        }
+    async function handleSend() {
+        const content = input.value.trim();
+        if (!content) return;
+        await sendMessage(friendId, content);
+        input.value = "";
+        sendBtn.disabled = true;
     }
+
+    sendBtn.addEventListener("click", handleSend);
+    input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
+
+    const backBtn = chatContainer.querySelector('.backBtn');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            sidebar.style.display = 'flex';
+            chatContainer.style.display = 'none';
+        });
+    }
+}
 
 
     /* ------------------ Button Listener ------------------ */
