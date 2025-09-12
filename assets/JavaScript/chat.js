@@ -252,13 +252,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ? new Date(lastMsgData.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
                 : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-            // Fetch count of unseen messages
             const { count: unseenCount, error: unseenError } = await client
                 .from("messages")
-                .select("*", { count: "exact", head: true }) // head:true for count only
-                .eq("sender_id", friendId) // messages sent by friend
-                .eq("receiver_id", currentUserId) // messages received by current user
-                .eq("seen", false); // not seen
+                .select("*", { count: "exact", head: true }) 
+                .eq("sender_id", friendId) 
+                .eq("receiver_id", currentUserId)
+                .eq("seen", false); 
 
             if (unseenError) console.error("Error fetching unseen messages:", unseenError);
 
@@ -529,8 +528,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         </div>
         <div class="messages"></div>
         <div class="chat-input">
-            <button class="emojiBtn" title="Insert emoji"><i class="fa-regular fa-face-smile"></i></button>
-            <button class="fileBtn" title="Send file"><i class="fa-solid fa-paperclip"></i></button>
             <input type="text" placeholder="Type a message..." inputmode="text">
             <button disabled class='sendBtn'>➤</button>
         </div>

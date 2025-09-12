@@ -158,7 +158,7 @@ nav h2 a {
   height: 20px;
   border-radius: 50%;
   background-color: var(--accent);
-  color: #fff;
+  color: var(--bg) !important;
   position: relative;
   right: 5px;
   bottom: 15%;
