@@ -208,6 +208,23 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    function updateUnseenBadge(friendId, count) {
+        const badge = document.querySelector(`.chat[data-friend-id="${friendId}"] .non-seen-msg`);
+        if (badge) {
+            badge.textContent = count > 0 ? count : '';
+        } else if (count > 0) {
+            // if badge doesn't exist, create it
+            const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
+            if (chatLi) {
+                const p = document.createElement('p');
+                p.className = 'non-seen-msg';
+                p.textContent = count;
+                chatLi.appendChild(p);
+            }
+        }
+    }
+
+
     /* ------------------ Fetch Friends / Chat List ------------------ */
     async function fetchFriends() {
         if (!currentUserId) return;
@@ -254,10 +271,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const { count: unseenCount, error: unseenError } = await client
                 .from("messages")
-                .select("*", { count: "exact", head: true }) 
-                .eq("sender_id", friendId) 
+                .select("*", { count: "exact", head: true })
+                .eq("sender_id", friendId)
                 .eq("receiver_id", currentUserId)
-                .eq("seen", false); 
+                .eq("seen", false);
 
             if (unseenError) console.error("Error fetching unseen messages:", unseenError);
 
@@ -459,12 +476,37 @@ document.addEventListener("DOMContentLoaded", async () => {
                             .eq("id", newMsg.id);
 
                         if (error) console.error("Error marking single incoming message seen:", error.message);
+
+                        const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
+                        if (chatLi) {
+                            const unseenCountResp = await client
+                                .from("messages")
+                                .select("*", { count: "exact", head: true })
+                                .eq("sender_id", friendId)
+                                .eq("receiver_id", currentUserId)
+                                .eq("seen", false);
+
+                            const unseenCount = unseenCountResp.count || 0;
+                            let badge = chatLi.querySelector(".non-seen-msg");
+                            if (unseenCount > 0) {
+                                if (!badge) {
+                                    badge = document.createElement("p");
+                                    badge.className = "non-seen-msg";
+                                    chatLi.appendChild(badge);
+                                }
+                                badge.textContent = unseenCount;
+                            } else if (badge) {
+                                badge.remove();
+                            }
+                        }
+
                     } catch (err) {
                         console.error("Unexpected error marking single message seen:", err.message);
                     }
                 }
             }
         );
+
 
         msgChannel.on("postgres_changes",
             { event: "UPDATE", schema: "public", table: "messages" },
@@ -508,16 +550,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     /* ------------------ Open Chat ------------------ */
     async function openChat(friendId, friendName, friendAvatar) {
-    const chatContainer = document.querySelector(".chat-area");
-    const sidebar = document.querySelector('.sidebar');
-    if (!chatContainer) return;
+        const chatContainer = document.querySelector(".chat-area");
+        const sidebar = document.querySelector('.sidebar');
+        if (!chatContainer) return;
 
-    if (window.innerWidth <= 700) {
-        sidebar.style.display = 'none';
-        chatContainer.style.display = 'flex';
-    }
+        if (window.innerWidth <= 700) {
+            sidebar.style.display = 'none';
+            chatContainer.style.display = 'flex';
+        }
 
-    chatContainer.innerHTML = `
+        chatContainer.innerHTML = `
         <div class="chat-header">
             <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
             <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
@@ -527,50 +569,50 @@ document.addEventListener("DOMContentLoaded", async () => {
             </div>
         </div>
         <div class="messages"></div>
-        <div class="chat-input">
+        <div class="chat-input"><i class="fa-regular fa-face-smile"></i>
             <input type="text" placeholder="Type a message..." inputmode="text">
             <button disabled class='sendBtn'>➤</button>
         </div>
     `;
 
-    const chatBox = chatContainer.querySelector(".messages");
-    const typingIndicator = chatContainer.querySelector("#typing-indicator");
-    const input = chatContainer.querySelector("input");
-    const sendBtn = chatContainer.querySelector(".sendBtn");
+        const chatBox = chatContainer.querySelector(".messages");
+        const typingIndicator = chatContainer.querySelector("#typing-indicator");
+        const input = chatContainer.querySelector("input");
+        const sendBtn = chatContainer.querySelector(".sendBtn");
 
-    const oldMessages = await fetchMessages(friendId);
-    renderChatMessages(chatBox, oldMessages, friendAvatar);
-    subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
-    await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
+        const oldMessages = await fetchMessages(friendId);
+        renderChatMessages(chatBox, oldMessages, friendAvatar);
+        subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
+        await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
 
-    input.addEventListener("input", () => {
-        sendBtn.disabled = !input.value.trim();
-        client.channel(`typing:${currentUserId}:${friendId}`).send({
-            type: "broadcast",
-            event: "typing",
-            payload: { userId: currentUserId, userName: "You" }
+        input.addEventListener("input", () => {
+            sendBtn.disabled = !input.value.trim();
+            client.channel(`typing:${currentUserId}:${friendId}`).send({
+                type: "broadcast",
+                event: "typing",
+                payload: { userId: currentUserId, userName: "You" }
+            });
         });
-    });
 
-    async function handleSend() {
-        const content = input.value.trim();
-        if (!content) return;
-        await sendMessage(friendId, content);
-        input.value = "";
-        sendBtn.disabled = true;
+        async function handleSend() {
+            const content = input.value.trim();
+            if (!content) return;
+            await sendMessage(friendId, content);
+            input.value = "";
+            sendBtn.disabled = true;
+        }
+
+        sendBtn.addEventListener("click", handleSend);
+        input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
+
+        const backBtn = chatContainer.querySelector('.backBtn');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                sidebar.style.display = 'flex';
+                chatContainer.style.display = 'none';
+            });
+        }
     }
-
-    sendBtn.addEventListener("click", handleSend);
-    input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
-
-    const backBtn = chatContainer.querySelector('.backBtn');
-    if (backBtn) {
-        backBtn.addEventListener('click', () => {
-            sidebar.style.display = 'flex';
-            chatContainer.style.display = 'none';
-        });
-    }
-}
 
 
     /* ------------------ Button Listener ------------------ */
