@@ -20,7 +20,7 @@
 
 html {
   width: 100vw;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -29,7 +29,7 @@ body {
   flex-direction: column;
   transition: background-color 0.35s, color 0.35s;
   width: 100%;
-  min-height: 100vh;
+  height: 100%;
   overflow: hidden;
   background-color: var(--bg);
   color: var(--text-primary);
@@ -681,6 +681,7 @@ emoji-picker {
     background: var(--bg);
     min-height: 70px;
     height: auto;
+    flex: 1;
   }
 
   .sidebar {

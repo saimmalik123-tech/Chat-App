@@ -27,6 +27,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     let currentUserId = null;
     let messages = [];
+    let statusChannelRef = null;
+
 
     /* ------------------ Get Current User ------------------ */
     async function getCurrentUser() {
@@ -444,10 +446,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
 
-    // RealTime Update
-
-    function subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator) {
-
+    /* ---------------- RealTime Update ---------------- */
+    async function subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator) {
         function upsertMessageAndRender(oldMessages, msgObj, chatBox, friendAvatar) {
             const idx = oldMessages.findIndex(m => m.id === msgObj.id);
             if (idx === -1) oldMessages.push(msgObj);
@@ -455,92 +455,62 @@ document.addEventListener("DOMContentLoaded", async () => {
             renderChatMessages(chatBox, oldMessages, friendAvatar);
         }
 
+        /* ---------------- Messages Channel ---------------- */
         const msgChannel = client.channel(`chat:${currentUserId}:${friendId}`);
+        msgChannel.on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, async payload => {
+            const newMsg = payload.new;
+            const isRelevant =
+                (newMsg.sender_id === currentUserId && newMsg.receiver_id === friendId) ||
+                (newMsg.sender_id === friendId && newMsg.receiver_id === currentUserId);
+            if (!isRelevant) return;
 
-        msgChannel.on("postgres_changes",
-            { event: "INSERT", schema: "public", table: "messages" },
-            async payload => {
-                const newMsg = payload.new;
+            oldMessages.push(newMsg);
+            renderChatMessages(chatBox, oldMessages, friendAvatar);
 
-                const isRelevant =
-                    (newMsg.sender_id === currentUserId && newMsg.receiver_id === friendId) ||
-                    (newMsg.sender_id === friendId && newMsg.receiver_id === currentUserId);
-                if (!isRelevant) return;
-
-                oldMessages.push(newMsg);
-                renderChatMessages(chatBox, oldMessages, friendAvatar);
-
-                if (newMsg.receiver_id === currentUserId && newMsg.sender_id === friendId) {
-                    try {
-                        const { error } = await client
-                            .from("messages")
-                            .update({ seen: true })
-                            .eq("id", newMsg.id);
-
-                        if (error) console.error("Error marking single incoming message seen:", error.message);
-
-                        const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
-                        if (chatLi) {
-                            const unseenCountResp = await client
-                                .from("messages")
-                                .select("*", { count: "exact", head: true })
-                                .eq("sender_id", friendId)
-                                .eq("receiver_id", currentUserId)
-                                .eq("seen", false);
-
-                            const unseenCount = unseenCountResp.count || 0;
-                            let badge = chatLi.querySelector(".non-seen-msg");
-                            if (unseenCount > 0) {
-                                if (!badge) {
-                                    badge = document.createElement("p");
-                                    badge.className = "non-seen-msg";
-                                    chatLi.appendChild(badge);
-                                }
-                                badge.textContent = unseenCount;
-                            } else if (badge) {
-                                badge.remove();
-                            }
-                        }
-                    } catch (err) {
-                        console.error("Unexpected error marking single message seen:", err.message);
-                    }
+            // auto mark as seen if I received it
+            if (newMsg.receiver_id === currentUserId && newMsg.sender_id === friendId) {
+                try {
+                    await client.from("messages").update({ seen: true }).eq("id", newMsg.id);
+                } catch (err) {
+                    console.error("Error marking seen:", err.message);
                 }
             }
-        );
+        });
 
-        msgChannel.on("postgres_changes",
-            { event: "UPDATE", schema: "public", table: "messages" },
-            payload => {
-                const updated = payload.new;
-                const isRelevant =
-                    (updated.sender_id === currentUserId && updated.receiver_id === friendId) ||
-                    (updated.sender_id === friendId && updated.receiver_id === currentUserId);
-                if (!isRelevant) return;
+        msgChannel.on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, payload => {
+            const updated = payload.new;
+            const isRelevant =
+                (updated.sender_id === currentUserId && updated.receiver_id === friendId) ||
+                (updated.sender_id === friendId && updated.receiver_id === currentUserId);
+            if (!isRelevant) return;
 
-                upsertMessageAndRender(oldMessages, updated, chatBox, friendAvatar);
-            }
-        );
+            upsertMessageAndRender(oldMessages, updated, chatBox, friendAvatar);
+        });
 
+        /* ---------------- Typing Channel ---------------- */
         const typingChannel = client.channel(`typing:${currentUserId}:${friendId}`)
             .on("broadcast", { event: "typing" }, payload => {
                 if (payload.userId === friendId) {
                     typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
                     setTimeout(async () => {
                         const { data: profile } = await client
-                            .from('user_profiles')
-                            .select('is_online')
-                            .eq('user_id', friendId)
+                            .from("user_profiles")
+                            .select("is_online")
+                            .eq("user_id", friendId)
                             .maybeSingle();
                         typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
                     }, 1500);
                 }
             });
 
-        client.removeChannel('user_status');
+        /* ---------------- Status Channel ---------------- */
+        if (statusChannelRef) {
+            await client.removeChannel(statusChannelRef); // ✅ properly cleanup previous
+        }
 
-        const statusChannel = client.channel('user_status')
-            .on('postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'user_profiles' },
+        statusChannelRef = client.channel("user_status")
+            .on("postgres_changes",
+                { event: "UPDATE", schema: "public", table: "user_profiles" },
                 payload => {
                     if (payload.new.user_id === friendId) {
                         typingIndicator.textContent = payload.new.is_online ? "Online" : "Offline";
@@ -548,9 +518,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             );
 
-        msgChannel.subscribe();
-        typingChannel.subscribe();
-        statusChannel.subscribe();
+        /* ---------------- Subscribe ---------------- */
+        await msgChannel.subscribe();
+        await typingChannel.subscribe();
+        await statusChannelRef.subscribe();
+
+        // return channels so you can cleanup later if needed
+        return { msgChannel, typingChannel, statusChannelRef };
     }
 
     /* ------------------ Open Chat ------------------ */
@@ -595,9 +569,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
         });
 
-        emojiPicker.addEventListener("click", (e) => {
-            e.stopPropagation();
-        });
+        emojiPicker.addEventListener("click", (e) => e.stopPropagation());
 
         window.addEventListener('click', () => {
             emojiPicker.style.display = 'none';
@@ -613,7 +585,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         const oldMessages = await fetchMessages(friendId);
         renderChatMessages(chatBox, oldMessages, friendAvatar);
 
-        subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
+        // ✅ store channels so we can remove later
+        const { msgChannel, typingChannel, statusChannelRef: statusChan } =
+            await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
         await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
 
@@ -642,14 +616,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         /* ---------------- Back Button ---------------- */
         const backBtn = chatContainer.querySelector('.backBtn');
         if (backBtn) {
-            backBtn.addEventListener('click', () => {
+            backBtn.addEventListener('click', async () => {
                 sidebar.style.display = 'flex';
                 chatContainer.style.display = 'none';
 
-                client.removeAllChannels();
+                // ✅ properly cleanup only this chat’s channels
+                await client.removeChannel(msgChannel);
+                await client.removeChannel(typingChannel);
+                await client.removeChannel(statusChan);
             });
         }
     }
+
 
     /* ------------------ Button Listener ------------------ */
     document.querySelector(".submit-friend")?.addEventListener("click", () => {
