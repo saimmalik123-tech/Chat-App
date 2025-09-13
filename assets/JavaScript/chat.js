@@ -527,18 +527,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         return { msgChannel, typingChannel, statusChannelRef };
     }
 
-    /* ------------------ Open Chat (complete with realtime + calls) ------------------ */
-async function openChat(friendId, friendName, friendAvatar) {
-    const chatContainer = document.querySelector(".chat-area");
-    const sidebar = document.querySelector('.sidebar');
-    if (!chatContainer) return;
+    /* ------------------ Open Chat ------------------ */
+    async function openChat(friendId, friendName, friendAvatar) {
+        const chatContainer = document.querySelector(".chat-area");
+        const sidebar = document.querySelector('.sidebar');
+        if (!chatContainer) return;
 
-    if (window.innerWidth <= 768) {
-        sidebar.style.display = 'none';
-        chatContainer.style.display = 'flex';
-    }
+        if (window.innerWidth <= 768) {
+            sidebar.style.display = 'none';
+            chatContainer.style.display = 'flex';
+        }
 
-    chatContainer.innerHTML = `
+        chatContainer.innerHTML = `
     <div class="chat-header">
         <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
         <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
@@ -546,22 +546,8 @@ async function openChat(friendId, friendName, friendAvatar) {
             <h4>${friendName || 'Unknown'}</h4>
             <p id="typing-indicator">Online</p>
         </div>
-        <div class="call-actions">
-            <button id="voiceCallBtn" title="Voice call"><i class="fa-solid fa-phone"></i></button>
-            <button id="videoCallBtn" title="Video call"><i class="fa-solid fa-video"></i></button>
-        </div>
     </div>
     <div class="messages"></div>
-
-    <!-- Video Call UI -->
-    <div class="video-call" style="display:none; position:fixed; inset:0; background:#000; flex-direction:column; justify-content:center; align-items:center; z-index:2000;">
-        <video id="remoteVideo" autoplay playsinline style="width:90%; max-height:80%; border-radius:10px;"></video>
-        <video id="localVideo" autoplay muted playsinline style="width:28%; max-width:240px; border:2px solid #fff; border-radius:10px; position:absolute; bottom:18px; right:18px; object-fit:cover;"></video>
-        <button id="endCallBtn" style="margin-top:20px; background:red; color:white; border:none; padding:12px 18px; border-radius:50%; font-size:20px;">
-            <i class="fa-solid fa-phone-slash"></i>
-        </button>
-    </div>
-
     <div class="chat-input" style="position:relative;">
         <i class="fa-regular fa-face-smile" id='emoji-btn'></i>
         <input id='input' type="text" placeholder="Type a message..." inputmode="text">
@@ -570,387 +556,77 @@ async function openChat(friendId, friendName, friendAvatar) {
     </div>
     `;
 
-    /* ---------------- DOM refs ---------------- */
-    const emojiBtn = chatContainer.querySelector("#emoji-btn");
-    const emojiPicker = chatContainer.querySelector("#emoji-picker");
-    const input = chatContainer.querySelector("input");
-    const sendBtn = chatContainer.querySelector(".sendBtn");
-    const chatBox = chatContainer.querySelector(".messages");
-    const typingIndicator = chatContainer.querySelector("#typing-indicator");
-    const voiceCallBtn = chatContainer.querySelector("#voiceCallBtn");
-    const videoCallBtn = chatContainer.querySelector("#videoCallBtn");
-    const videoCallContainer = chatContainer.querySelector(".video-call");
-    const localVideo = chatContainer.querySelector("#localVideo");
-    const remoteVideo = chatContainer.querySelector("#remoteVideo");
-    const endCallBtn = chatContainer.querySelector("#endCallBtn");
+        const emojiBtn = chatContainer.querySelector("#emoji-btn");
+        const emojiPicker = chatContainer.querySelector("#emoji-picker");
+        const input = chatContainer.querySelector("input");
+        const sendBtn = chatContainer.querySelector(".sendBtn");
+        const chatBox = chatContainer.querySelector(".messages");
+        const typingIndicator = chatContainer.querySelector("#typing-indicator");
 
-    /* ---------------- Emoji Picker ---------------- */
-    emojiBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
-    });
-    emojiPicker.addEventListener("click", (e) => e.stopPropagation());
-    window.addEventListener('click', () => emojiPicker.style.display = 'none');
-    emojiPicker.addEventListener("emoji-click", event => {
-        input.value += event.detail.unicode;
-        input.focus();
-        sendBtn.disabled = !input.value.trim();
-    });
-
-    /* ---------------- Messages + Realtime ---------------- */
-    const oldMessages = await fetchMessages(friendId);
-    renderChatMessages(chatBox, oldMessages, friendAvatar);
-
-    // subscribe to message/typing/status channels (your existing function)
-    const { msgChannel, typingChannel, statusChannelRef: statusChan } =
-        await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
-
-    await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
-
-    /* ---------------- Typing Broadcast ---------------- */
-    input.addEventListener("input", () => {
-        sendBtn.disabled = !input.value.trim();
-        client.channel(`typing:${currentUserId}:${friendId}`).send({
-            type: "broadcast",
-            event: "typing",
-            payload: { userId: currentUserId, userName: "You" }
+        /* ---------------- Emoji Picker ---------------- */
+        emojiBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
         });
-    });
 
-    /* ---------------- Send Button ---------------- */
-    async function handleSend() {
-        const content = input.value.trim();
-        if (!content) return;
-        await sendMessage(friendId, content);
-        input.value = "";
-        sendBtn.disabled = true;
-    }
-    sendBtn.addEventListener("click", handleSend);
-    input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
+        emojiPicker.addEventListener("click", (e) => e.stopPropagation());
 
-    /* ---------------- Back Button Cleanup ---------------- */
-    const backBtn = chatContainer.querySelector('.backBtn');
-    backBtn?.addEventListener('click', async () => {
-        sidebar.style.display = 'flex';
-        chatContainer.style.display = 'none';
+        window.addEventListener('click', () => {
+            emojiPicker.style.display = 'none';
+        });
 
-        // remove channels created for this chat
-        try { if (msgChannel) await client.removeChannel(msgChannel); } catch (e) {}
-        try { if (typingChannel) await client.removeChannel(typingChannel); } catch (e) {}
-        try { if (statusChan) await client.removeChannel(statusChan); } catch (e) {}
+        emojiPicker.addEventListener("emoji-click", event => {
+            input.value += event.detail.unicode;
+            input.focus();
+            sendBtn.disabled = !input.value.trim();
+        });
 
-        // also remove callChannel if exists
-        try { if (callChannelRef) await client.removeChannel(callChannelRef); } catch (e) {}
-        // hang up if in call
-        if (currentCall) await endCall(true);
-    });
+        /* ---------------- Messages + Realtime ---------------- */
+        const oldMessages = await fetchMessages(friendId);
+        renderChatMessages(chatBox, oldMessages, friendAvatar);
 
-    /* ---------------- Call signaling & WebRTC (per-chat) ---------------- */
-    // callChannelRef is used to remove subscription later
-    let callChannelRef = null;
+        // ✅ store channels so we can remove later
+        const { msgChannel, typingChannel, statusChannelRef: statusChan } =
+            await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
-    // simple ringtone using WebAudio
-    let ringtoneCtx = null, ringtoneOsc = null;
-    function playRingtone() {
-        try {
-            if (ringtoneCtx) return;
-            ringtoneCtx = new (window.AudioContext || window.webkitAudioContext)();
-            ringtoneOsc = ringtoneCtx.createOscillator();
-            const gain = ringtoneCtx.createGain();
-            ringtoneOsc.type = 'sine';
-            ringtoneOsc.frequency.value = 480;
-            gain.gain.value = 0.02;
-            ringtoneOsc.connect(gain);
-            gain.connect(ringtoneCtx.destination);
-            ringtoneOsc.start();
-        } catch (err) { console.warn("Ringtone error", err); }
-    }
-    function stopRingtone() {
-        try { if (ringtoneOsc) ringtoneOsc.stop(); if (ringtoneCtx) ringtoneCtx.close(); } catch (e) {}
-        ringtoneOsc = null; ringtoneCtx = null;
-    }
+        await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
 
-    // Peer connection state
-    let pc = null;
-    let localStream = null;
-    let remoteStream = null;
-    let pendingIce = [];
-    let currentCall = null; // { peerId, direction, isVideo }
+        /* ---------------- Typing Broadcast ---------------- */
+        input.addEventListener("input", () => {
+            sendBtn.disabled = !input.value.trim();
+            client.channel(`typing:${currentUserId}:${friendId}`).send({
+                type: "broadcast",
+                event: "typing",
+                payload: { userId: currentUserId, userName: "You" }
+            });
+        });
 
-    // create and configure RTCPeerConnection
-    function createPeerConnection(peerId) {
-        const config = {
-            iceServers: [
-                { urls: "stun:stun.l.google.com:19302" }
-                // add TURN here for reliability: { urls:"turn:TURN_HOST:3478", username:"u", credential:"p" }
-            ]
-        };
-        const connection = new RTCPeerConnection(config);
-
-        connection.onicecandidate = ev => {
-            if (ev.candidate) {
-                // send candidate via call_signals table
-                client.from("call_signals").insert([{
-                    from_id: currentUserId,
-                    to_id: peerId,
-                    type: "ice",
-                    payload: ev.candidate
-                }]).catch(e => console.error("send ice error", e));
-            }
-        };
-
-        connection.ontrack = ev => {
-            if (!remoteStream) remoteStream = new MediaStream();
-            ev.streams[0].getTracks().forEach(t => remoteStream.addTrack(t));
-            if (remoteVideo) remoteVideo.srcObject = remoteStream;
-        };
-
-        connection.onconnectionstatechange = () => {
-            if (!connection) return;
-            if (connection.connectionState === "failed" || connection.connectionState === "disconnected") {
-                // end if failed
-                endCall(true);
-            }
-        };
-
-        return connection;
-    }
-
-    // helper: show incoming-call modal
-    let incomingModal = null;
-    function ensureIncomingModal() {
-        if (incomingModal) return incomingModal;
-        incomingModal = document.createElement("div");
-        incomingModal.id = "incoming-call-modal";
-        incomingModal.style = "position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:3000;";
-        incomingModal.innerHTML = `
-            <div style="background:#fff;border-radius:12px;padding:18px;min-width:300px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.4)">
-                <p id="incoming-text" style="font-weight:600;margin-bottom:12px;">Incoming call</p>
-                <div style="display:flex;gap:12px;justify-content:center">
-                    <button id="incoming-accept" style="background:#16a34a;color:#fff;padding:8px 14px;border-radius:8px;border:none;">Accept</button>
-                    <button id="incoming-reject" style="background:#ef4444;color:#fff;padding:8px 14px;border-radius:8px;border:none;">Reject</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(incomingModal);
-        return incomingModal;
-    }
-    function showIncomingModal(nameOrId) {
-        const modal = ensureIncomingModal();
-        modal.style.display = "flex";
-        modal.querySelector("#incoming-text").textContent = `${nameOrId} is calling...`;
-        playRingtone();
-    }
-    function hideIncomingModal() {
-        if (incomingModal) incomingModal.style.display = "none";
-        stopRingtone();
-    }
-
-    // callChannel subscription that listens for rows where to_id === currentUserId
-    // we filter client-side after receiving inserted rows
-    async function subscribeCallSignals() {
-        // cleanup old if any
-        if (callChannelRef) {
-            try { await client.removeChannel(callChannelRef); } catch (e) {}
-            callChannelRef = null;
+        /* ---------------- Send Button ---------------- */
+        async function handleSend() {
+            const content = input.value.trim();
+            if (!content) return;
+            await sendMessage(friendId, content);
+            input.value = "";
+            sendBtn.disabled = true;
         }
 
-        callChannelRef = client.channel(`call_signals_${currentUserId}_${friendId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'call_signals' }, payload => {
-                const sig = payload.new;
-                if (!sig) return;
-                if (sig.to_id !== currentUserId) return; // only signals to me
-                // Process only signals from this friend (ignore others while chat open)
-                if (sig.from_id !== friendId) return;
+        sendBtn.addEventListener("click", handleSend);
+        input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
 
-                // handle types
-                const type = sig.type;
-                const payloadData = sig.payload;
-                (async () => {
-                    if (type === "offer") {
-                        // incoming offer: show modal with accept/reject
-                        currentCall = { peerId: friendId, direction: "incoming", isVideo: !!payloadData?.isVideo, offer: payloadData.offer || payloadData };
-                        showIncomingModal(friendName || friendId);
-                        // wire accept/reject buttons
-                        const acceptBtn = incomingModal.querySelector("#incoming-accept");
-                        const rejectBtn = incomingModal.querySelector("#incoming-reject");
-                        acceptBtn.onclick = async () => {
-                            hideIncomingModal();
-                            await acceptIncomingCall(payloadData);
-                        };
-                        rejectBtn.onclick = async () => {
-                            hideIncomingModal();
-                            await client.from("call_signals").insert([{
-                                from_id: currentUserId, to_id: friendId, type: "reject", payload: { reason: "user_rejected" }
-                            }]);
-                        };
-                    } else if (type === "answer") {
-                        // remote answered our outgoing call
-                        if (pc && payloadData?.answer) {
-                            try { await pc.setRemoteDescription(new RTCSessionDescription(payloadData.answer)); } catch (e) { console.error(e); }
-                        }
-                    } else if (type === "ice") {
-                        // ICE candidate from remote
-                        try {
-                            const cand = new RTCIceCandidate(payloadData);
-                            if (pc && pc.remoteDescription && pc.remoteDescription.type) {
-                                await pc.addIceCandidate(cand);
-                            } else {
-                                pendingIce.push(cand);
-                            }
-                        } catch (e) { console.error("addIce error", e); }
-                    } else if (type === "hangup") {
-                        // remote ended
-                        endCall(false);
-                        alert("Call ended");
-                    } else if (type === "reject") {
-                        // remote rejected our outgoing call
-                        stopRingtone();
-                        endCall(false);
-                        alert("Call rejected");
-                    }
-                })();
-            }).subscribe();
-    }
+        /* ---------------- Back Button ---------------- */
+        const backBtn = chatContainer.querySelector('.backBtn');
+        if (backBtn) {
+            backBtn.addEventListener('click', async () => {
+                sidebar.style.display = 'flex';
+                chatContainer.style.display = 'none';
 
-    // Accept incoming call: create pc, add tracks, setRemoteDesc with offer, create answer and send
-    async function acceptIncomingCall(payloadData) {
-        try {
-            // stop any ringtone
-            stopRingtone();
-
-            pc = createPeerConnection(friendId);
-
-            // obtain media according to incoming offer flag
-            localStream = await navigator.mediaDevices.getUserMedia({ video: !!payloadData?.isVideo, audio: true });
-            localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-            if (localVideo) localVideo.srcObject = localStream;
-
-            // set remote description (offer)
-            const offerDesc = payloadData.offer || payloadData;
-            await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
-
-            // add pending ICE if any
-            if (pendingIce.length) {
-                for (const c of pendingIce) { try { await pc.addIceCandidate(c); } catch (e) {} }
-                pendingIce = [];
-            }
-
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-
-            // send answer row
-            await client.from("call_signals").insert([{
-                from_id: currentUserId,
-                to_id: friendId,
-                type: "answer",
-                payload: { answer }
-            }]);
-
-            // show in-call UI
-            showInCallUI();
-        } catch (err) {
-            console.error("acceptIncomingCall error", err);
-            await client.from("call_signals").insert([{
-                from_id: currentUserId,
-                to_id: friendId,
-                type: "hangup",
-                payload: { reason: "error_accept" }
-            }]);
-            endCall(false);
+                // ✅ properly cleanup only this chat’s channels
+                await client.removeChannel(msgChannel);
+                await client.removeChannel(typingChannel);
+                await client.removeChannel(statusChan);
+            });
         }
     }
-
-    // Initiate outgoing call
-    async function initiateOutgoingCall(isVideo) {
-        if (currentCall) return alert("Already in a call");
-        currentCall = { peerId: friendId, direction: "outgoing", isVideo };
-
-        // prepare pc + media
-        try {
-            pc = createPeerConnection(friendId);
-
-            localStream = await navigator.mediaDevices.getUserMedia({ video: !!isVideo, audio: true });
-            localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-            if (localVideo) localVideo.srcObject = localStream;
-
-            // create offer
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-
-            // send offer row with isVideo flag
-            await client.from("call_signals").insert([{
-                from_id: currentUserId,
-                to_id: friendId,
-                type: "offer",
-                payload: { offer, isVideo }
-            }]);
-
-            // play ringing locally while waiting for answer
-            playRingtone();
-
-            // show in-call UI (outgoing)
-            showInCallUI(true);
-        } catch (err) {
-            console.error("initiateOutgoingCall error", err);
-            endCall(false);
-        }
-    }
-
-    // End call locally; notify remote if notify === true
-    async function endCall(notify = true) {
-        stopRingtone();
-        try {
-            if (notify && currentCall && currentCall.peerId) {
-                await client.from("call_signals").insert([{
-                    from_id: currentUserId,
-                    to_id: currentCall.peerId,
-                    type: "hangup",
-                    payload: {}
-                }]);
-            }
-        } catch (e) { /* ignore */ }
-
-        // cleanup streams + pc
-        try { if (localStream) localStream.getTracks().forEach(t => t.stop()); } catch (e) {}
-        try { if (remoteStream) remoteStream.getTracks().forEach(t => t.stop()); } catch (e) {}
-        try { if (pc) pc.close(); } catch (e) {}
-        pc = null; localStream = null; remoteStream = null; pendingIce = []; currentCall = null;
-
-        // hide UI
-        const v = document.querySelector(".video-call");
-        if (v) v.style.display = "none";
-        if (localVideo) localVideo.srcObject = null;
-        if (remoteVideo) remoteVideo.srcObject = null;
-    }
-
-    // show in-call UI
-    function showInCallUI(outgoing = false) {
-        const v = document.querySelector(".video-call");
-        if (v) v.style.display = "flex";
-        if (localVideo && localStream) localVideo.srcObject = localStream;
-        if (remoteVideo && remoteStream) remoteVideo.srcObject = remoteStream;
-        stopRingtone();
-    }
-
-    // wire call controls
-    endCallBtn.addEventListener("click", () => endCall(true));
-    voiceCallBtn.addEventListener("click", () => {
-        subscribeCallSignals().catch(e => console.error(e));
-        initiateOutgoingCall(false);
-    });
-    videoCallBtn.addEventListener("click", () => {
-        subscribeCallSignals().catch(e => console.error(e));
-        initiateOutgoingCall(true);
-    });
-
-    // subscribe to call_signals for incoming signals from this friend (per-chat)
-    await subscribeCallSignals();
-
-    // expose endCall to outer scope if needed (optional)
-    // window._endCall = endCall;
-}
-
 
 
     /* ------------------ Button Listener ------------------ */

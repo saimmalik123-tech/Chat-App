@@ -370,93 +370,14 @@ nav h2 a {
   padding: 10px;
   border-top: 1px solid var(--input-border);
   background-color: var(--bg);
+  position: sticky;
+  bottom: 0;
 }
 
 #addFriendsSVG {
   width: 20px;
   height: 20px;
   filter: invert(1);
-}
-
-/* ---------------- Video Call Container ---------------- */
-.video-call {
-  display: none; /* hidden until call starts */
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.95);
-  z-index: 2000;
-
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-
-  transition: all 0.3s ease;
-}
-
-/* Remote video (main full screen) */
-.video-call #remoteVideo {
-  width: 90%;
-  max-height: 80%;
-  border-radius: 12px;
-  box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
-  background: #000;
-  object-fit: cover;
-}
-
-/* Local video (small preview) */
-.video-call #localVideo {
-  width: 28%;
-  max-width: 200px;
-  border-radius: 12px;
-  border: 2px solid #fff;
-  position: absolute;
-  bottom: 15px;
-  right: 15px;
-  background: #000;
-  object-fit: cover;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
-}
-
-/* End call button */
-.video-call #endCallBtn {
-  margin-top: 20px;
-  background: #ef4444; /* red */
-  color: #fff;
-  border: none;
-  padding: 14px 18px;
-  border-radius: 50%;
-  font-size: 22px;
-  cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
-}
-
-.video-call #endCallBtn:hover {
-  background: #dc2626;
-  transform: scale(1.1);
-}
-
-/* Voice/Video Call Buttons in Header */
-.chat-header .call-actions {
-  display: flex;
-  gap: 10px;
-  margin-left: auto;
-}
-
-.chat-header .call-actions button {
-  background: var(--accent, #2563eb);
-  border: none;
-  padding: 8px 10px;
-  border-radius: 50%;
-  color: white;
-  font-size: 16px;
-  cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
-}
-
-.chat-header .call-actions button:hover {
-  background: #1e40af;
-  transform: scale(1.05);
 }
 
 .chat-input input {
