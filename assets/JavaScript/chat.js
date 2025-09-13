@@ -444,7 +444,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
 
-    /* ------------------ Realtime Messages & Online Status ------------------ */
+    // RealTime Update
+
     function subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator) {
 
         function upsertMessageAndRender(oldMessages, msgObj, chatBox, friendAvatar) {
@@ -461,7 +462,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             async payload => {
                 const newMsg = payload.new;
 
-                const isRelevant = (newMsg.sender_id === currentUserId && newMsg.receiver_id === friendId) ||
+                const isRelevant =
+                    (newMsg.sender_id === currentUserId && newMsg.receiver_id === friendId) ||
                     (newMsg.sender_id === friendId && newMsg.receiver_id === currentUserId);
                 if (!isRelevant) return;
 
@@ -499,7 +501,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 badge.remove();
                             }
                         }
-
                     } catch (err) {
                         console.error("Unexpected error marking single message seen:", err.message);
                     }
@@ -507,13 +508,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         );
 
-
         msgChannel.on("postgres_changes",
             { event: "UPDATE", schema: "public", table: "messages" },
             payload => {
                 const updated = payload.new;
-
-                const isRelevant = (updated.sender_id === currentUserId && updated.receiver_id === friendId) ||
+                const isRelevant =
+                    (updated.sender_id === currentUserId && updated.receiver_id === friendId) ||
                     (updated.sender_id === friendId && updated.receiver_id === currentUserId);
                 if (!isRelevant) return;
 
@@ -536,12 +536,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             });
 
+        client.removeChannel('user_status');
+
         const statusChannel = client.channel('user_status')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles' }, payload => {
-                if (payload.new.user_id === friendId) {
-                    typingIndicator.textContent = payload.new.is_online ? "Online" : "Offline";
+            .on('postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'user_profiles' },
+                payload => {
+                    if (payload.new.user_id === friendId) {
+                        typingIndicator.textContent = payload.new.is_online ? "Online" : "Offline";
+                    }
                 }
-            });
+            );
 
         msgChannel.subscribe();
         typingChannel.subscribe();
@@ -575,13 +580,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         <button disabled class='sendBtn'>➤</button>
         <emoji-picker id="emoji-picker" style="position:absolute; bottom:50px; left:0; display:none; z-index:1000;"></emoji-picker>
     </div>
-`;
+    `;
 
         const emojiBtn = chatContainer.querySelector("#emoji-btn");
         const emojiPicker = chatContainer.querySelector("#emoji-picker");
+        const input = chatContainer.querySelector("input");
+        const sendBtn = chatContainer.querySelector(".sendBtn");
+        const chatBox = chatContainer.querySelector(".messages");
+        const typingIndicator = chatContainer.querySelector("#typing-indicator");
 
+        /* ---------------- Emoji Picker ---------------- */
         emojiBtn.addEventListener("click", (e) => {
-            e.stopPropagation(); // prevent window click from firing
+            e.stopPropagation();
             emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
         });
 
@@ -596,21 +606,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         emojiPicker.addEventListener("emoji-click", event => {
             input.value += event.detail.unicode;
             input.focus();
-            chatContainer.querySelector(".sendBtn").disabled = !input.value.trim();
+            sendBtn.disabled = !input.value.trim();
         });
 
-
-
-        const chatBox = chatContainer.querySelector(".messages");
-        const typingIndicator = chatContainer.querySelector("#typing-indicator");
-        const input = chatContainer.querySelector("input");
-        const sendBtn = chatContainer.querySelector(".sendBtn");
-
+        /* ---------------- Messages + Realtime ---------------- */
         const oldMessages = await fetchMessages(friendId);
         renderChatMessages(chatBox, oldMessages, friendAvatar);
+
         subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
+
         await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
 
+        /* ---------------- Typing Broadcast ---------------- */
         input.addEventListener("input", () => {
             sendBtn.disabled = !input.value.trim();
             client.channel(`typing:${currentUserId}:${friendId}`).send({
@@ -620,6 +627,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         });
 
+        /* ---------------- Send Button ---------------- */
         async function handleSend() {
             const content = input.value.trim();
             if (!content) return;
@@ -631,15 +639,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         sendBtn.addEventListener("click", handleSend);
         input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
 
+        /* ---------------- Back Button ---------------- */
         const backBtn = chatContainer.querySelector('.backBtn');
         if (backBtn) {
             backBtn.addEventListener('click', () => {
                 sidebar.style.display = 'flex';
                 chatContainer.style.display = 'none';
+
+                client.removeAllChannels();
             });
         }
     }
-
 
     /* ------------------ Button Listener ------------------ */
     document.querySelector(".submit-friend")?.addEventListener("click", () => {
