@@ -28,8 +28,8 @@ body {
   height: 100%;
   background-color: var(--bg);
   color: var(--text-primary);
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
+  /* overflow-y: auto; */
 }
 
 body {
