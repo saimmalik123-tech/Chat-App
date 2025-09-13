@@ -554,7 +554,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const sidebar = document.querySelector('.sidebar');
         if (!chatContainer) return;
 
-        if (window.innerWidth <= 700) {
+        if (window.innerWidth <= 768) {
             sidebar.style.display = 'none';
             chatContainer.style.display = 'flex';
         }
