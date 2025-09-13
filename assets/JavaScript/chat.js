@@ -546,6 +546,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             <h4>${friendName || 'Unknown'}</h4>
             <p id="typing-indicator">Online</p>
         </div>
+        <div class="call-actions">
+            <button id="voiceCallBtn"><i class="fa-solid fa-phone"></i></button>
+            <button id="videoCallBtn"><i class="fa-solid fa-video"></i></button>
+        </div>
     </div>
     <div class="messages"></div>
     <div class="chat-input" style="position:relative;">
@@ -553,6 +557,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         <input id='input' type="text" placeholder="Type a message..." inputmode="text">
         <button disabled class='sendBtn'>➤</button>
         <emoji-picker id="emoji-picker" style="position:absolute; bottom:50px; left:0; display:none; z-index:1000;"></emoji-picker>
+    </div>
+
+    <!-- Video Call UI -->
+    <div class="video-call" style="display:none; position:fixed; inset:0; background:#000; flex-direction:column; justify-content:center; align-items:center; z-index:2000;">
+        <video id="localVideo" autoplay muted playsinline style="width:30%; border:2px solid #fff; border-radius:10px; position:absolute; bottom:10px; right:10px;"></video>
+        <video id="remoteVideo" autoplay playsinline style="width:90%; max-height:80%; border-radius:10px;"></video>
+        <button id="endCallBtn" style="margin-top:20px; background:red; color:white; border:none; padding:12px 18px; border-radius:50%; font-size:20px;">
+            <i class="fa-solid fa-phone-slash"></i>
+        </button>
     </div>
     `;
 
@@ -570,11 +583,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
 
         emojiPicker.addEventListener("click", (e) => e.stopPropagation());
-
-        window.addEventListener('click', () => {
-            emojiPicker.style.display = 'none';
-        });
-
+        window.addEventListener('click', () => emojiPicker.style.display = 'none');
         emojiPicker.addEventListener("emoji-click", event => {
             input.value += event.detail.unicode;
             input.focus();
@@ -585,7 +594,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         const oldMessages = await fetchMessages(friendId);
         renderChatMessages(chatBox, oldMessages, friendAvatar);
 
-        // ✅ store channels so we can remove later
         const { msgChannel, typingChannel, statusChannelRef: statusChan } =
             await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
@@ -609,7 +617,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             input.value = "";
             sendBtn.disabled = true;
         }
-
         sendBtn.addEventListener("click", handleSend);
         input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
 
@@ -620,13 +627,73 @@ document.addEventListener("DOMContentLoaded", async () => {
                 sidebar.style.display = 'flex';
                 chatContainer.style.display = 'none';
 
-                // ✅ properly cleanup only this chat’s channels
                 await client.removeChannel(msgChannel);
                 await client.removeChannel(typingChannel);
                 await client.removeChannel(statusChan);
             });
         }
+
+        /* ---------------- Voice/Video Call ---------------- */
+        const videoCallContainer = chatContainer.querySelector(".video-call");
+        const localVideo = chatContainer.querySelector("#localVideo");
+        const remoteVideo = chatContainer.querySelector("#remoteVideo");
+        const endCallBtn = chatContainer.querySelector("#endCallBtn");
+        const voiceCallBtn = chatContainer.querySelector("#voiceCallBtn");
+        const videoCallBtn = chatContainer.querySelector("#videoCallBtn");
+
+        let peerConnection, localStream, remoteStream;
+
+        async function startCall(isVideo) {
+            videoCallContainer.style.display = "flex";
+            localStream = await navigator.mediaDevices.getUserMedia({
+                video: isVideo,
+                audio: true
+            });
+
+            peerConnection = new RTCPeerConnection({
+                iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+            });
+
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            localVideo.srcObject = localStream;
+
+            remoteStream = new MediaStream();
+            remoteVideo.srcObject = remoteStream;
+            peerConnection.ontrack = (e) => e.streams[0].getTracks().forEach(t => remoteStream.addTrack(t));
+
+            peerConnection.onicecandidate = (e) => {
+                if (e.candidate) {
+                    client.from("signals").insert([{
+                        from_id: currentUserId,
+                        to_id: friendId,
+                        candidate: e.candidate
+                    }]);
+                }
+            };
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            await client.from("signals").insert([{
+                from_id: currentUserId,
+                to_id: friendId,
+                offer
+            }]);
+        }
+
+        function endCall() {
+            if (localStream) localStream.getTracks().forEach(t => t.stop());
+            if (remoteStream) remoteStream.getTracks().forEach(t => t.stop());
+            if (peerConnection) peerConnection.close();
+            peerConnection = null;
+            videoCallContainer.style.display = "none";
+        }
+
+        endCallBtn.addEventListener("click", endCall);
+        voiceCallBtn.addEventListener("click", () => startCall(false));
+        videoCallBtn.addEventListener("click", () => startCall(true));
     }
+
 
 
     /* ------------------ Button Listener ------------------ */
