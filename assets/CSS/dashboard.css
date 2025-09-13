@@ -25,7 +25,7 @@ body {
   background-color: var(--bg);
   color: var(--text-primary);
   overflow-x: hidden;
-  overflow-y: auto; /* ✅ allow page to resize when keyboard opens */
+  overflow-y: auto;
 }
 
 body {
@@ -47,7 +47,6 @@ body.dark {
   --footer-bg: #1e293b;
 }
 
-/* Header */
 header nav {
   display: flex;
   justify-content: space-between;
@@ -128,7 +127,7 @@ nav h2 a {
   padding: 5px;
   gap: 5px;
   overflow-y: auto;
-  flex: 1 1 auto;
+  height: 100%;
 }
 
 .chat-list::-webkit-scrollbar {
@@ -159,6 +158,9 @@ nav h2 a {
   border-radius: 50%;
   background-color: var(--accent);
   color: var(--bg) !important;
+  position: relative;
+  right: 5px;
+  bottom: 15%;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -190,11 +192,12 @@ nav h2 a {
 
 /* Chat Area */
 .chat-area {
-  flex: 1 1 auto; /* ✅ flex-based layout */
+  width: 70%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  min-height: 0; /* ✅ fix for keyboard shrinking */
+  overflow: hidden;
 }
 
 .chat-header {
@@ -223,8 +226,7 @@ nav h2 a {
 }
 
 .messages {
-  flex: 1 1 auto;
-  min-height: 0; /* ✅ ensures it shrinks properly */
+  flex: 1;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -274,6 +276,7 @@ nav h2 a {
 }
 
 /* Request PopUp */
+
 #message-popup {
   display: none;
   position: absolute;
@@ -365,10 +368,6 @@ nav h2 a {
   padding: 10px;
   border-top: 1px solid var(--input-border);
   background-color: var(--bg);
-  flex-shrink: 0;
-  position: sticky; /* ✅ better for mobile */
-  bottom: 0;
-  padding-bottom: env(safe-area-inset-bottom); /* ✅ iOS safe area */
 }
 
 #addFriendsSVG {
@@ -416,6 +415,233 @@ emoji-picker {
   transform: scale(1.1);
 }
 
+/* Default screen */
+.default {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 20px;
+  background-color: var(--bg);
+}
+
+.default i {
+  font-size: 60px;
+  color: #4caf50;
+  margin-bottom: 20px;
+  animation: bounce 1.5s infinite, pulse 2s infinite;
+}
+
+@keyframes bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-15px);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.default p {
+  font-size: 24px;
+  color: #555;
+  line-height: 1.6;
+  max-width: 520px;
+  opacity: 0;
+  animation: fadeIn 1s 0.3s forwards;
+}
+
+/* Buttons */
+.addFriends {
+  background: var(--accent);
+  color: #fff;
+  padding: 7px 15px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  width: 25%;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.addFriends:hover {
+  background: #43a047;
+}
+
+.backBtn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.3s ease, transform 0.2s ease;
+}
+
+.backBtn i {
+  margin-right: 5px;
+}
+
+.backBtn:hover {
+  background: #43a047;
+  transform: scale(1.05);
+}
+
+/* Floating message button */
+#message {
+  position: fixed;
+  bottom: 70px;
+  left: 20px;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-size: 2.1rem;
+  cursor: pointer;
+  z-index: 50;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+}
+
+#unread-count {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  min-width: 20px;
+  height: 20px;
+  background-color: red;
+  color: white;
+  font-size: 0.8rem;
+  font-weight: bold;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2px 5px;
+}
+
+/* Popups and modals */
+.modal,
+.popup {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9999;
+}
+
+.modal-content,
+.popup-content {
+  background: var(--bg);
+  color: var(--text-primary);
+  padding: 25px 20px;
+  border-radius: 12px;
+  width: 320px;
+  max-width: 90%;
+  text-align: center;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  position: relative;
+  animation: popUp 0.3s ease;
+}
+
+.friend-input {
+  width: 100%;
+  padding: 10px;
+  margin: 15px 0;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  outline: none;
+  font-size: 0.9rem;
+}
+
+#emoji-btn {
+  font-size: 1.5rem;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.submit-friend {
+  background: var(--accent);
+  color: #fff;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  font-size: 0.9rem;
+}
+
+.submit-friend:hover {
+  background: #388e3c;
+}
+
+.close,
+.popup-close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-size: 24px;
+  font-weight: bold;
+  color: #666;
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.close:hover,
+.popup-close:hover {
+  color: #000;
+}
+
+.popup.success {
+  border-left: 6px solid #16a34a;
+}
+.popup.error {
+  border-left: 6px solid #dc2626;
+}
+.popup.info {
+  border-left: 6px solid var(--accent);
+}
+
+.hidden {
+  display: none !important;
+}
+
+@keyframes popUp {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 /* Responsive */
 @media (max-width: 992px) {
   .sidebar {
@@ -450,10 +676,10 @@ emoji-picker {
 
   .chat-input {
     width: 100%;
-    min-height: 60px;
+    background: var(--bg);
+    min-height: 70px;
     height: auto;
   }
-
   .sidebar {
     width: 100%;
   }
