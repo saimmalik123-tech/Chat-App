@@ -368,7 +368,7 @@ nav h2 a {
   align-items: center;
   gap: 6px;
   padding: 10px;
-  height: auto;
+  height: calc(100% - 70px);
   border-top: 1px solid var(--input-border);
   background-color: var(--bg);
   position: sticky;
