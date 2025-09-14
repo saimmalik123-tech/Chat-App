@@ -643,27 +643,47 @@ document.addEventListener("DOMContentLoaded", async () => {
         sendFriendRequest(username);
     });
 
+    async function subscribeToGlobalMessages() {
+        const globalChannel = client.channel("global-messages");
+
+        // New message arrives
+        globalChannel.on(
+            "postgres_changes",
+            { event: "INSERT", schema: "public", table: "messages" },
+            payload => {
+                const newMsg = payload.new;
+
+                // If I am the receiver
+                if (newMsg.receiver_id === currentUserId) {
+                    const prev = unseenCounts[newMsg.sender_id] || 0;
+                    unseenCounts[newMsg.sender_id] = prev + 1;
+                    updateUnseenBadge(newMsg.sender_id, unseenCounts[newMsg.sender_id]);
+                }
+            }
+        );
+
+        // Message marked as seen
+        globalChannel.on(
+            "postgres_changes",
+            { event: "UPDATE", schema: "public", table: "messages" },
+            payload => {
+                const updated = payload.new;
+
+                if (updated.receiver_id === currentUserId && updated.seen === true) {
+                    unseenCounts[updated.sender_id] = 0;
+                    updateUnseenBadge(updated.sender_id, 0);
+                }
+            }
+        );
+
+        await globalChannel.subscribe();
+    }
+
+
 
     /* ------------------ Initial Load ------------------ */
     await getCurrentUser();
     await fetchFriendRequests();
     await fetchFriends();
-
-    // const { data: friends } = await client
-    //     .from("friends")
-    //     .select("*")
-    //     .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
-
-    // if (friends) {
-    //     for (const f of friends) {
-    //         const friendId = f.user1_id === currentUserId ? f.user2_id : f.user1_id;
-
-    //         const chatBox = document.createElement("div");
-    //         const typingIndicator = document.createElement("p");
-    //         const oldMessages = await fetchMessages(friendId);
-
-    //         await subscribeToMessages(friendId, chatBox, oldMessages, "./assets/icon/user.png", typingIndicator);
-    //     }
-    // }
-
+    await subscribeToGlobalMessages();
 });
