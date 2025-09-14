@@ -410,20 +410,28 @@ document.addEventListener("DOMContentLoaded", async () => {
             const msgDiv = document.createElement("div");
             msgDiv.className = `message ${isMe ? "sent" : "received"}`;
 
-            msgDiv.innerHTML = `
-            ${!isMe ? `<img src="${friendAvatar}" class="msg-avatar" style="width:25px;height:25px;border-radius:50%;margin-right:6px;">` : ""}
-            <span>${msg.content}</span>
-        `;
+            const timeStr = new Date(msg.created_at).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit"
+            });
 
-            if (isMe) {
-                msgDiv.innerHTML += `<small class="seen-status">${msg.seen ? "✓✓" : "✓"}</small>`;
-            }
+            msgDiv.innerHTML = `
+            ${!isMe
+                    ? `<img src="${friendAvatar}" class="msg-avatar" style="width:25px;height:25px;border-radius:50%;margin-right:6px;">`
+                    : ""}
+            <div class="msg-bubble">
+                <span class="msg-text">${msg.content}</span>
+                <div class="msg-meta">
+                    <small class="msg-time">${timeStr}</small>
+                    ${isMe ? `<small class="seen-status">${msg.seen ? "✓✓" : "✓"}</small>` : ""}
+                </div>
+            </div>
+        `;
 
             chatBox.appendChild(msgDiv);
         });
         chatBox.scrollTop = chatBox.scrollHeight;
     }
-
 
     // Send Friend Request
 
