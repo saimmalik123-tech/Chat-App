@@ -682,7 +682,7 @@ emoji-picker {
     width: 100%;
     background: var(--bg);
     min-height: 70px;
-    flex: 1;
+    flex: 1 1 0;
   }
 
   .sidebar {
