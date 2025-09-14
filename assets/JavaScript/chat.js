@@ -639,7 +639,7 @@ document.addEventListener("DOMContentLoaded", async () => {
  
     /* ------------------ Initial Load ------------------ */
     await getCurrentUser();
-    await fetchFriendRequests();
-    await fetchFriends();
-    await subscribeToMessages();
+    fetchFriendRequests();
+    fetchFriends();
+    subscribeToMessages();
 });
