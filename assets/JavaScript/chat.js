@@ -642,4 +642,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     fetchFriendRequests();
     fetchFriends();
     subscribeToMessages();
+    openChat();
 });
