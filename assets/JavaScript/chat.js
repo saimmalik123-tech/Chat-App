@@ -224,12 +224,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (count > 0) {
             badge.textContent = count;
-            badge.style.display = "block";
+            badge.style.display = "flex";
         } else {
             badge.style.display = "none";
         }
     }
-    
+
     /* ------------------ Fetch Friends / Chat List ------------------ */
     async function fetchFriends() {
         if (!currentUserId) return;
