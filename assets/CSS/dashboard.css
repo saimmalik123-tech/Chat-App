@@ -368,7 +368,6 @@ nav h2 a {
   align-items: center;
   gap: 6px;
   padding: 10px;
-  height: calc(100% - 70px);
   border-top: 1px solid var(--input-border);
   background-color: var(--bg);
   position: sticky;
@@ -661,7 +660,7 @@ emoji-picker {
 @media (max-width: 768px) {
   .chat-container {
     flex-direction: column;
-    height: 100%;
+    height: calc(100% - 70px);
   }
 
   .chat-area {
@@ -669,7 +668,6 @@ emoji-picker {
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;
-    height: calc(100% -70px);
     width: 100%;
   }
 
