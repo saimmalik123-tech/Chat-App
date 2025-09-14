@@ -16,7 +16,7 @@ async function signUp() {
     });
 
     if (error) {
-        alert("Error signing up: " + error.message);
+        showPopup("Error signing up: " + error.message);
         return;
     }
 
@@ -30,7 +30,7 @@ async function signUp() {
             }], { onConflict: "email" });
 
         if (upsertError) {
-            alert("Error saving user in private_users: " + upsertError.message);
+            showPopup("Error saving user in private_users: " + upsertError.message);
             return;
         }
     }
@@ -50,7 +50,7 @@ signUpBtn?.addEventListener('click', async e => {
 async function checkProfileAndRedirect() {
     const { data: { user }, error: userError } = await client.auth.getUser();
     if (userError || !user) {
-        alert("User not logged in.");
+        showPopup("User not logged in.");
         return;
     }
 
@@ -61,7 +61,7 @@ async function checkProfileAndRedirect() {
         .maybeSingle();
 
     if (profileError) {
-        alert("Error checking profile: " + profileError.message);
+        showPopup("Error checking profile: " + profileError.message);
         return;
     }
 
@@ -83,7 +83,7 @@ async function login() {
     });
 
     if (error) {
-        alert("Login failed: " + error.message);
+        showPopup("Login failed: " + error.message);
     } else {
         await checkProfileAndRedirect();
     }
@@ -142,7 +142,7 @@ async function setupProfile() {
 
     const { data: { user }, error: userError } = await client.auth.getUser();
     if (userError || !user) {
-        alert("User not logged in.");
+        showPopup("User not logged in.");
         return;
     }
 
@@ -155,7 +155,7 @@ async function setupProfile() {
         }], { onConflict: "email" });
 
     if (upsertError) {
-        alert("Error saving user in private_users: " + upsertError.message);
+        showPopup("Error saving user in private_users: " + upsertError.message);
         return;
     }
 
@@ -167,7 +167,7 @@ async function setupProfile() {
             .upload(fileName, avatarFile, { cacheControl: '3600', upsert: true });
 
         if (uploadError) {
-            alert("Error uploading avatar: " + uploadError.message);
+            showPopup("Error uploading avatar: " + uploadError.message);
             return;
         }
 
@@ -186,11 +186,11 @@ async function setupProfile() {
         }]);
 
     if (insertProfileError) {
-        alert("Error saving profile: " + insertProfileError.message);
+        showPopup("Error saving profile: " + insertProfileError.message);
         return;
     }
 
-    alert("Profile saved successfully!");
+    showPopup("Profile saved successfully!");
     window.location.href = "dashboard.html";
 }
 
