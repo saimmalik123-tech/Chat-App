@@ -456,7 +456,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         /* ---------------- Messages Channel ---------------- */
-        const msgChannel = client.channel(`chat:${currentUserId}:${friendId}`);
+        const msgChannel = client.channel(`chat:${[currentUserId, friendId].sort().join(":")}`);
         msgChannel.on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, async payload => {
             const newMsg = payload.new;
             const isRelevant =
@@ -488,7 +488,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
 
         /* ---------------- Typing Channel ---------------- */
-        const typingChannel = client.channel(`typing:${currentUserId}:${friendId}`)
+        const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
+        const typingChannel = client.channel(typingChannelName)
             .on("broadcast", { event: "typing" }, payload => {
                 if (payload.userId === friendId) {
                     typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
@@ -505,16 +506,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         /* ---------------- Status Channel ---------------- */
         if (statusChannelRef) {
-            await client.removeChannel(statusChannelRef); // ✅ properly cleanup previous
+            await client.removeChannel(statusChannelRef); // cleanup previous
         }
 
         statusChannelRef = client.channel("user_status")
             .on("postgres_changes",
-                { event: "UPDATE", schema: "public", table: "user_profiles" },
+                {
+                    event: "*", // INSERT + UPDATE + DELETE
+                    schema: "public",
+                    table: "user_profiles",
+                    filter: `user_id=eq.${friendId}`
+                },
                 payload => {
-                    if (payload.new.user_id === friendId) {
-                        typingIndicator.textContent = payload.new.is_online ? "Online" : "Offline";
-                    }
+                    typingIndicator.textContent = payload.new?.is_online ? "Online" : "Offline";
                 }
             );
 
@@ -544,7 +548,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
         <div>
             <h4>${friendName || 'Unknown'}</h4>
-            <p id="typing-indicator">Online</p>
+            <p id="typing-indicator">Offline</p>
         </div>
     </div>
     <div class="messages"></div>
@@ -570,10 +574,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
 
         emojiPicker.addEventListener("click", (e) => e.stopPropagation());
-
-        window.addEventListener('click', () => {
-            emojiPicker.style.display = 'none';
-        });
+        window.addEventListener('click', () => { emojiPicker.style.display = 'none'; });
 
         emojiPicker.addEventListener("emoji-click", event => {
             input.value += event.detail.unicode;
@@ -585,15 +586,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         const oldMessages = await fetchMessages(friendId);
         renderChatMessages(chatBox, oldMessages, friendAvatar);
 
+        // subscribe with fixed function (uses shared typing channel + status)
         const { msgChannel, typingChannel, statusChannelRef: statusChan } =
             await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
         await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
 
         /* ---------------- Typing Broadcast ---------------- */
+        const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
         input.addEventListener("input", () => {
             sendBtn.disabled = !input.value.trim();
-            client.channel(`typing:${currentUserId}:${friendId}`).send({
+            client.channel(typingChannelName).send({
                 type: "broadcast",
                 event: "typing",
                 payload: { userId: currentUserId, userName: "You" }
@@ -619,9 +622,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 sidebar.style.display = 'flex';
                 chatContainer.style.display = 'none';
 
-                await client.removeChannel(msgChannel);
-                await client.removeChannel(typingChannel);
-                await client.removeChannel(statusChan);
+                // cleanup realtime channels properly
+                if (msgChannel) await client.removeChannel(msgChannel);
+                if (typingChannel) await client.removeChannel(typingChannel);
+                if (statusChan) await client.removeChannel(statusChan);
             });
         }
     }
