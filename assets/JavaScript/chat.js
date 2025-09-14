@@ -636,11 +636,29 @@ document.addEventListener("DOMContentLoaded", async () => {
         sendFriendRequest(username);
     });
 
- 
+
     /* ------------------ Initial Load ------------------ */
     await getCurrentUser();
     await fetchFriendRequests();
     await fetchFriends();
-    await subscribeToMessages();
-    await openChat();
+
+    /* 🔹 Start realtime for all friends immediately */
+    const { data: friends } = await client
+        .from("friends")
+        .select("*")
+        .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
+
+    if (friends) {
+        for (const f of friends) {
+            const friendId = f.user1_id === currentUserId ? f.user2_id : f.user1_id;
+
+            // prepare minimal UI hooks for background realtime
+            const chatBox = document.createElement("div"); // hidden temp container
+            const typingIndicator = document.createElement("p");
+            const oldMessages = await fetchMessages(friendId);
+
+            await subscribeToMessages(friendId, chatBox, oldMessages, "./assets/icon/user.png", typingIndicator);
+        }
+    }
+
 });
