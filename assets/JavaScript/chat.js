@@ -28,6 +28,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let currentUserId = null;
     let messages = [];
     let statusChannelRef = null;
+    let unseenCounts = {};
 
 
     /* ------------------ Get Current User ------------------ */
@@ -472,7 +473,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (newMsg.receiver_id === currentUserId) {
                 const prev = unseenCounts[newMsg.sender_id] || 0;
-                updateUnseenBadge(newMsg.sender_id, prev + 1);
+                unseenCounts[newMsg.sender_id] = prev + 1;
+                updateUnseenBadge(newMsg.sender_id, unseenCounts[newMsg.sender_id]);
             }
         });
 
@@ -486,6 +488,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             upsertMessageAndRender(oldMessages, updated, chatBox, friendAvatar);
 
             if (updated.receiver_id === currentUserId && updated.seen === true) {
+                unseenCounts[updated.sender_id] = 0;
                 updateUnseenBadge(updated.sender_id, 0);
             }
         });
