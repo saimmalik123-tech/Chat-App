@@ -215,7 +215,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (badge) {
             badge.textContent = count > 0 ? count : '';
         } else if (count > 0) {
-            // if badge doesn't exist, create it
             const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
             if (chatLi) {
                 const p = document.createElement('p');
@@ -468,19 +467,28 @@ document.addEventListener("DOMContentLoaded", async () => {
             renderChatMessages(chatBox, oldMessages, friendAvatar);
 
             if (newMsg.receiver_id === currentUserId) {
-                const badge = document.querySelector(`.chat[data-friend-id="${newMsg.sender_id}"] .non-seen-msg`);
-                if (badge) {
-                    badge.textContent = (parseInt(badge.textContent) || 0) + 1;
+                const chatLi = document.querySelector(`.chat[data-friend-id="${newMsg.sender_id}"]`);
+                if (!chatLi) return;
+
+                let badge = chatLi.querySelector(".non-seen-msg");
+
+                if (!badge) {
+                    badge = document.createElement("p");
+                    badge.className = "non-seen-msg";
+                    chatLi.appendChild(badge);
+                }
+
+                let count = parseInt(badge.textContent) || 0;
+                count++;
+
+                if (count > 0) {
+                    badge.textContent = count;
+                    badge.style.display = "block";
                 } else {
-                    const chatLi = document.querySelector(`.chat[data-friend-id="${newMsg.sender_id}"]`);
-                    if (chatLi) {
-                        const p = document.createElement('p');
-                        p.className = 'non-seen-msg';
-                        p.textContent = 1;
-                        chatLi.appendChild(p);
-                    }
+                    badge.style.display = "none";
                 }
             }
+
 
         });
 
@@ -598,7 +606,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
         await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
-        updateUnseenBadge(friendId, 0);
+        updateUnseenBadge(friendId, count);
 
         /* ---------------- Typing Broadcast ---------------- */
         const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
@@ -650,21 +658,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     await fetchFriendRequests();
     await fetchFriends();
 
-    const { data: friends } = await client
-        .from("friends")
-        .select("*")
-        .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
+    // const { data: friends } = await client
+    //     .from("friends")
+    //     .select("*")
+    //     .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
 
-    if (friends) {
-        for (const f of friends) {
-            const friendId = f.user1_id === currentUserId ? f.user2_id : f.user1_id;
+    // if (friends) {
+    //     for (const f of friends) {
+    //         const friendId = f.user1_id === currentUserId ? f.user2_id : f.user1_id;
 
-            const chatBox = document.createElement("div");
-            const typingIndicator = document.createElement("p");
-            const oldMessages = await fetchMessages(friendId);
+    //         const chatBox = document.createElement("div");
+    //         const typingIndicator = document.createElement("p");
+    //         const oldMessages = await fetchMessages(friendId);
 
-            await subscribeToMessages(friendId, chatBox, oldMessages, "./assets/icon/user.png", typingIndicator);
-        }
-    }
+    //         await subscribeToMessages(friendId, chatBox, oldMessages, "./assets/icon/user.png", typingIndicator);
+    //     }
+    // }
 
 });
