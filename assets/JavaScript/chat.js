@@ -471,9 +471,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             renderChatMessages(chatBox, oldMessages, friendAvatar);
 
             if (newMsg.receiver_id === currentUserId) {
-                const badge = document.querySelector(`.chat[data-friend-id="${newMsg.sender_id}"] .non-seen-msg`);
-                const currentCount = badge && badge.style.display !== "none" ? parseInt(badge.textContent) || 0 : 0;
-                updateUnseenBadge(newMsg.sender_id, currentCount + 1);
+                const prev = unseenCounts[newMsg.sender_id] || 0;
+                updateUnseenBadge(newMsg.sender_id, prev + 1);
             }
         });
 
@@ -485,6 +484,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!isRelevant) return;
 
             upsertMessageAndRender(oldMessages, updated, chatBox, friendAvatar);
+
+            if (updated.receiver_id === currentUserId && updated.seen === true) {
+                updateUnseenBadge(updated.sender_id, 0);
+            }
         });
 
         /* ---------------- Typing Channel ---------------- */
