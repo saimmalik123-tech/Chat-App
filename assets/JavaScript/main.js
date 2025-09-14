@@ -44,7 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
             contactCon.style.display = 'flex';
             chatContainer.style.display = 'none';
             chatContainer.classList.add('width');
-            
+
             const input = document.querySelector(".chat-input input");
             const messages = document.querySelector(".messages");
 
@@ -64,4 +64,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     window.addEventListener('resize', smallScreen);
     smallScreen();
+
+    // Modal PopUp
+
+    function showPopup(message, type = "info") {
+        const popup = document.getElementById("popup");
+        const msgBox = document.getElementById("popup-message");
+        popup.className = `popup ${type}`;
+        msgBox.textContent = message;
+        popup.classList.remove("hidden");
+
+        setTimeout(() => popup.classList.add("hidden"), 3000);
+    }
+
+    document.querySelector(".popup-close").addEventListener("click", () => {
+        document.getElementById("popup").classList.add("hidden");
+    });
+
+
 });

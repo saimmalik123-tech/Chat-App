@@ -195,7 +195,7 @@ nav h2 a {
 /* Chat Area */
 .chat-area {
   width: 70%;
-  height: 100%;
+  height: calc(100% - 70px);
   display: flex;
   flex-direction: column;
   background: var(--bg);
