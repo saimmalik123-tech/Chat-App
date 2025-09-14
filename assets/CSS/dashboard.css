@@ -257,10 +257,6 @@ nav h2 a {
 
 .msg-bubble {
   background: var(--bubble-received);
-  padding: 6px 10px;
-  border-radius: 12px;
-  max-width: 70%;
-  position: relative;
 }
 
 .message.sent .msg-bubble {
@@ -270,7 +266,7 @@ nav h2 a {
 
 .msg-meta {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 6px;
   font-size: 11px;
   margin-top: 2px;
