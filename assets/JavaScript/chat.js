@@ -548,7 +548,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         </div>
     </div>
     <div class="messages"></div>
-    <div class="chat-input" style="position:relative;">
+    <div class="chat-input">
         <i class="fa-regular fa-face-smile" id='emoji-btn'></i>
         <input id='input' type="text" placeholder="Type a message..." inputmode="text">
         <button disabled class='sendBtn'>➤</button>
@@ -585,7 +585,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         const oldMessages = await fetchMessages(friendId);
         renderChatMessages(chatBox, oldMessages, friendAvatar);
 
-        // ✅ store channels so we can remove later
         const { msgChannel, typingChannel, statusChannelRef: statusChan } =
             await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
@@ -620,7 +619,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 sidebar.style.display = 'flex';
                 chatContainer.style.display = 'none';
 
-                // ✅ properly cleanup only this chat’s channels
                 await client.removeChannel(msgChannel);
                 await client.removeChannel(typingChannel);
                 await client.removeChannel(statusChan);
