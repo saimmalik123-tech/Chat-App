@@ -368,6 +368,7 @@ nav h2 a {
   align-items: center;
   gap: 6px;
   padding: 10px;
+  height: auto;
   border-top: 1px solid var(--input-border);
   background-color: var(--bg);
   position: sticky;
@@ -668,6 +669,7 @@ emoji-picker {
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;
+    height: calc(100% -70px);
     width: 100%;
   }
 
