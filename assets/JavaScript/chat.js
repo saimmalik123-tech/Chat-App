@@ -639,8 +639,8 @@ document.addEventListener("DOMContentLoaded", async () => {
  
     /* ------------------ Initial Load ------------------ */
     await getCurrentUser();
-    fetchFriendRequests();
-    fetchFriends();
-    subscribeToMessages();
-    openChat();
+    await fetchFriendRequests();
+    await fetchFriends();
+    await subscribeToMessages();
+    await openChat();
 });
