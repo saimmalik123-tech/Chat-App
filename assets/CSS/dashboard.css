@@ -21,7 +21,7 @@
 html {
   width: 100vw;
   height: 100%;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 body {
@@ -30,8 +30,7 @@ body {
   transition: background-color 0.35s, color 0.35s;
   width: 100%;
   height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   background-color: var(--bg);
   color: var(--text-primary);
 }
@@ -669,6 +668,7 @@ emoji-picker {
     display: none;
     flex-direction: column;
     flex: 1 1 auto;
+    overflow: visible;
     min-height: 100%;
     width: 100%;
   }
