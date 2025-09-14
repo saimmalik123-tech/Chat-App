@@ -18,20 +18,21 @@
   font-family: "Inter", Arial, Helvetica, sans-serif;
 }
 
-html {
-  width: 100vw;
-  height: 100%;
+html, body {
+  width: 100%;
+  height: auto;
+  min-height: 100%;
   overflow-x: hidden;
+  overflow-y: auto;
 }
-
 body {
   display: flex;
   flex-direction: column;
   transition: background-color 0.35s, color 0.35s;
-  width: 100%;
-  height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
+  /* width: 100%;
+  height: 100%; */
+  /* overflow-x: hidden;
+  overflow-y: auto; */
   background-color: var(--bg);
   color: var(--text-primary);
 }
