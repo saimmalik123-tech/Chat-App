@@ -681,8 +681,8 @@ emoji-picker {
   .chat-input {
     width: 100%;
     background: var(--bg);
-    min-height: 70px;
-    flex: 1 1 0;
+    min-height: 0;
+    flex: 1;
   }
 
   .sidebar {
