@@ -467,14 +467,21 @@ document.addEventListener("DOMContentLoaded", async () => {
             oldMessages.push(newMsg);
             renderChatMessages(chatBox, oldMessages, friendAvatar);
 
-            // auto mark as seen if I received it
-            if (newMsg.receiver_id === currentUserId && newMsg.sender_id === friendId) {
-                try {
-                    await client.from("messages").update({ seen: true }).eq("id", newMsg.id);
-                } catch (err) {
-                    console.error("Error marking seen:", err.message);
+            if (newMsg.receiver_id === currentUserId) {
+                const badge = document.querySelector(`.chat[data-friend-id="${newMsg.sender_id}"] .non-seen-msg`);
+                if (badge) {
+                    badge.textContent = (parseInt(badge.textContent) || 0) + 1;
+                } else {
+                    const chatLi = document.querySelector(`.chat[data-friend-id="${newMsg.sender_id}"]`);
+                    if (chatLi) {
+                        const p = document.createElement('p');
+                        p.className = 'non-seen-msg';
+                        p.textContent = 1;
+                        chatLi.appendChild(p);
+                    }
                 }
             }
+
         });
 
         msgChannel.on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, payload => {
@@ -591,6 +598,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
         await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
+        updateUnseenBadge(friendId, 0);
 
         /* ---------------- Typing Broadcast ---------------- */
         const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
@@ -642,7 +650,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     await fetchFriendRequests();
     await fetchFriends();
 
-    /* 🔹 Start realtime for all friends immediately */
     const { data: friends } = await client
         .from("friends")
         .select("*")
@@ -652,8 +659,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         for (const f of friends) {
             const friendId = f.user1_id === currentUserId ? f.user2_id : f.user1_id;
 
-            // prepare minimal UI hooks for background realtime
-            const chatBox = document.createElement("div"); // hidden temp container
+            const chatBox = document.createElement("div");
             const typingIndicator = document.createElement("p");
             const oldMessages = await fetchMessages(friendId);
 
