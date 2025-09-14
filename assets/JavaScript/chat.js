@@ -211,21 +211,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     function updateUnseenBadge(friendId, count) {
-        const badge = document.querySelector(`.chat[data-friend-id="${friendId}"] .non-seen-msg`);
-        if (badge) {
-            badge.textContent = count > 0 ? count : '';
-        } else if (count > 0) {
-            const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
-            if (chatLi) {
-                const p = document.createElement('p');
-                p.className = 'non-seen-msg';
-                p.textContent = count;
-                chatLi.appendChild(p);
-            }
+        const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
+        if (!chatLi) return;
+
+        let badge = chatLi.querySelector(".non-seen-msg");
+
+        if (!badge) {
+            badge = document.createElement("p");
+            badge.className = "non-seen-msg";
+            chatLi.appendChild(badge);
+        }
+
+        if (count > 0) {
+            badge.textContent = count;
+            badge.style.display = "block";
+        } else {
+            badge.style.display = "none";
         }
     }
-
-
+    
     /* ------------------ Fetch Friends / Chat List ------------------ */
     async function fetchFriends() {
         if (!currentUserId) return;
@@ -467,29 +471,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             renderChatMessages(chatBox, oldMessages, friendAvatar);
 
             if (newMsg.receiver_id === currentUserId) {
-                const chatLi = document.querySelector(`.chat[data-friend-id="${newMsg.sender_id}"]`);
-                if (!chatLi) return;
-
-                let badge = chatLi.querySelector(".non-seen-msg");
-
-                if (!badge) {
-                    badge = document.createElement("p");
-                    badge.className = "non-seen-msg";
-                    chatLi.appendChild(badge);
-                }
-
-                let count = parseInt(badge.textContent) || 0;
-                count++;
-
-                if (count > 0) {
-                    badge.textContent = count;
-                    badge.style.display = "block";
-                } else {
-                    badge.style.display = "none";
-                }
+                const badge = document.querySelector(`.chat[data-friend-id="${newMsg.sender_id}"] .non-seen-msg`);
+                const currentCount = badge && badge.style.display !== "none" ? parseInt(badge.textContent) || 0 : 0;
+                updateUnseenBadge(newMsg.sender_id, currentCount + 1);
             }
-
-
         });
 
         msgChannel.on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, payload => {
@@ -606,7 +591,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
         await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
-        updateUnseenBadge(friendId, count);
+        updateUnseenBadge(friendId, 0);
 
         /* ---------------- Typing Broadcast ---------------- */
         const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
