@@ -679,6 +679,7 @@ emoji-picker {
   .chat-container {
     flex-direction: column;
     min-height: calc(var(--vh) * 100);
+    max-height: -webkit-fill-available;
   }
 
   .chat-area {
@@ -698,7 +699,7 @@ emoji-picker {
     padding: 10px 10px 100px 10px;
   }
 
- .chat-input {
+  .chat-input {
     position: fixed;
     left: 0;
     right: 0;
