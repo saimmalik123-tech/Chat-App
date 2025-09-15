@@ -48,8 +48,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     /* ------------------ Accept Friend Request ------------------ */
     async function acceptRequest(requestId, senderId) {
         try {
-            showLoading("Accepting request..."); // ✅ Move here
-
             const { error: updateError } = await client
                 .from("requests")
                 .update({ status: "accepted" })
@@ -57,7 +55,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (updateError) {
                 console.error("Error updating request:", updateError.message);
-                hideLoading();
                 return showPopup("Failed to accept request.");
             }
 
@@ -65,16 +62,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .from("friends")
                 .insert([{ user1_id: currentUserId, user2_id: senderId }]);
 
-            hideLoading();
-
             if (insertError) {
                 console.error("Error inserting into friends:", insertError.message);
                 return showPopup("Failed to add friend.");
             }
 
             showPopup("Friend request accepted!", "success");
+            fetchFriends();
+
         } catch (err) {
-            hideLoading();
             console.error("Unexpected error:", err.message);
         }
     }
@@ -601,10 +597,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
 
         /* ---------------- Messages + Realtime ---------------- */
-        showChatLoading(chatBox);
         const oldMessages = await fetchMessages(friendId);
         renderChatMessages(chatBox, oldMessages, friendAvatar);
-
 
         // subscribe with fixed function (uses shared typing channel + status)
         const { msgChannel, typingChannel, statusChannelRef: statusChan } =
