@@ -18,19 +18,17 @@
   font-family: "Inter", Arial, Helvetica, sans-serif;
 }
 
-html {
-  width: 100vw;
+html, body {
   height: 100%;
-  overflow: hidden;
+  width: 100%;
+  overflow: auto;
 }
+
 
 body {
   display: flex;
   flex-direction: column;
   transition: background-color 0.35s, color 0.35s;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
   background-color: var(--bg);
   color: var(--text-primary);
 }
@@ -385,7 +383,6 @@ nav h2 a {
   width: 100%;
   background: var(--bg);
   min-height: 70px;
-  height: auto;
   padding: 8px 10px;
   border-top: 1px solid var(--input-border);
   display: flex;
@@ -679,7 +676,7 @@ emoji-picker {
 @media (max-width: 768px) {
   .chat-container {
     flex-direction: column;
-    height: calc(100% - 70px);
+    height: 100%;
   }
 
   .chat-area {
@@ -701,10 +698,10 @@ emoji-picker {
   .chat-input {
     position: sticky;
     bottom: 0;
-    left: 0;
-    right: 0;
-    padding-bottom: env(safe-area-inset-bottom);
-    z-index: 1000;
+    background: var(--bg);
+    will-change: transform; 
+    z-index: 10000000000000;
+    font-size: 16px;
   }
 
   .sidebar {
