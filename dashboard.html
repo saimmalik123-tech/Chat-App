@@ -78,45 +78,22 @@
     </div>
 
     <script>
-        (() => {
-            // 🔹 Update CSS --vh to match visible viewport
-            const setVh = () =>
-                document.documentElement.style.setProperty("--vh", window.innerHeight * 0.01 + "px");
+        (function () {
+            function setVh() {
+                // 1% of viewport height in pixels
+                let vh = window.innerHeight * 0.01;
+                document.documentElement.style.setProperty('--vh', `${vh}px`);
+            }
+
+            // Run once on load
             setVh();
-            window.addEventListener("resize", setVh);
-            window.addEventListener("orientationchange", setVh);
 
-            // 🔹 Keep messages scrolled to bottom
-            const scrollBottom = () => {
-                const msgs = document.querySelector(".messages");
-                if (msgs) msgs.scrollTop = msgs.scrollHeight;
-            };
-
-            // Input focus/blur handlers
-            document.querySelectorAll(".chat-input input, .chat-input textarea")
-                .forEach(el => {
-                    el.addEventListener("focus", () => setTimeout(scrollBottom, 250));
-                    el.addEventListener("blur", () => setTimeout(scrollBottom, 250));
-                });
-
-            // 🔹 Mobile toggle behavior
-            document.addEventListener("click", e => {
-                const chat = e.target.closest(".chat");
-                if (chat && window.innerWidth <= 768) {
-                    document.querySelector(".sidebar")?.classList.add("hidden");
-                    document.querySelector(".chat-area")?.classList.remove("hidden");
-                    setTimeout(scrollBottom, 200);
-                }
-            });
-
-            document.querySelectorAll(".backBtn").forEach(btn =>
-                btn.addEventListener("click", () => {
-                    document.querySelector(".sidebar")?.classList.remove("hidden");
-                    document.querySelector(".chat-area")?.classList.add("hidden");
-                })
-            );
+            // Run on resize/orientation change
+            window.addEventListener('resize', setVh);
+            window.addEventListener('orientationchange', setVh);
         })();
     </script>
+
 
     <script src="https://unpkg.com/@supabase/supabase-js"></script>
     <script src="./assets/JavaScript/main.js"></script>
