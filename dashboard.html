@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ChatrSaim - Dashboard</title>
     <link rel="stylesheet" href="./assets/CSS/dashboard.css">
     <link rel="shortcut icon" href="./assets/icon/fav-icon.png" type="image/x-icon">
@@ -77,6 +77,46 @@
         </div>
     </div>
 
+    <script>
+        (function () {
+            // set --vh to 1% of the viewport height (in px)
+            function setVh() {
+                document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
+            }
+            setVh();
+            window.addEventListener('resize', setVh);
+            window.addEventListener('orientationchange', setVh);
+
+            // scroll messages to bottom when input focused (helps when keyboard opens)
+            function scrollMessagesToBottom() {
+                const msgs = document.querySelector('.messages');
+                if (msgs) msgs.scrollTop = msgs.scrollHeight;
+            }
+
+            const input = document.querySelector('.chat-input input, .chat-input textarea');
+            if (input) {
+                input.addEventListener('focus', () => setTimeout(scrollMessagesToBottom, 250));
+                input.addEventListener('blur', () => setTimeout(scrollMessagesToBottom, 250));
+            }
+
+            // Optional: mobile toggle behavior (click chat to open chat-area; backBtn returns)
+            document.addEventListener('click', (e) => {
+                const chatEl = e.target.closest('.chat');
+                if (chatEl && window.innerWidth <= 768) {
+                    document.querySelector('.sidebar')?.classList.add('hidden');
+                    document.querySelector('.chat-area')?.classList.remove('hidden');
+                    setTimeout(scrollMessagesToBottom, 200);
+                }
+            });
+            document.querySelectorAll('.backBtn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelector('.sidebar')?.classList.remove('hidden');
+                    document.querySelector('.chat-area')?.classList.add('hidden');
+                });
+            });
+
+        })();
+    </script>
 
     <script src="https://unpkg.com/@supabase/supabase-js"></script>
     <script src="./assets/JavaScript/main.js"></script>
