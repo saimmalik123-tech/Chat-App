@@ -678,6 +678,7 @@ emoji-picker {
 @media (max-width: 768px) {
   .chat-container {
     flex-direction: column;
+    height: 100%;
   }
   .chat-area {
     display: none;
@@ -696,8 +697,10 @@ emoji-picker {
   }
 
   .chat-input {
-    position: relative;
-    margin-top: auto;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
   }
 
   .sidebar {
