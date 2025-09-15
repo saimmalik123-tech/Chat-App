@@ -75,7 +75,6 @@ nav h2 a {
 .chat-container {
   display: flex;
   width: 100%;
-  min-height: calc(var(--vh) * 100);
   background: var(--bg);
   overflow: hidden;
 }
@@ -679,8 +678,6 @@ emoji-picker {
 @media (max-width: 768px) {
   .chat-container {
     flex-direction: column;
-    height: calc(var(--vh) * 100);
-    overflow: hidden;
   }
   .chat-area {
     display: none;
