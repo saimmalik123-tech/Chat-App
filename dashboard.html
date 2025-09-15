@@ -80,19 +80,14 @@
     <script>
         (function () {
             function setVh() {
-                // 1% of viewport height in pixels
-                let vh = window.innerHeight * 0.01;
-                document.documentElement.style.setProperty('--vh', `${vh}px`);
+                document.documentElement.style.setProperty('--vh', window.innerHeight * 0.01 + 'px');
             }
-
-            // Run once on load
             setVh();
-
-            // Run on resize/orientation change
             window.addEventListener('resize', setVh);
             window.addEventListener('orientationchange', setVh);
         })();
     </script>
+
 
 
     <script src="https://unpkg.com/@supabase/supabase-js"></script>
