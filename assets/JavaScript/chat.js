@@ -651,17 +651,43 @@ document.addEventListener("DOMContentLoaded", async () => {
         sendFriendRequest(username);
     });
 
+    function updateLastMessage(friendId, content, createdAt) {
+        const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
+        if (!chatLi) return;
+
+        const lastMessageEl = chatLi.querySelector(".last-message");
+        const timeEl = chatLi.querySelector(".time");
+
+        if (lastMessageEl) lastMessageEl.textContent = content;
+        if (timeEl) {
+            const timeStr = new Date(createdAt).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+            timeEl.textContent = timeStr;
+        }
+
+        // Move chat to top of list (like WhatsApp)
+        const chatList = chatLi.parentElement;
+        chatList.prepend(chatLi);
+    }
+
+
     async function subscribeToGlobalMessages() {
         const globalChannel = client.channel("global-messages");
 
-        // New message arrives
         globalChannel.on(
             "postgres_changes",
             { event: "INSERT", schema: "public", table: "messages" },
             payload => {
                 const newMsg = payload.new;
 
-                // If I am the receiver
+                const friendId = newMsg.sender_id === currentUserId
+                    ? newMsg.receiver_id
+                    : newMsg.sender_id;
+
+                updateLastMessage(friendId, newMsg.content, newMsg.created_at);
+
                 if (newMsg.receiver_id === currentUserId) {
                     const prev = unseenCounts[newMsg.sender_id] || 0;
                     unseenCounts[newMsg.sender_id] = prev + 1;
@@ -670,7 +696,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         );
 
-        // Message marked as seen
         globalChannel.on(
             "postgres_changes",
             { event: "UPDATE", schema: "public", table: "messages" },
@@ -686,8 +711,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         await globalChannel.subscribe();
     }
-
-
 
     /* ------------------ Initial Load ------------------ */
     await getCurrentUser();
