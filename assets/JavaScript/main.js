@@ -68,18 +68,28 @@ document.addEventListener("DOMContentLoaded", () => {
     // Modal PopUp
 
     function showPopup(message, type = "info") {
-        const popup = document.getElementById("popup");
-        const msgBox = document.getElementById("popup-message");
+        const popup = document.createElement("div");
         popup.className = `popup ${type}`;
-        msgBox.textContent = message;
-        popup.classList.remove("hidden");
+        popup.innerHTML = `<span>${message}</span>`;
+        document.body.appendChild(popup);
 
-        setTimeout(() => popup.classList.add("hidden"), 3000);
+        setTimeout(() => { popup.classList.add("show"); }, 10);
+        setTimeout(() => {
+            popup.classList.remove("show");
+            setTimeout(() => popup.remove(), 300);
+        }, 3000);
     }
 
-    document.querySelector(".popup-close").addEventListener("click", () => {
-        document.getElementById("popup").classList.add("hidden");
-    });
+
+    function showLoading(msg = "Loading...") {
+        const overlay = document.getElementById("loading-overlay");
+        overlay.querySelector("p").textContent = msg;
+        overlay.style.display = "flex";
+    }
+    function hideLoading() {
+        document.getElementById("loading-overlay").style.display = "none";
+    }
+
 
 
 });

@@ -234,6 +234,23 @@ nav h2 a {
   min-height: 0;
 }
 
+.skeleton-msg {
+  background: #e2e8f0;
+  border-radius: 10px;
+  height: 20px;
+  margin: 5px 0;
+  width: 70%;
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
+}
+
 .message {
   max-width: 70%;
   padding: 10px 14px;
@@ -563,8 +580,7 @@ emoji-picker {
 }
 
 /* Popups and modals */
-.modal,
-.popup {
+.modal {
   position: fixed;
   inset: 0;
   display: flex;
@@ -572,6 +588,20 @@ emoji-picker {
   justify-content: center;
   background: rgba(0, 0, 0, 0.6);
   z-index: 9999;
+}
+
+.popup {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #fff;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.3s ease;
+  z-index: 2001;
 }
 
 .modal-content,
@@ -596,6 +626,23 @@ emoji-picker {
   border-radius: 8px;
   outline: none;
   font-size: 0.9rem;
+}
+
+.popup.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.popup.success {
+  background: #16a34a;
+}
+.popup.error {
+  background: #dc2626;
+}
+.popup.info {
+  background: #2563eb;
+}
+.popup.warning {
+  background: #f59e0b;
 }
 
 #emoji-btn {
@@ -675,7 +722,7 @@ emoji-picker {
 @media (max-width: 768px) {
   .chat-container {
     flex-direction: column;
-    height: 100vh;
+    height: 100dvh;
   }
   .chat-area {
     width: 100%;
@@ -697,7 +744,7 @@ emoji-picker {
   .sidebar {
     width: 100%;
     height: auto;
-    max-height: 50%; 
+    max-height: 50%;
     overflow-y: auto;
   }
 
