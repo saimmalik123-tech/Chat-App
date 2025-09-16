@@ -82,6 +82,8 @@ document.addEventListener("DOMContentLoaded", () => {
     smallScreen();
 
     /* ------------------ Profile Popup ------------------ */
+    const DEFAULT_PROFILE_IMG = "./assets/icon/default-user.png"; // fallback image
+
     const profilePic = document.querySelector(".profile-pic");
     const profilePopup = document.getElementById("profile-popup");
     const closeProfile = document.getElementById("close-profile");
@@ -91,11 +93,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const saveProfileBtn = document.getElementById("save-profile");
     const logoutBtn = document.getElementById("logout");
 
-    // Open popup
+    /* ------------------ Open Popup ------------------ */
     profilePic?.addEventListener("click", async () => {
         profilePopup.classList.remove("hidden");
 
-        // Load current profile
         const { data: profile } = await client
             .from("user_profiles")
             .select("profile_image_url, bio")
@@ -103,16 +104,17 @@ document.addEventListener("DOMContentLoaded", () => {
             .limit(1)
             .maybeSingle();
 
-        if (profile?.profile_image_url) profilePreview.src = profile.profile_image_url;
-        if (profile?.bio) bioInput.value = profile.bio;
+        // always fall back to default if missing
+        profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
+        bioInput.value = profile?.bio || "";
     });
 
-    // Close popup
+    /* ------------------ Close Popup ------------------ */
     closeProfile?.addEventListener("click", () => {
         profilePopup.classList.add("hidden");
     });
 
-    // Preview new image
+    /* ------------------ Preview new image ------------------ */
     profileUpload?.addEventListener("change", (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -122,10 +124,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Save profile
+    /* ------------------ Save profile ------------------ */
     saveProfileBtn?.addEventListener("click", async () => {
         try {
-            let imageUrl = profilePreview.src;
+            let imageUrl = profilePreview.src || DEFAULT_PROFILE_IMG;
             const bio = bioInput.value.trim();
 
             const { error } = await client
@@ -138,7 +140,6 @@ document.addEventListener("DOMContentLoaded", () => {
             showPopup("Profile updated successfully!", "success");
             profilePopup.classList.add("hidden");
 
-            // refresh avatar
             fetchCurrentUserAvatar();
         } catch (err) {
             console.error("Error updating profile:", err.message);
@@ -146,7 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Logout
+    /* ------------------ Logout ------------------ */
     logoutBtn?.addEventListener("click", async () => {
         await client.auth.signOut();
         showPopup("Logged out!", "info");

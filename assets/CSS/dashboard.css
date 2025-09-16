@@ -106,6 +106,7 @@ nav h2 a {
   height: 40px;
   border-radius: 50%;
   object-fit: cover;
+  cursor: pointer;
 }
 
 .sidebar-header input {
@@ -599,60 +600,160 @@ emoji-picker {
   background: #43a047;
 }
 
+/* ------------------ Profile Popup ------------------ */
 .profile-popup {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  right: 0;
+  bottom: 0;
   background: rgba(0, 0, 0, 0.6);
   display: flex;
-  align-items: center;
   justify-content: center;
-  z-index: 1000;
+  align-items: center;
+  z-index: 3000;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
 }
+
 .profile-popup.hidden {
-  display: none;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .profile-content {
-  background: #fff;
-  padding: 20px;
+  background: var(--bg);
+  color: var(--text-primary);
+  padding: 25px 30px;
   border-radius: 12px;
-  width: 350px;
-  max-width: 90%;
+  width: 95%;
+  max-width: 400px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+  position: relative;
+  animation: scaleIn 0.3s ease;
+}
+
+.profile-content h2 {
+  margin-bottom: 15px;
+  font-size: 1.5rem;
   text-align: center;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  color: var(--accent);
 }
+
+.close-btn {
+  position: absolute;
+  top: 12px;
+  right: 15px;
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.close-btn:hover {
+  color: var(--accent);
+}
+
 .profile-section {
-  margin: 15px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 18px;
+  gap: 10px;
 }
-#profile-preview {
-  width: 80px;
-  height: 80px;
+
+.profile-section img {
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
   object-fit: cover;
-  margin-bottom: 10px;
+  border: 3px solid var(--accent);
+  transition: transform 0.2s ease;
 }
+
+.profile-section img:hover {
+  transform: scale(1.05);
+}
+
+.profile-section input[type="file"] {
+  font-size: 0.9rem;
+  padding: 5px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  width: 100%;
+}
+
+.profile-section label {
+  font-size: 0.95rem;
+  margin-bottom: 5px;
+  align-self: flex-start;
+  color: var(--text-secondary);
+}
+
+.profile-section textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  resize: none;
+  outline: none;
+  transition: border-color 0.3s;
+}
+
+.profile-section textarea:focus {
+  border-color: var(--accent);
+}
+
+.profile-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .profile-actions button {
-  margin: 5px;
-  padding: 8px 12px;
-  border: none;
+  flex: 1;
+  padding: 10px;
+  font-size: 1rem;
   border-radius: 6px;
   cursor: pointer;
+  border: none;
+  background: var(--accent);
+  color: var(--button-text);
+  transition: background 0.3s, transform 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
-#save-profile {
-  background: #2563eb;
-  color: #fff;
+
+.profile-actions button:hover {
+  background: #1d4ed8;
+  transform: translateY(-2px);
 }
+
 #logout {
   background: #ef4444;
-  color: #fff;
 }
-.close-btn {
-  cursor: pointer;
-  float: right;
-  font-size: 20px;
+
+#logout:hover {
+  background: #dc2626;
+}
+
+/* Animations */
+@keyframes scaleIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .backBtn {
