@@ -296,7 +296,6 @@ footer {
   }
 }
 
-/* ✅ Responsive */
 @media (max-width: 768px) {
   nav h2 a {
     font-size: 1.3rem;
