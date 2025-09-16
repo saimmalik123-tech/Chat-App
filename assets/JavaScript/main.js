@@ -1,4 +1,6 @@
 import { showPopup, showLoading, hideLoading } from "./popup.js";
+import { client } from "./supabase.js";
+
 
 function showNotification(title, body, icon = "./assets/icon/user.png", onClickUrl = "dashboard") {
     if (!("Notification" in window)) return;
@@ -80,7 +82,7 @@ document.addEventListener("DOMContentLoaded", () => {
     smallScreen();
 
     /* ------------------ Profile Popup ------------------ */
-    const profilePic = document.querySelector(".profile-pic"); 
+    const profilePic = document.querySelector(".profile-pic");
     const profilePopup = document.getElementById("profile-popup");
     const closeProfile = document.getElementById("close-profile");
     const profilePreview = document.getElementById("profile-preview");
