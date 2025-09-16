@@ -460,25 +460,67 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Send Friend Request
 
     async function sendFriendRequest(username) {
-        if (!username) return showPopup("Enter a username.");
+        if (!username) return showPopup("Enter a username.", "error");
 
-        const { data: user, error: userError } = await client
-            .from("user_profiles")
-            .select("user_id")
-            .eq("user_name", username)
-            .maybeSingle();
+        try {
+            // 1. Find receiver user by username
+            const { data: user, error: userError } = await client
+                .from("user_profiles")
+                .select("user_id")
+                .eq("user_name", username)
+                .maybeSingle();
 
-        if (userError || !user) return showPopup("User not found.");
+            if (userError || !user) {
+                return showPopup("User not found.", "error");
+            }
 
-        const receiverId = user.user_id;
+            const receiverId = user.user_id;
 
-        const { error: requestError } = await client
-            .from("requests")
-            .insert([{ sender_id: currentUserId, receiver_id: receiverId, status: "pending" }]);
+            if (receiverId === currentUserId) {
+                return showPopup("You cannot send a request to yourself.", "warning");
+            }
 
-        if (requestError) return showPopup("Failed to send friend request: " + requestError.message);
+            // 2. Check if request already exists
+            const { data: existing, error: existingError } = await client
+                .from("requests")
+                .select("id, status")
+                .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${currentUserId})`)
+                .maybeSingle();
 
-        showPopup("Friend request sent!");
+            if (existingError) {
+                console.error("Error checking existing request:", existingError.message);
+                return showPopup("Something went wrong. Try again.", "error");
+            }
+
+            if (existing) {
+                if (existing.status === "pending") {
+                    return showPopup("You have already sent a request.", "info");
+                }
+                if (existing.status === "accepted") {
+                    return showPopup("You are already friends.", "info");
+                }
+                if (existing.status === "rejected") {
+                    return showPopup("This user rejected your request before.", "warning");
+                }
+            }
+
+            // 3. Insert new friend request
+            const { error: requestError } = await client
+                .from("requests")
+                .insert([{ sender_id: currentUserId, receiver_id: receiverId, status: "pending" }]);
+
+            if (requestError) {
+                console.error("Error sending friend request:", requestError.message);
+                return showPopup("Failed to send friend request.", "error");
+            }
+
+            // ✅ Success
+            showPopup("Friend request sent successfully!", "success");
+
+        } catch (err) {
+            console.error("Unexpected error in sendFriendRequest:", err.message);
+            showPopup("Unexpected error. Please try again.", "error");
+        }
     }
 
 

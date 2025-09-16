@@ -374,7 +374,7 @@ nav h2 a {
   width: 40px;
   height: 40px;
   border: 4px solid #ddd;
-  border-top: 4px solid #2563eb; /* accent color */
+  border-top: 4px solid #2563eb; 
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 12px;
@@ -386,7 +386,6 @@ nav h2 a {
   }
 }
 
-/* Request PopUp */
 #message-popup {
   display: none;
   position: absolute;
