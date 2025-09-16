@@ -8,7 +8,7 @@ export function showPopup(message) {
     messageEl.textContent = message;
     popup.classList.remove("hidden");
 
-    closeBtn.addEventListener('click', () => {
+    closeBtn?.addEventListener('click', () => {
         popup.classList.add("hidden")
     });
 }
