@@ -82,7 +82,7 @@ document.addEventListener("DOMContentLoaded", () => {
     smallScreen();
 
     /* ------------------ Profile Popup ------------------ */
-    const DEFAULT_PROFILE_IMG = "./assets/icon/default-user.png"; // fallback image
+    const DEFAULT_PROFILE_IMG = "./assets/icon/default-user.png"; 
 
     const profilePic = document.querySelector(".profile-pic");
     const profilePopup = document.getElementById("profile-popup");
@@ -94,7 +94,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const logoutBtn = document.getElementById("logout");
 
     /* ------------------ Open Popup ------------------ */
-    profilePic?.addEventListener("click", async () => {
+    profilePic.addEventListener("click", async () => {
         profilePopup.classList.remove("hidden");
 
         const { data: profile } = await client
@@ -104,7 +104,6 @@ document.addEventListener("DOMContentLoaded", () => {
             .limit(1)
             .maybeSingle();
 
-        // always fall back to default if missing
         profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
         bioInput.value = profile?.bio || "";
     });
