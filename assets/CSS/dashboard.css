@@ -374,7 +374,7 @@ nav h2 a {
   width: 40px;
   height: 40px;
   border: 4px solid #ddd;
-  border-top: 4px solid #2563eb; 
+  border-top: 4px solid #2563eb;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 12px;
@@ -597,6 +597,62 @@ emoji-picker {
 
 .addFriends:hover {
   background: #43a047;
+}
+
+.profile-popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.profile-popup.hidden {
+  display: none;
+}
+
+.profile-content {
+  background: #fff;
+  padding: 20px;
+  border-radius: 12px;
+  width: 350px;
+  max-width: 90%;
+  text-align: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+.profile-section {
+  margin: 15px 0;
+}
+#profile-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 10px;
+}
+.profile-actions button {
+  margin: 5px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#save-profile {
+  background: #2563eb;
+  color: #fff;
+}
+#logout {
+  background: #ef4444;
+  color: #fff;
+}
+.close-btn {
+  cursor: pointer;
+  float: right;
+  font-size: 20px;
 }
 
 .backBtn {

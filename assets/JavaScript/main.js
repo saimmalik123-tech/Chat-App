@@ -1,3 +1,5 @@
+import { showPopup, showLoading, hideLoading } from "./popup.js";
+
 document.addEventListener("DOMContentLoaded", () => {
     // ---------- THEME TOGGLE ----------
     const toggleBtn = document.getElementById("themeToggle");
@@ -65,32 +67,75 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener('resize', smallScreen);
     smallScreen();
 
-    // Modal PopUp
-    // function showPopup(message) {
-    //     const popup = document.getElementById("popup");
-    //     const messageEl = document.getElementById("popup-message");
-    //     const closeBtn = document.getElementById("popup-close");
+    /* ------------------ Profile Popup ------------------ */
+    const profilePic = document.querySelector(".profile-pic"); // your avatar
+    const profilePopup = document.getElementById("profile-popup");
+    const closeProfile = document.getElementById("close-profile");
+    const profilePreview = document.getElementById("profile-preview");
+    const profileUpload = document.getElementById("profile-upload");
+    const bioInput = document.getElementById("bio");
+    const saveProfileBtn = document.getElementById("save-profile");
+    const logoutBtn = document.getElementById("logout");
 
-    //     if (!popup || !messageEl) return;
+    // Open popup
+    profilePic?.addEventListener("click", async () => {
+        profilePopup.classList.remove("hidden");
 
-    //     messageEl.textContent = message;
-    //     popup.classList.remove("hidden");
+        // Load current profile
+        const { data: profile } = await client
+            .from("user_profiles")
+            .select("profile_image_url, bio")
+            .eq("user_id", currentUserId)
+            .maybeSingle();
 
-    //     closeBtn.onclick = () => {
-    //         popup.classList.add("hidden");
-    //     };
-    // }
+        if (profile?.profile_image_url) profilePreview.src = profile.profile_image_url;
+        if (profile?.bio) bioInput.value = profile.bio;
+    });
 
-    // function showLoading(message = "Loading...") {
-    //     const overlay = document.getElementById("loading-overlay");
-    //     const msgEl = document.getElementById("loading-message");
-    //     if (msgEl) msgEl.textContent = message;
-    //     if (overlay) overlay.style.display = "flex";
-    // }
+    // Close popup
+    closeProfile?.addEventListener("click", () => {
+        profilePopup.classList.add("hidden");
+    });
 
-    // function hideLoading() {
-    //     const overlay = document.getElementById("loading-overlay");
-    //     if (overlay) overlay.style.display = "none";
-    // }
+    // Preview new image
+    profileUpload?.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => { profilePreview.src = ev.target.result; };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    // Save profile
+    saveProfileBtn?.addEventListener("click", async () => {
+        try {
+            let imageUrl = profilePreview.src;
+            const bio = bioInput.value.trim();
+
+            const { error } = await client
+                .from("user_profiles")
+                .update({ profile_image_url: imageUrl, bio })
+                .eq("user_id", currentUserId);
+
+            if (error) throw error;
+
+            showPopup("Profile updated successfully!", "success");
+            profilePopup.classList.add("hidden");
+
+            // refresh avatar
+            fetchCurrentUserAvatar();
+        } catch (err) {
+            console.error("Error updating profile:", err.message);
+            showPopup("Failed to update profile.", "error");
+        }
+    });
+
+    // Logout
+    logoutBtn?.addEventListener("click", async () => {
+        await client.auth.signOut();
+        showPopup("Logged out!", "info");
+        window.location.href = "signup.html";
+    });
 
 });

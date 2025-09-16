@@ -85,7 +85,28 @@
         </div>
     </div>
 
+    <!-- Profile Popup -->
+    <div id="profile-popup" class="profile-popup hidden">
+        <div class="profile-content">
+            <span id="close-profile" class="close-btn">&times;</span>
+            <h2>My Profile</h2>
 
+            <div class="profile-section">
+                <img id="profile-preview" src="./assets/icon/user.png" alt="Profile" />
+                <input type="file" id="profile-upload" accept="image/*" />
+            </div>
+
+            <div class="profile-section">
+                <label for="bio">Bio</label>
+                <textarea id="bio" placeholder="Write something..."></textarea>
+            </div>
+
+            <div class="profile-actions">
+                <button id="save-profile"><i class="fa-solid fa-save"></i> Save</button>
+                <button id="logout"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+            </div>
+        </div>
+    </div>
 
 
     <script src="https://unpkg.com/@supabase/supabase-js"></script>
