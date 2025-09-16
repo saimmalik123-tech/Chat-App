@@ -66,30 +66,34 @@ document.addEventListener("DOMContentLoaded", () => {
     smallScreen();
 
     // Modal PopUp
+    /* Popup function */
+    function showPopup(message) {
+        const popup = document.getElementById("popup");
+        const messageEl = document.getElementById("popup-message");
+        const closeBtn = document.getElementById("popup-close");
 
-    function showPopup(message, type = "info") {
-        const popup = document.createElement("div");
-        popup.className = `popup ${type}`;
-        popup.innerHTML = `<span>${message}</span>`;
-        document.body.appendChild(popup);
+        if (!popup || !messageEl) return;
 
-        setTimeout(() => { popup.classList.add("show"); }, 10);
-        setTimeout(() => {
-            popup.classList.remove("show");
-            setTimeout(() => popup.remove(), 300);
-        }, 3000);
+        messageEl.textContent = message;
+        popup.classList.remove("hidden");
+
+        closeBtn.onclick = () => {
+            popup.classList.add("hidden");
+        };
     }
 
 
-    function showLoading(msg = "Loading...") {
+
+    function showLoading(message = "Loading...") {
         const overlay = document.getElementById("loading-overlay");
-        overlay.querySelector("p").textContent = msg;
-        overlay.style.display = "flex";
+        const msgEl = document.getElementById("loading-message");
+        if (msgEl) msgEl.textContent = message;
+        if (overlay) overlay.style.display = "flex";
     }
+
     function hideLoading() {
-        document.getElementById("loading-overlay").style.display = "none";
+        const overlay = document.getElementById("loading-overlay");
+        if (overlay) overlay.style.display = "none";
     }
-
-
 
 });

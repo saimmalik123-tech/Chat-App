@@ -179,37 +179,44 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function fetchFriendRequests() {
         if (!currentUserId) return;
 
-        const { data: requests, error } = await client
-            .from("requests")
-            .select("id, sender_id, status, private_users!requests_sender_id_fkey(name)")
-            .eq("receiver_id", currentUserId)
-            .eq("status", "pending");
+        showLoading("Fetching friend requests...");
 
-        if (error) {
-            console.error("Error fetching requests:", error.message);
-            return;
-        }
+        try {
+            const { data: requests, error } = await client
+                .from("requests")
+                .select("id, sender_id, status, private_users!requests_sender_id_fkey(name)")
+                .eq("receiver_id", currentUserId)
+                .eq("status", "pending");
 
-        messages = [];
-        if (requests) {
-            for (const req of requests) {
-                const { data: senderProfile } = await client
-                    .from("user_profiles")
-                    .select("profile_image_url")
-                    .eq("user_id", req.sender_id)
-                    .maybeSingle();
+            if (error) throw error;
 
-                const avatarUrl = senderProfile?.profile_image_url || "./assets/icon/user.png";
+            messages = [];
+            if (requests) {
+                for (const req of requests) {
+                    const { data: senderProfile } = await client
+                        .from("user_profiles")
+                        .select("profile_image_url")
+                        .eq("user_id", req.sender_id)
+                        .maybeSingle();
 
-                addMessage(
-                    `${req.private_users?.name || "Unknown"} sent you a friend request`,
-                    req.id,
-                    req.sender_id,
-                    avatarUrl
-                );
+                    const avatarUrl = senderProfile?.profile_image_url || "./assets/icon/user.png";
+
+                    addMessage(
+                        `${req.private_users?.name || "Unknown"} sent you a friend request`,
+                        req.id,
+                        req.sender_id,
+                        avatarUrl
+                    );
+                }
             }
+        } catch (err) {
+            console.error("Error fetching requests:", err.message);
+            showPopup("Failed to fetch friend requests.");
+        } finally {
+            hideLoading();
         }
     }
+
 
     function updateUnseenBadge(friendId, count) {
         const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
@@ -235,79 +242,89 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function fetchFriends() {
         if (!currentUserId) return;
 
-        const { data: friends, error } = await client
-            .from("friends")
-            .select("*")
-            .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
+        showLoading("Fetching friends...");
 
-        if (error) {
-            console.error("Error fetching friends:", error);
-            return;
-        }
-
-        const chatList = document.querySelector(".chat-list");
-        if (!chatList) return;
-        chatList.innerHTML = "";
-
-        for (const f of friends) {
-            const friendId = f.user1_id === currentUserId ? f.user2_id : f.user1_id;
-
-            const { data: userProfile } = await client
-                .from("user_profiles")
-                .select("user_name, profile_image_url, is_online")
-                .eq("user_id", friendId)
-                .maybeSingle();
-
-            const friendName = userProfile?.user_name || "Unknown";
-            const avatarUrl = userProfile?.profile_image_url || "./assets/icon/user.png";
-
-            // Fetch last message
-            const { data: lastMsgData } = await client
-                .from("messages")
+        try {
+            const { data: friends, error } = await client
+                .from("friends")
                 .select("*")
-                .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
-                .order("created_at", { ascending: false })
-                .limit(1)
-                .maybeSingle();
+                .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
 
-            const lastMessageText = lastMsgData?.content || "Say hi! 👋";
-            const lastMessageTime = lastMsgData
-                ? new Date(lastMsgData.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            if (error) throw error;
 
-            const { count: unseenCount, error: unseenError } = await client
-                .from("messages")
-                .select("*", { count: "exact", head: true })
-                .eq("sender_id", friendId)
-                .eq("receiver_id", currentUserId)
-                .eq("seen", false);
+            const chatList = document.querySelector(".chat-list");
+            if (!chatList) return;
+            chatList.innerHTML = "";
 
-            if (unseenError) console.error("Error fetching unseen messages:", unseenError);
+            for (const f of friends) {
+                const friendId = f.user1_id === currentUserId ? f.user2_id : f.user1_id;
 
-            const li = document.createElement("li");
-            li.classList.add("chat");
-            li.setAttribute("data-friend-id", friendId);
-            li.innerHTML = `
-            <div class="avatar-wrapper" style="position:relative;">
-                <img src="${avatarUrl}" alt="User" style="object-fit: cover; border-radius:50%;">
-                ${userProfile?.is_online ? '<span class="online-dot"></span>' : ''}
-            </div>
-            <div>
-                <h4>${friendName}</h4>
-                <p class="last-message" title="${lastMessageText}">${lastMessageText}</p>
-            </div>
-            <span class="time">${lastMessageTime}</span>
-            ${unseenCount > 0 ? `<p class="non-seen-msg">${unseenCount}</p>` : ''}
-        `;
+                // get profile
+                const { data: userProfile } = await client
+                    .from("user_profiles")
+                    .select("user_name, profile_image_url, is_online")
+                    .eq("user_id", friendId)
+                    .maybeSingle();
 
-            li.addEventListener("click", () => {
-                openChat(friendId, friendName, avatarUrl);
-                if (innerWidth <= 768) {
-                    document.querySelector('#message').classList.add("hidden");
-                }
-            });
+                const friendName = userProfile?.user_name || "Unknown";
+                const avatarUrl = userProfile?.profile_image_url || "./assets/icon/user.png";
 
-            chatList.appendChild(li);
+                // last message
+                const { data: lastMsgData } = await client
+                    .from("messages")
+                    .select("*")
+                    .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),
+                     and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                const lastMessageText = lastMsgData?.content || "Say hi! 👋";
+                const lastMessageTime = lastMsgData
+                    ? new Date(lastMsgData.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                    : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+                // unseen messages
+                const { count: unseenCount, error: unseenError } = await client
+                    .from("messages")
+                    .select("*", { count: "exact", head: true })
+                    .eq("sender_id", friendId)
+                    .eq("receiver_id", currentUserId)
+                    .eq("seen", false);
+
+                if (unseenError) console.error("Error fetching unseen messages:", unseenError);
+
+                // build list item
+                const li = document.createElement("li");
+                li.classList.add("chat");
+                li.setAttribute("data-friend-id", friendId);
+                li.innerHTML = `
+                <div class="avatar-wrapper" style="position:relative;">
+                    <img src="${avatarUrl}" alt="User" style="object-fit: cover; border-radius:50%;">
+                    ${userProfile?.is_online ? '<span class="online-dot"></span>' : ''}
+                </div>
+                <div>
+                    <h4>${friendName}</h4>
+                    <p class="last-message" title="${lastMessageText}">${lastMessageText}</p>
+                </div>
+                <span class="time">${lastMessageTime}</span>
+                ${unseenCount > 0 ? `<p class="non-seen-msg">${unseenCount}</p>` : ''}
+            `;
+
+                li.addEventListener("click", () => {
+                    openChat(friendId, friendName, avatarUrl);
+                    if (innerWidth <= 768) {
+                        document.querySelector('#message').classList.add("hidden");
+                    }
+                });
+
+                chatList.appendChild(li);
+            }
+        } catch (err) {
+            console.error("Error fetching friends:", err.message);
+            showPopup("Failed to load friends.");
+        } finally {
+            hideLoading();
         }
     }
 
@@ -320,8 +337,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             receiver_id: friendId,
             content
         }]);
-        if (error) console.error("Error sending message:", error.message);
+
+        if (error) {
+            console.error("Error sending message:", error.message);
+            showPopup("Message failed to send. Please try again.", "error");
+        }
     }
+
 
     async function logMessagesTable() {
         try {
@@ -556,93 +578,103 @@ document.addEventListener("DOMContentLoaded", async () => {
             chatContainer.style.display = 'flex';
         }
 
-        chatContainer.innerHTML = `
-    <div class="chat-header">
-        <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
-        <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
-        <div>
-            <h4>${friendName || 'Unknown'}</h4>
-            <p id="typing-indicator">Offline</p>
+        showLoading("Loading chat...");
+
+        try {
+            chatContainer.innerHTML = `
+        <div class="chat-header">
+            <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
+            <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
+            <div>
+                <h4>${friendName || 'Unknown'}</h4>
+                <p id="typing-indicator">Offline</p>
+            </div>
         </div>
-    </div>
-    <div class="messages"></div>
-    <div class="chat-input">
-        <i class="fa-regular fa-face-smile" id='emoji-btn'></i>
-        <input id='input' type="text" placeholder="Type a message..." inputmode="text">
-        <button disabled class='sendBtn'>➤</button>
-        <emoji-picker id="emoji-picker" style="position:absolute; bottom:50px; left:0; display:none; z-index:1000;"></emoji-picker>
-    </div>
-    `;
+        <div class="messages"></div>
+        <div class="chat-input">
+            <i class="fa-regular fa-face-smile" id='emoji-btn'></i>
+            <input id='input' type="text" placeholder="Type a message..." inputmode="text">
+            <button disabled class='sendBtn'>➤</button>
+            <emoji-picker id="emoji-picker" style="position:absolute; bottom:50px; left:0; display:none; z-index:1000;"></emoji-picker>
+        </div>
+        `;
 
-        const emojiBtn = chatContainer.querySelector("#emoji-btn");
-        const emojiPicker = chatContainer.querySelector("#emoji-picker");
-        const input = chatContainer.querySelector("input");
-        const sendBtn = chatContainer.querySelector(".sendBtn");
-        const chatBox = chatContainer.querySelector(".messages");
-        const typingIndicator = chatContainer.querySelector("#typing-indicator");
+            const emojiBtn = chatContainer.querySelector("#emoji-btn");
+            const emojiPicker = chatContainer.querySelector("#emoji-picker");
+            const input = chatContainer.querySelector("input");
+            const sendBtn = chatContainer.querySelector(".sendBtn");
+            const chatBox = chatContainer.querySelector(".messages");
+            const typingIndicator = chatContainer.querySelector("#typing-indicator");
 
-        /* ---------------- Emoji Picker ---------------- */
-        emojiBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
-        });
-
-        emojiPicker.addEventListener("click", (e) => e.stopPropagation());
-        window.addEventListener('click', () => { emojiPicker.style.display = 'none'; });
-
-        emojiPicker.addEventListener("emoji-click", event => {
-            input.value += event.detail.unicode;
-            input.focus();
-            sendBtn.disabled = !input.value.trim();
-        });
-
-        /* ---------------- Messages + Realtime ---------------- */
-        const oldMessages = await fetchMessages(friendId);
-        renderChatMessages(chatBox, oldMessages, friendAvatar);
-
-        // subscribe with fixed function (uses shared typing channel + status)
-        const { msgChannel, typingChannel, statusChannelRef: statusChan } =
-            await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
-
-        await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
-        updateUnseenBadge(friendId, 0);
-
-        /* ---------------- Typing Broadcast ---------------- */
-        const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
-        input.addEventListener("input", () => {
-            sendBtn.disabled = !input.value.trim();
-            client.channel(typingChannelName).send({
-                type: "broadcast",
-                event: "typing",
-                payload: { userId: currentUserId, userName: "You" }
+            /* ---------------- Emoji Picker ---------------- */
+            emojiBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
             });
-        });
 
-        /* ---------------- Send Button ---------------- */
-        async function handleSend() {
-            const content = input.value.trim();
-            if (!content) return;
-            await sendMessage(friendId, content);
-            input.value = "";
-            sendBtn.disabled = true;
-        }
+            emojiPicker.addEventListener("click", (e) => e.stopPropagation());
+            window.addEventListener('click', () => { emojiPicker.style.display = 'none'; });
 
-        sendBtn.addEventListener("click", handleSend);
-        input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
-
-        /* ---------------- Back Button ---------------- */
-        const backBtn = chatContainer.querySelector('.backBtn');
-        if (backBtn) {
-            backBtn.addEventListener('click', async () => {
-                sidebar.style.display = 'flex';
-                chatContainer.style.display = 'none';
-
-                if (msgChannel) await client.removeChannel(msgChannel);
-                if (typingChannel) await client.removeChannel(typingChannel);
-                if (statusChan) await client.removeChannel(statusChan);
+            emojiPicker.addEventListener("emoji-click", event => {
+                input.value += event.detail.unicode;
+                input.focus();
+                sendBtn.disabled = !input.value.trim();
             });
+
+            /* ---------------- Messages + Realtime ---------------- */
+            const oldMessages = await fetchMessages(friendId);
+            renderChatMessages(chatBox, oldMessages, friendAvatar);
+
+            // subscribe with fixed function (uses shared typing channel + status)
+            const { msgChannel, typingChannel, statusChannelRef: statusChan } =
+                await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
+
+            await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
+            updateUnseenBadge(friendId, 0);
+
+            /* ---------------- Typing Broadcast ---------------- */
+            const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
+            input.addEventListener("input", () => {
+                sendBtn.disabled = !input.value.trim();
+                client.channel(typingChannelName).send({
+                    type: "broadcast",
+                    event: "typing",
+                    payload: { userId: currentUserId, userName: "You" }
+                });
+            });
+
+            /* ---------------- Send Button ---------------- */
+            async function handleSend() {
+                const content = input.value.trim();
+                if (!content) return;
+                await sendMessage(friendId, content);
+                input.value = "";
+                sendBtn.disabled = true;
+            }
+
+            sendBtn.addEventListener("click", handleSend);
+            input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
+
+            /* ---------------- Back Button ---------------- */
+            const backBtn = chatContainer.querySelector('.backBtn');
+            if (backBtn) {
+                backBtn.addEventListener('click', async () => {
+                    sidebar.style.display = 'flex';
+                    chatContainer.style.display = 'none';
+
+                    if (msgChannel) await client.removeChannel(msgChannel);
+                    if (typingChannel) await client.removeChannel(typingChannel);
+                    if (statusChan) await client.removeChannel(statusChan);
+                });
+            }
+        } catch (err) {
+            console.error("Error opening chat:", err.message);
+            showPopup("Failed to open chat.");
+        } finally {
+            hideLoading();
         }
     }
+
 
 
     /* ------------------ Button Listener ------------------ */

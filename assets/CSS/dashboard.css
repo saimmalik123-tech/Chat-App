@@ -741,7 +741,6 @@ emoji-picker {
   }
 }
 
-/* Responsive */
 @media (max-width: 992px) {
   .sidebar {
     width: 35%;
@@ -756,18 +755,44 @@ emoji-picker {
   .chat-container {
     flex-direction: column;
     height: 100%;
+    position: relative;
   }
+
+  .sidebar {
+    width: 100%;
+    height: 100%;
+    display: none;
+    flex-direction: column;
+    background: var(--input-bg);
+    overflow-y: auto;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  .sidebar.active {
+    display: flex;
+    transform: translateX(0);
+    opacity: 1;
+  }
+
   .chat-area {
     width: 100%;
+    height: 100%;
     flex: 1;
-    height: auto;
+    display: none;
+    flex-direction: column;
+    background: var(--bg);
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  .chat-area.active {
+    display: flex;
+    transform: translateX(0);
+    opacity: 1;
   }
 
   .messages {
     flex: 1 1 auto;
-    min-height: 0;
     overflow-y: auto;
-    padding: 10px;
+    padding: 12px;
+    min-height: 0;
   }
 
   .chat-input {
@@ -776,16 +801,15 @@ emoji-picker {
     bottom: 0;
     left: 0;
     right: 0;
-  }
-  .sidebar {
-    width: 100%;
-    height: 100%;
-    max-height: none;
-    overflow-y: auto;
+    margin: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
   }
 
   .backBtn {
     display: flex;
+    margin-right: 8px;
   }
 }
 
@@ -800,8 +824,8 @@ emoji-picker {
     max-width: 100%;
   }
   #message {
-    width: 60px;
-    height: 60px;
-    font-size: 1.8rem;
+    width: 56px;
+    height: 56px;
+    font-size: 1.6rem;
   }
 }
