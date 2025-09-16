@@ -616,7 +616,8 @@ emoji-picker {
 }
 
 .profile-popup.hidden {
-  opacity: 0;
+  opacity: 1;
+  display: flex;
   visibility: hidden;
   pointer-events: none;
 }
