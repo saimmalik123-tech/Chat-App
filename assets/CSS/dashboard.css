@@ -39,7 +39,6 @@ html,
 body {
   height: 100%;
   width: 100%;
-  overflow: hidden;
 }
 
 body {
@@ -773,15 +772,15 @@ emoji-picker {
 
   .chat-input {
     flex: none;
-    position: fixed;
+    position: sticky;
     bottom: 0;
     left: 0;
     right: 0;
   }
   .sidebar {
     width: 100%;
-    height: auto;
-    max-height: 50%;
+    height: 100%;
+    max-height: none;
     overflow-y: auto;
   }
 
