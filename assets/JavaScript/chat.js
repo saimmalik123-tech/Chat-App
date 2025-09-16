@@ -4,6 +4,19 @@ import { showPopup, showLoading, hideLoading } from "./popup.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
 
+    async function requestNotificationPermission() {
+        if (!("Notification" in window)) return;
+
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+            console.log("Notifications blocked by user.");
+        } else {
+            console.log("Notifications enabled ✅");
+        }
+    }
+    requestNotificationPermission();
+
+
     /* ------------------ Current User Avatar ------------------ */
     async function fetchCurrentUserAvatar(profileImageSelector = '.profile-pic') {
         const profileImage = document.querySelector(profileImageSelector);
@@ -209,6 +222,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         req.sender_id,
                         avatarUrl
                     );
+                    showNotification("Friend Request 👥", `${req.private_users?.name || "Someone"} sent you a request`);
                 }
             }
         } catch (err) {
@@ -549,6 +563,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const prev = unseenCounts[newMsg.sender_id] || 0;
                 unseenCounts[newMsg.sender_id] = prev + 1;
                 updateUnseenBadge(newMsg.sender_id, unseenCounts[newMsg.sender_id]);
+
+                showNotification("New Message 💬", newMsg.content, "./assets/icon/user.png", "dashboard.html" + newMsg.sender_id);
             }
         });
 

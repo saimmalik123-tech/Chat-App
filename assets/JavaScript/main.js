@@ -1,5 +1,17 @@
 import { showPopup, showLoading, hideLoading } from "./popup.js";
 
+function showNotification(title, body, icon = "./assets/icon/user.png", onClickUrl = "dashboard") {
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+
+    const notification = new Notification(title, { body, icon });
+    notification.onclick = () => {
+        window.focus();
+        window.location.href = onClickUrl;
+    };
+}
+
+
 document.addEventListener("DOMContentLoaded", () => {
     // ---------- THEME TOGGLE ----------
     const toggleBtn = document.getElementById("themeToggle");
@@ -68,7 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
     smallScreen();
 
     /* ------------------ Profile Popup ------------------ */
-    const profilePic = document.querySelector(".profile-pic"); // your avatar
+    const profilePic = document.querySelector(".profile-pic"); 
     const profilePopup = document.getElementById("profile-popup");
     const closeProfile = document.getElementById("close-profile");
     const profilePreview = document.getElementById("profile-preview");
@@ -86,6 +98,7 @@ document.addEventListener("DOMContentLoaded", () => {
             .from("user_profiles")
             .select("profile_image_url, bio")
             .eq("user_id", currentUserId)
+            .limit(1)
             .maybeSingle();
 
         if (profile?.profile_image_url) profilePreview.src = profile.profile_image_url;
@@ -137,5 +150,16 @@ document.addEventListener("DOMContentLoaded", () => {
         showPopup("Logged out!", "info");
         window.location.href = "signup.html";
     });
+
+    function showNotification(title, body, icon = "./assets/icon/user.png") {
+        if (!("Notification" in window)) return;
+        if (Notification.permission !== "granted") return;
+
+        new Notification(title, {
+            body,
+            icon
+        });
+    }
+
 
 });
