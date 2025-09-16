@@ -66,7 +66,6 @@ document.addEventListener("DOMContentLoaded", () => {
     smallScreen();
 
     // Modal PopUp
-    /* Popup function */
     function showPopup(message) {
         const popup = document.getElementById("popup");
         const messageEl = document.getElementById("popup-message");
@@ -81,8 +80,6 @@ document.addEventListener("DOMContentLoaded", () => {
             popup.classList.add("hidden");
         };
     }
-
-
 
     function showLoading(message = "Loading...") {
         const overlay = document.getElementById("loading-overlay");
