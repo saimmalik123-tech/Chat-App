@@ -3,6 +3,7 @@
 main h1 {
   font-size: 1.8rem;
   margin-bottom: 8px;
+  animation: fadeIn 0.8s ease-in;
 }
 
 main p {
@@ -10,63 +11,73 @@ main p {
   color: var(--text-secondary);
   margin-bottom: 20px;
   max-width: 400px;
+  animation: fadeIn 1s ease-in;
 }
 
 .profile-box {
   background: var(--input-bg);
   padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 400px;
+  max-width: 420px;
   width: 100%;
-  animation: fadeUp 0.8s ease-in;
+  animation: scaleFadeUp 0.7s ease-out;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.profile-box:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
 }
 
 .avatar-upload {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .avatar-upload img {
-  width: 100px;
-  height: 100px;
+  width: 110px;
+  height: 110px;
   border-radius: 50%;
   object-fit: cover;
   border: 3px solid var(--accent);
   cursor: pointer;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
 }
 
 .avatar-upload img:hover {
-  transform: scale(1.05);
+  transform: scale(1.08);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
 }
 
 .avatar-upload span {
   font-size: 0.9rem;
   color: var(--text-secondary);
   cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.avatar-upload span:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .profile-box input,
 .profile-box textarea {
   padding: 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid var(--input-border);
   background-color: var(--input-bg);
   color: var(--text-primary);
   font-size: 1rem;
   width: 100%;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-.profile-box textarea {
-  resize: none;
-  height: 80px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
 }
 
 .profile-box input:focus,
@@ -74,10 +85,56 @@ main p {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3);
   outline: none;
+  transform: scale(1.02);
 }
 
+.profile-box textarea {
+  resize: none;
+  height: 90px;
+}
+
+/* Fancy Gradient Button */
 .profile-box button {
-  margin-top: 10px;
+  margin-top: 12px;
+  padding: 12px 24px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), #4f46e5);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.4s ease;
+  animation: fadeIn 1.2s ease-in;
+}
+
+.profile-box button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  background: linear-gradient(135deg, #4338ca, var(--accent));
+}
+
+/* 🔥 Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleFadeUp {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 /* Responsive Styles */
@@ -85,19 +142,16 @@ main p {
   main h1 {
     font-size: 1.6rem;
   }
-
   main p {
     font-size: 0.95rem;
   }
-
   .profile-box {
     padding: 20px;
     gap: 14px;
   }
-
   .avatar-upload img {
-    width: 90px;
-    height: 90px;
+    width: 95px;
+    height: 95px;
   }
 }
 
@@ -105,27 +159,22 @@ main p {
   main h1 {
     font-size: 1.4rem;
   }
-
   main p {
     font-size: 0.9rem;
   }
-
   .profile-box {
     padding: 16px;
     gap: 12px;
   }
-
   .avatar-upload img {
     width: 80px;
     height: 80px;
   }
-
   .profile-box input,
   .profile-box textarea {
     font-size: 0.9rem;
     padding: 10px;
   }
-
   .profile-box button {
     width: 100%;
     max-width: 260px;
