@@ -41,6 +41,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (addFriendsBtn && friendModal && closeBtn) {
         addFriendsBtn.addEventListener('click', () => {
             friendModal.classList.remove('hidden');
+            alert('hello')
         });
         closeBtn.addEventListener('click', () => {
             friendModal.classList.add('hidden');
