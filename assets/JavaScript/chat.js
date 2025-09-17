@@ -768,11 +768,15 @@ document.addEventListener("DOMContentLoaded", async () => {
             {
                 event: "INSERT",
                 schema: "public",
-                table: "messages",
-                filter: `or(sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId})`
+                table: "messages"
             },
             payload => {
                 const newMsg = payload.new;
+
+                // Only process if I'm sender or receiver
+                if (newMsg.sender_id !== currentUserId && newMsg.receiver_id !== currentUserId) {
+                    return;
+                }
 
                 // Find the friend (other participant in chat)
                 const friendId = newMsg.sender_id === currentUserId
@@ -791,16 +795,21 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         );
 
+        /* ------------------ Listen for Seen Updates ------------------ */
         globalChannel.on(
             "postgres_changes",
             {
                 event: "UPDATE",
                 schema: "public",
-                table: "messages",
-                filter: `or(sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId})`
+                table: "messages"
             },
             payload => {
                 const updated = payload.new;
+
+                // Only process if I'm sender or receiver
+                if (updated.sender_id !== currentUserId && updated.receiver_id !== currentUserId) {
+                    return;
+                }
 
                 // If my friend has seen my messages → reset unseen count
                 if (updated.receiver_id === currentUserId && updated.seen === true) {
@@ -813,7 +822,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Subscribe to channel
         await globalChannel.subscribe();
     }
-
 
 
     // profile 
