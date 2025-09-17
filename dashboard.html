@@ -92,6 +92,13 @@
             <h2>My Profile</h2>
 
             <div class="profile-section">
+                <h3 id="profile-username">Username</h3>
+                <button id="change-username-btn" class="small-btn">
+                    <i class="fa-solid fa-pen"></i> Change Username
+                </button>
+            </div>
+
+            <div class="profile-section">
                 <img id="profile-preview" src="./assets/icon/user.png" alt="Profile" />
                 <input type="file" id="profile-upload" accept="image/*" />
             </div>
@@ -107,6 +114,25 @@
             </div>
         </div>
     </div>
+
+    <!-- Change Username Modal -->
+    <div id="username-popup" class="profile-popup hidden">
+        <div class="profile-content">
+            <span id="close-username" class="close-btn">&times;</span>
+            <h2>Change Username</h2>
+
+            <div class="profile-section">
+                <label for="new-username">New Username</label>
+                <input type="text" id="new-username" placeholder="Enter new username" />
+            </div>
+
+            <div class="profile-actions">
+                <button id="save-username"><i class="fa-solid fa-save"></i> Save</button>
+                <button id="cancel-username">Cancel</button>
+            </div>
+        </div>
+    </div>
+
 
 
     <script src="https://unpkg.com/@supabase/supabase-js"></script>

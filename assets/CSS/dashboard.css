@@ -686,6 +686,28 @@ emoji-picker {
   width: 100%;
 }
 
+.small-btn {
+  padding: 5px 10px;
+  font-size: 0.85rem;
+  border-radius: 5px;
+  border: none;
+  background: var(--accent);
+  color: var(--button-text);
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.small-btn:hover {
+  background: #1d4ed8;
+}
+
+#profile-username {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .profile-section label {
   font-size: 0.95rem;
   margin-bottom: 5px;

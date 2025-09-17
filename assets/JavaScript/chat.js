@@ -477,7 +477,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!username) return showPopup("Enter a username.", "error");
 
         try {
-            // 1. Find receiver user by username
             const { data: user, error: userError } = await client
                 .from("user_profiles")
                 .select("user_id")
@@ -494,7 +493,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return showPopup("You cannot send a request to yourself.", "warning");
             }
 
-            // 2. Check if request already exists
             const { data: existing, error: existingError } = await client
                 .from("requests")
                 .select("id, status")
@@ -518,7 +516,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             }
 
-            // 3. Insert new friend request
             const { error: requestError } = await client
                 .from("requests")
                 .insert([{ sender_id: currentUserId, receiver_id: receiverId, status: "pending" }]);
@@ -528,7 +525,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return showPopup("Failed to send friend request.", "error");
             }
 
-            // ✅ Success
             showPopup("Friend request sent successfully!", "success");
 
         } catch (err) {
