@@ -103,7 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const newUsernameInput = document.getElementById("new-username");
 
     /* ------------------ Open Profile Popup ------------------ */
-    profilePic.addEventListener("click", async () => {
+    profilePic?.addEventListener("click", async () => {
         profilePopup.classList.remove("hidden");
 
         const { data: profile } = await client
