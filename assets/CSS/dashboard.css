@@ -82,7 +82,6 @@ nav h2 a {
   height: 100%;
   width: 100%;
   background: var(--bg);
-  overflow: hidden;
 }
 
 /* Sidebar */
@@ -563,6 +562,16 @@ emoji-picker {
   justify-content: center;
   z-index: 3000;
 }
+
+.profile-username {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 8px;
+  text-align: center;
+  word-break: break-word;
+}
+
 .profile-popup.hidden {
   visibility: hidden;
   opacity: 0;
@@ -845,7 +854,6 @@ emoji-picker {
 @media (max-width: 768px) {
   .chat-container {
     flex-direction: column;
-    position: relative;
   }
   .sidebar {
     width: 100%;
@@ -868,10 +876,6 @@ emoji-picker {
     display: flex;
   }
   .chat-input {
-    position: sticky;
-    bottom: 0;
-    left: 0;
-    right: 0;
     margin: 0;
     border-radius: 0;
     border-left: none;
@@ -900,5 +904,13 @@ emoji-picker {
     width: 56px;
     height: 56px;
     font-size: 1.6rem;
+  }
+}
+
+@media (max-width: 420px) {
+  #message {
+    left: auto;
+    right: 16px;
+    bottom: 80px;
   }
 }
