@@ -854,6 +854,7 @@ emoji-picker {
 @media (max-width: 768px) {
   .chat-container {
     flex-direction: column;
+    overflow: auto;
   }
   .sidebar {
     width: 100%;
