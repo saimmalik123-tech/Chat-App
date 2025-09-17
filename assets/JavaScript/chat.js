@@ -762,18 +762,27 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function subscribeToGlobalMessages() {
         const globalChannel = client.channel("global-messages");
 
+        /* ------------------ Listen for New Messages ------------------ */
         globalChannel.on(
             "postgres_changes",
-            { event: "INSERT", schema: "public", table: "messages" },
+            {
+                event: "INSERT",
+                schema: "public",
+                table: "messages",
+                filter: `or(sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId})`
+            },
             payload => {
                 const newMsg = payload.new;
 
+                // Find the friend (other participant in chat)
                 const friendId = newMsg.sender_id === currentUserId
                     ? newMsg.receiver_id
                     : newMsg.sender_id;
 
+                // Update last message in chat list
                 updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
+                // If I am the receiver → increase unseen count
                 if (newMsg.receiver_id === currentUserId) {
                     const prev = unseenCounts[newMsg.sender_id] || 0;
                     unseenCounts[newMsg.sender_id] = prev + 1;
@@ -784,10 +793,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         globalChannel.on(
             "postgres_changes",
-            { event: "UPDATE", schema: "public", table: "messages" },
+            {
+                event: "UPDATE",
+                schema: "public",
+                table: "messages",
+                filter: `or(sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId})`
+            },
             payload => {
                 const updated = payload.new;
 
+                // If my friend has seen my messages → reset unseen count
                 if (updated.receiver_id === currentUserId && updated.seen === true) {
                     unseenCounts[updated.sender_id] = 0;
                     updateUnseenBadge(updated.sender_id, 0);
@@ -795,8 +810,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         );
 
+        // Subscribe to channel
         await globalChannel.subscribe();
     }
+
 
 
     // profile 
@@ -834,6 +851,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
         bioInput.value = profile?.bio || "";
         profileUsername.textContent = profile?.user_name || "Unknown User";
+        console.log(profile.user_name)
     });
 
     /* ------------------ Close Profile Popup ------------------ */
