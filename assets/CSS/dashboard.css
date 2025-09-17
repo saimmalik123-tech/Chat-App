@@ -878,13 +878,13 @@ emoji-picker {
   .chat-area.active {
     display: flex;
   }
-  /* .chat-input {
-    margin: 0;
+  .chat-input {
+    margin-bottom: auto;
     border-radius: 0;
     border-left: none;
     border-right: none;
     flex: 1 1 auto;
-  } */
+  }
   .backBtn {
     display: flex;
     margin-right: 8px;
