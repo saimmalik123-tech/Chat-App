@@ -883,7 +883,7 @@ emoji-picker {
     border-radius: 0;
     border-left: none;
     border-right: none;
-    flex: 1;
+    flex: 1 1 auto;
   }
   .backBtn {
     display: flex;
