@@ -850,8 +850,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
         bioInput.value = profile?.bio || "";
-        profileUsername.textContent = profile?.user_name || "Unknown User";
-        console.log(profile.user_name)
+        profileUsername.textContent = profile?.username || "Unknown User";
+        console.log(profile.username)
     });
 
     /* ------------------ Close Profile Popup ------------------ */
