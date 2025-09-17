@@ -1,10 +1,3 @@
-/* Rewritten CSS for chat app
-   - Keeps original class names and layout
-   - Removes excessive !important flags
-   - Preserves responsiveness and animations
-   - Cleans up redundant/contradictory rules and groups related styles
-*/
-
 :root {
   --bg: #f4f7fb;
   --text-primary: #1e293b;
@@ -159,6 +152,7 @@ nav h2 a {
   cursor: pointer;
   border-radius: 8px;
   transition: background 0.22s, box-shadow 0.22s;
+  border: 1px solid var(--input-border);
 }
 .chat + .chat {
   border-top: 1px solid var(--input-border);
@@ -856,7 +850,7 @@ emoji-picker {
   .sidebar {
     width: 100%;
     height: 100%;
-    display: none;
+    display: flex;
     overflow: auto;
     transition: transform 0.28s, opacity 0.28s;
   }
