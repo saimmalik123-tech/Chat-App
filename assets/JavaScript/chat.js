@@ -293,7 +293,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     .limit(1)
                     .maybeSingle();
 
-                const lastMessageText = lastMsgData?.content || "Say hi! 👋";
+                const lastMessageText = lastMsgData?.content || "Loading Messagees...";
                 const lastMessageTime = lastMsgData
                     ? new Date(lastMsgData.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
                     : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
