@@ -843,15 +843,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const { data: profile } = await client
             .from("user_profiles")
-            .select("profile_image_url, bio, username")
+            .select("profile_image_url, bio, user_name")
             .eq("user_id", currentUserId)
             .limit(1)
             .maybeSingle();
 
         profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
         bioInput.value = profile?.bio || "";
-        profileUsername.textContent = profile?.username || "Unknown User";
-        console.log(profile.username)
+        profileUsername.textContent = profile?.user_name || "Unknown User";
+        console.log(profile.user_name)
     });
 
     /* ------------------ Close Profile Popup ------------------ */
