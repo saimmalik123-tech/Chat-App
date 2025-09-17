@@ -200,7 +200,8 @@ nav h2 a {
 
 /* Chat area */
 .chat-area {
-  flex: 1 1 auto;
+  flex: 1;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   height: 100%;
