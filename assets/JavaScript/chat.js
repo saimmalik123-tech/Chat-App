@@ -647,7 +647,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         <div class="messages"></div>
         <div class="chat-input">
             <i class="fa-regular fa-face-smile" id='emoji-btn'></i>
-            <input id='input' type="text" placeholder="Type a message..." inputmode="text">
+            <textarea id='input' placeholder="Type a message..."></textarea>
             <button disabled class='sendBtn'>➤</button>
             <emoji-picker id="emoji-picker" style="position:absolute; bottom:50px; left:0; display:none; z-index:1000;"></emoji-picker>
         </div>

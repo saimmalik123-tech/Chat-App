@@ -458,7 +458,7 @@ nav h2 a {
 /* Chat input */
 .chat-input {
   display: flex;
-  align-items: flex-end; /* This is a key change */
+  align-items: flex-end;
   gap: 8px;
   padding: 12px;
   border-radius: 16px;
