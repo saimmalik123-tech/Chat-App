@@ -1019,6 +1019,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (overlay) overlay.style.display = "none";
     }
 
+
+    const input = document.querySelector(".chat-input input");
+    const messagesAA = document.querySelector(".messages");
+
+    if (input && messagesAA) {
+        input.addEventListener("focus", () => {
+            alert('foced')
+            setTimeout(() => {
+                messages.scrollTop = messages.scrollHeight;
+            }, 300);
+        });
+    }
+
+
     /* ------------------ Initial Load ------------------ */
     await getCurrentUser();
     await fetchFriendRequests();

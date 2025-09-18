@@ -88,16 +88,5 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    const input = document.querySelector(".chat-input input");
-    const messages = document.querySelector(".messages");
-
-    if (input && messages) {
-        input.addEventListener("focus", () => {
-            alert('foced')
-            setTimeout(() => {
-                messages.scrollTop = messages.scrollHeight;
-            }, 300); // wait for keyboard animation
-        });
-    }
 
 });
