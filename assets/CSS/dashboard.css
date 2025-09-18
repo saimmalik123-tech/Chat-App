@@ -458,7 +458,7 @@ nav h2 a {
 /* Chat input */
 .chat-input {
   display: flex;
-  align-items: center;
+  align-items: flex-end; /* This is a key change */
   gap: 8px;
   padding: 12px;
   border-radius: 16px;
@@ -466,19 +466,25 @@ nav h2 a {
   border: 1px solid rgba(0, 0, 0, 0.05);
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
-  min-height: 64px;
   flex-shrink: 0;
+  min-height: 64px;
 }
-.chat-input input {
+.chat-input textarea {
   flex: 1;
   padding: 12px;
   border-radius: 30px;
   border: 1px solid var(--input-border);
   background: var(--bg);
+  font-family: "Inter", Arial, Helvetica, sans-serif;
   font-size: 1rem;
   min-width: 0;
+  resize: none;
+  overflow-y: hidden; /* Important to prevent scrollbars */
+  min-height: 24px;
+  max-height: 120px;
+  transition: all 0.2s ease;
 }
-.chat-input input:focus {
+.chat-input textarea:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 6px rgba(37, 99, 235, 0.16);
@@ -492,6 +498,7 @@ nav h2 a {
   font-size: 1.1rem;
   cursor: pointer;
   transition: transform 0.18s, background 0.18s;
+  align-self: flex-end; /* Align the button to the bottom */
 }
 .chat-input button:hover {
   transform: scale(1.06);
@@ -872,6 +879,7 @@ emoji-picker {
 @media (max-width: 768px) {
   .chat-container {
     flex-direction: column;
+    /* Use dvh for mobile height to prevent layout shifts */
     height: 100dvh;
     flex: 1;
     overflow-x: hidden;
