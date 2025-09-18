@@ -582,6 +582,35 @@ emoji-picker {
   transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
+.profile-section input[type="text"] {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--text-primary);
+  transition: border-color 0.2s ease;
+}
+
+.profile-section input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 6px rgba(37, 99, 235, 0.12);
+}
+
+#cancel-username {
+  background: var(--input-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--input-border);
+}
+
+#cancel-username:hover {
+  background: var(--input-border);
+  transform: translateY(-2px);
+}
+
 .profile-popup.hidden {
   visibility: hidden;
   opacity: 0;
