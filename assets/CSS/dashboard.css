@@ -85,7 +85,6 @@ nav h2 a {
 .chat-container {
   display: flex;
   flex-grow: 1;
-  /* Key fix: Use 100dvh for correct mobile height calculation */
   height: 100dvh;
   width: 100%;
   background: var(--bg);
@@ -968,6 +967,8 @@ emoji-picker {
   .chat-input {
     margin: 10px;
     border-radius: 16px;
+    position: sticky;
+    bottom: 20px;
     border: 1px solid rgba(0, 0, 0, 0.05);
     background: var(--glass-bg);
     backdrop-filter: var(--glass-blur);

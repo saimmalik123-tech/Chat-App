@@ -77,7 +77,7 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener('resize', smallScreen);
     smallScreen();
 
-  
+
     function showNotification(title, body, icon = "./assets/icon/user.png") {
         if (!("Notification" in window)) return;
         if (Notification.permission !== "granted") return;
@@ -88,5 +88,16 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    const input = document.querySelector(".chat-input input");
+    const messages = document.querySelector(".messages");
+
+    if (input && messages) {
+        input.addEventListener("focus", () => {
+            alert('foced')
+            setTimeout(() => {
+                messages.scrollTop = messages.scrollHeight;
+            }, 300); // wait for keyboard animation
+        });
+    }
 
 });
