@@ -84,6 +84,7 @@ nav h2 a {
 .chat-container {
   display: flex;
   flex-grow: 1;
+  /* Key fix: Use 100dvh for correct mobile height calculation */
   height: 100dvh;
   width: 100%;
   background: var(--bg);
@@ -241,7 +242,7 @@ nav h2 a {
   gap: 10px;
   padding: 16px;
   overflow-y: auto;
-  min-height: 0;
+  min-height: 0; /* Ensures the flex item can shrink properly */
   -webkit-overflow-scrolling: touch;
   will-change: scroll-position;
 }
@@ -272,7 +273,6 @@ nav h2 a {
   font-size: 0.95rem;
   line-height: 1.4;
   word-wrap: break-word;
-  /* Removed fadeIn animation from here */
   opacity: 1;
   align-self: flex-start;
   transition: transform 0.18s ease;
@@ -287,7 +287,6 @@ nav h2 a {
   color: var(--button-text);
   border-radius: 20px 20px 0 20px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  /* Added fadeIn animation here */
   animation: fadeIn 0.45s ease;
 }
 .message.received {
