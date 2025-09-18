@@ -293,10 +293,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                     .limit(1)
                     .maybeSingle();
 
-                const lastMessageText = lastMsgData?.content || "Loading Messagees...";
+                const lastMessageText = lastMsgData?.content || "Loading messages...";
                 const lastMessageTime = lastMsgData
                     ? new Date(lastMsgData.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                    : "";
 
                 // unseen messages
                 const { count: unseenCount, error: unseenError } = await client
@@ -334,6 +334,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 chatList.appendChild(li);
             }
+
+            // ✅ enable search after rendering list
+            enableFriendSearch();
+
         } catch (err) {
             console.error("Error fetching friends:", err.message);
             showPopup("Failed to load friends.");
@@ -341,6 +345,31 @@ document.addEventListener("DOMContentLoaded", async () => {
             hideLoading();
         }
     }
+
+    /* ------------------ Friend Search ------------------ */
+    function enableFriendSearch() {
+        const searchInput = document.getElementById("search-friends");
+        const chatList = document.querySelector(".chat-list");
+
+        if (!searchInput || !chatList) return;
+
+        searchInput.addEventListener("input", () => {
+            const query = searchInput.value.toLowerCase().trim();
+            const chats = chatList.querySelectorAll(".chat");
+
+            chats.forEach(chat => {
+                const nameEl = chat.querySelector("h4");
+                const name = nameEl ? nameEl.textContent.toLowerCase() : "";
+
+                if (name.includes(query)) {
+                    chat.style.display = "flex"; // show match
+                } else {
+                    chat.style.display = "none"; // hide non-match
+                }
+            });
+        });
+    }
+
 
     /* ------------------ Send Message ------------------ */
     async function sendMessage(friendId, content) {
@@ -973,8 +1002,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         const overlay = document.getElementById("loading-overlay");
         if (overlay) overlay.style.display = "none";
     }
-
-
 
     /* ------------------ Initial Load ------------------ */
     await getCurrentUser();
