@@ -332,6 +332,13 @@ nav h2 a {
   }
 }
 
+.last-message {
+  width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Loading overlay */
 #loading-overlay {
   position: fixed;
@@ -913,7 +920,7 @@ emoji-picker {
     font-size: 0.78rem;
   }
   .message {
-    max-width: 100%;
+    max-width: 70%;
   }
   #message {
     width: 56px;
