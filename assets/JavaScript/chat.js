@@ -2,6 +2,38 @@ import { client } from "../../supabase.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
 
+    /* ------------------ URL and Direct Chat Linking ------------------ */
+    // This function adds or removes the friend's ID from the URL hash.
+    function setUrlForChat(friendId) {
+        if (friendId) {
+            window.location.hash = `chat?id=${friendId}`;
+        } else {
+            // Clear the hash without reloading the page
+            window.history.pushState("", document.title, window.location.pathname + window.location.search);
+        }
+    }
+
+    // This function checks the URL on page load and opens a chat if an ID is present.
+    async function checkUrlForChatId() {
+        const hash = window.location.hash;
+        const match = hash.match(/#chat\?id=(.*)/);
+        if (match && match[1]) {
+            const friendId = match[1];
+            showLoading("Loading chat from URL...");
+            const { data: userProfile } = await client
+                .from("user_profiles")
+                .select("user_name, profile_image_url")
+                .eq("user_id", friendId)
+                .maybeSingle();
+
+            if (userProfile) {
+                await openChat(friendId, userProfile.user_name, userProfile.profile_image_url);
+            }
+            hideLoading();
+        }
+    }
+
+
     async function requestNotificationPermission() {
         if (!("Notification" in window)) return;
 
@@ -667,10 +699,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     /* ------------------ Open Chat ------------------ */
+    // Updated to call setUrlForChat()
     async function openChat(friendId, friendName, friendAvatar) {
         const chatContainer = document.querySelector(".chat-area");
         const sidebar = document.querySelector('.sidebar');
         if (!chatContainer) return;
+
+        // Set the URL to reflect the open chat
+        setUrlForChat(friendId);
 
         if (window.innerWidth <= 768) {
             sidebar.style.display = 'none';
@@ -767,6 +803,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                     sidebar.style.display = 'flex';
                     chatContainer.style.display = 'none';
 
+                    // Clear the URL hash when going back
+                    setUrlForChat(null);
+
                     if (msgChannel) await client.removeChannel(msgChannel);
                     if (typingChannel) await client.removeChannel(typingChannel);
                     if (statusChan) await client.removeChannel(statusChan);
@@ -816,232 +855,36 @@ document.addEventListener("DOMContentLoaded", async () => {
         /* ------------------ Listen for New Messages ------------------ */
         globalChannel.on(
             "postgres_changes",
-            {
-                event: "INSERT",
-                schema: "public",
-                table: "messages"
-            },
+            { event: "INSERT", schema: "public", table: "messages" },
             payload => {
                 const newMsg = payload.new;
 
-                // Only process if I'm sender or receiver
-                if (newMsg.sender_id !== currentUserId && newMsg.receiver_id !== currentUserId) {
-                    return;
-                }
-
-                // Find the friend (other participant in chat)
-                const friendId = newMsg.sender_id === currentUserId
-                    ? newMsg.receiver_id
-                    : newMsg.sender_id;
-
-                // Update last message in chat list
-                updateLastMessage(friendId, newMsg.content, newMsg.created_at);
-
-                // If I am the receiver → increase unseen count
+                // Only handle new messages that are sent to the current user
                 if (newMsg.receiver_id === currentUserId) {
-                    const prev = unseenCounts[newMsg.sender_id] || 0;
-                    unseenCounts[newMsg.sender_id] = prev + 1;
-                    updateUnseenBadge(newMsg.sender_id, unseenCounts[newMsg.sender_id]);
+                    // Update unseen message count for the friend who sent the message
+                    const senderId = newMsg.sender_id;
+                    unseenCounts[senderId] = (unseenCounts[senderId] || 0) + 1;
+                    updateUnseenBadge(senderId, unseenCounts[senderId]);
+
+                    // Update the last message text in the friend list
+                    updateLastMessage(senderId, newMsg.content, newMsg.created_at);
+
+                    // Show a notification
+                    showNotification(
+                        "New Message 💬",
+                        newMsg.content,
+                        "./assets/icon/user.png",
+                        "dashboard.html" + newMsg.sender_id
+                    );
                 }
             }
-        );
-
-        /* ------------------ Listen for Seen Updates ------------------ */
-        globalChannel.on(
-            "postgres_changes",
-            {
-                event: "UPDATE",
-                schema: "public",
-                table: "messages"
-            },
-            payload => {
-                const updated = payload.new;
-
-                // Only process if I'm sender or receiver
-                if (updated.sender_id !== currentUserId && updated.receiver_id !== currentUserId) {
-                    return;
-                }
-
-                // If my friend has seen my messages → reset unseen count
-                if (updated.receiver_id === currentUserId && updated.seen === true) {
-                    unseenCounts[updated.sender_id] = 0;
-                    updateUnseenBadge(updated.sender_id, 0);
-                }
-            }
-        );
-
-        // Subscribe to channel
-        await globalChannel.subscribe();
+        ).subscribe();
     }
 
-
-    // profile 
-
-    const DEFAULT_PROFILE_IMG = "./assets/icon/default-user.png";
-
-    const profilePic = document.querySelector(".profile-pic");
-    const profilePopup = document.getElementById("profile-popup");
-    const closeProfile = document.getElementById("close-profile");
-    const profilePreview = document.getElementById("profile-preview");
-    const profileUpload = document.getElementById("profile-upload");
-    const bioInput = document.getElementById("bio");
-    const saveProfileBtn = document.getElementById("save-profile");
-    const logoutBtn = document.getElementById("logout");
-    const profileUsername = document.getElementById("profile-username");
-
-    const usernamePopup = document.getElementById("username-popup");
-    const changeUsernameBtn = document.getElementById("change-username-btn");
-    const closeUsername = document.getElementById("close-username");
-    const cancelUsername = document.getElementById("cancel-username");
-    const saveUsernameBtn = document.getElementById("save-username");
-    const newUsernameInput = document.getElementById("new-username");
-
-    /* ------------------ Open Profile Popup ------------------ */
-    profilePic?.addEventListener("click", async () => {
-        profilePopup.classList.remove("hidden");
-
-        const { data: profile } = await client
-            .from("user_profiles")
-            .select("profile_image_url, bio, user_name")
-            .eq("user_id", currentUserId)
-            .limit(1)
-            .maybeSingle();
-
-        profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
-        bioInput.value = profile?.bio || "";
-        profileUsername.textContent = profile?.user_name || "Unknown User";
-        console.log(profile.user_name)
+    getCurrentUser().then(() => {
+        fetchFriends();
+        fetchFriendRequests();
+        subscribeToGlobalMessages();
+        checkUrlForChatId(); // Check the URL for an ID and open the chat
     });
-
-    /* ------------------ Close Profile Popup ------------------ */
-    closeProfile?.addEventListener("click", () => {
-        profilePopup.classList.add("hidden");
-    });
-
-    /* ------------------ Preview new image ------------------ */
-    profileUpload?.addEventListener("change", (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                profilePreview.src = ev.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-    });
-
-    /* ------------------ Save Profile ------------------ */
-    saveProfileBtn?.addEventListener("click", async () => {
-        try {
-            let imageUrl = profilePreview.src || DEFAULT_PROFILE_IMG;
-            const bio = bioInput.value.trim();
-
-            const { error } = await client
-                .from("user_profiles")
-                .update({ profile_image_url: imageUrl, bio })
-                .eq("user_id", currentUserId);
-
-            if (error) throw error;
-
-            showPopup("Profile updated successfully!", "success");
-            profilePopup.classList.add("hidden");
-
-            fetchCurrentUserAvatar();
-        } catch (err) {
-            console.error("Error updating profile:", err.message);
-            showPopup("Failed to update profile.", "error");
-        }
-    });
-
-    /* ------------------ Logout ------------------ */
-    logoutBtn?.addEventListener("click", async () => {
-        await client.auth.signOut();
-        showPopup("Logged out!", "info");
-        window.location.href = "signup.html";
-    });
-
-    /* ------------------ Change Username Modal ------------------ */
-    changeUsernameBtn?.addEventListener("click", () => {
-        profilePopup.classList.add("hidden");
-        usernamePopup.classList.remove("hidden");
-    });
-
-    closeUsername?.addEventListener("click", () => {
-        usernamePopup.classList.add("hidden");
-    });
-
-    cancelUsername?.addEventListener("click", () => {
-        usernamePopup.classList.add("hidden");
-    });
-
-    saveUsernameBtn?.addEventListener("click", async () => {
-        const newUsername = newUsernameInput.value.trim();
-        if (!newUsername) {
-            showPopup("Username cannot be empty!", "error");
-            return;
-        }
-
-        try {
-            const { error } = await client
-                .from("user_profiles")
-                .update({ username: newUsername })
-                .eq("user_id", currentUserId);
-
-            if (error) throw error;
-
-            showPopup("Username updated!", "success");
-            profileUsername.textContent = newUsername;
-            usernamePopup.classList.add("hidden");
-        } catch (err) {
-            console.error("Error updating username:", err.message);
-            showPopup("Failed to update username.", "error");
-        }
-    });
-
-    function showPopup(message) {
-        const popup = document.getElementById("popup");
-        const messageEl = document.getElementById("popup-message");
-        const closeBtn = document.getElementById("popup-close");
-
-        if (!popup || !messageEl) return;
-
-        messageEl.textContent = message;
-        popup.classList.remove("hidden");
-
-        closeBtn?.addEventListener('click', () => {
-            popup.classList.add("hidden")
-        });
-    }
-
-    function showLoading(message = "Loading...") {
-        const overlay = document.getElementById("loading-overlay");
-        const msgEl = document.getElementById("loading-message");
-        if (msgEl) msgEl.textContent = message;
-        if (overlay) overlay.style.display = "flex";
-    }
-
-    function hideLoading() {
-        const overlay = document.getElementById("loading-overlay");
-        if (overlay) overlay.style.display = "none";
-    }
-
-
-    const input = document.querySelector(".chat-input input");
-    const messagesAA = document.querySelector(".messages");
-
-    if (input && messagesAA) {
-        input.addEventListener("focus", () => {
-            alert('foced')
-            setTimeout(() => {
-                messages.scrollTop = messages.scrollHeight;
-            }, 300);
-        });
-    }
-
-
-    /* ------------------ Initial Load ------------------ */
-    await getCurrentUser();
-    await fetchFriendRequests();
-    await fetchFriends();
-    await subscribeToGlobalMessages();
 });
