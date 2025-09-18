@@ -253,6 +253,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     /* ------------------ Fetch Friends / Chat List ------------------ */
+    /* ------------------ Fetch Friends / Chat List ------------------ */
     async function fetchFriends() {
         if (!currentUserId) return;
 
@@ -270,10 +271,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!chatList) return;
             chatList.innerHTML = "";
 
-            for (const f of friends) {
+            // Use Promise.all to fetch data concurrently for better performance
+            const friendPromises = friends.map(async (f) => {
                 const friendId = f.user1_id === currentUserId ? f.user2_id : f.user1_id;
 
-                // get profile
+                // Get profile data
                 const { data: userProfile } = await client
                     .from("user_profiles")
                     .select("user_name, profile_image_url, is_online")
@@ -283,22 +285,21 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const friendName = userProfile?.user_name || "Unknown";
                 const avatarUrl = userProfile?.profile_image_url || "./assets/icon/user.png";
 
-                // last message
+                // Fetch last message
                 const { data: lastMsgData } = await client
                     .from("messages")
                     .select("*")
-                    .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),
-                     and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                    .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}), and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
                     .order("created_at", { ascending: false })
                     .limit(1)
                     .maybeSingle();
 
-                const lastMessageText = lastMsgData?.content || "Loading messages...";
+                const lastMessageText = lastMsgData?.content || "No messages yet";
                 const lastMessageTime = lastMsgData
                     ? new Date(lastMsgData.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
                     : "";
 
-                // unseen messages
+                // Fetch unseen messages
                 const { count: unseenCount, error: unseenError } = await client
                     .from("messages")
                     .select("*", { count: "exact", head: true })
@@ -308,14 +309,31 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 if (unseenError) console.error("Error fetching unseen messages:", unseenError);
 
-                // build list item
+                return {
+                    friendId,
+                    friendName,
+                    avatarUrl,
+                    isOnline: userProfile?.is_online,
+                    lastMessageText,
+                    lastMessageTime,
+                    unseenCount
+                };
+            });
+
+            // Wait for all promises to resolve
+            const friendData = await Promise.all(friendPromises);
+
+            // Now render the UI with the complete data
+            friendData.forEach(data => {
+                const { friendId, friendName, avatarUrl, isOnline, lastMessageText, lastMessageTime, unseenCount } = data;
+
                 const li = document.createElement("li");
                 li.classList.add("chat");
                 li.setAttribute("data-friend-id", friendId);
                 li.innerHTML = `
                 <div class="avatar-wrapper" style="position:relative;">
                     <img src="${avatarUrl}" alt="User" style="object-fit: cover; border-radius:50%;">
-                    ${userProfile?.is_online ? '<span class="online-dot"></span>' : ''}
+                    ${isOnline ? '<span class="online-dot"></span>' : ''}
                 </div>
                 <div>
                     <h4>${friendName}</h4>
@@ -333,9 +351,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 });
 
                 chatList.appendChild(li);
-            }
+            });
 
-            // ✅ enable search after rendering list
             enableFriendSearch();
 
         } catch (err) {
@@ -345,7 +362,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             hideLoading();
         }
     }
-
     /* ------------------ Friend Search ------------------ */
     function enableFriendSearch() {
         const searchInput = document.getElementById("search-friends");
