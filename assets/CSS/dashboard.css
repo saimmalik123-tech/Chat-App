@@ -647,7 +647,7 @@ emoji-picker {
   border: 1px solid var(--input-border);
   background: var(--input-bg);
 }
-.profile-section textarea {
+.profile-section input {
   width: 100%;
   min-height: 80px;
   padding: 10px;
@@ -656,7 +656,7 @@ emoji-picker {
   background: var(--input-bg);
   resize: none;
 }
-.profile-section textarea:focus {
+.profile-section input:focus {
   outline: none;
   border-color: var(--accent);
 }
@@ -665,7 +665,8 @@ emoji-picker {
   display: flex;
   gap: 10px;
 }
-.profile-actions button {
+.profile-actions button,
+ small-btn{
   flex: 1;
   padding: 10px;
   border-radius: 8px;
