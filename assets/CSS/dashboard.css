@@ -204,6 +204,7 @@ nav h2 a {
   display: flex;
   flex-direction: column;
   height: 100%;
+  width: 70%;
   background: var(--bg);
   flex-grow: 1;
 }
