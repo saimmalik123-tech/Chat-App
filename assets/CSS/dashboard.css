@@ -40,7 +40,6 @@ html,
 body {
   height: 100%;
   width: 100%;
-  /* This is the core fix. It prevents scrollbars on the entire page. */
   overflow: hidden;
 }
 
@@ -85,7 +84,6 @@ nav h2 a {
 .chat-container {
   display: flex;
   flex-grow: 1;
-  /* Use 100vh for desktop, and 100dvh for a correct mobile height calculation */
   height: 100dvh;
   width: 100%;
   background: var(--bg);
@@ -244,6 +242,7 @@ nav h2 a {
   overflow-y: auto;
   min-height: 0;
   -webkit-overflow-scrolling: touch;
+  will-change: scroll-position;
 }
 
 /* Message skeleton */
@@ -272,7 +271,7 @@ nav h2 a {
   font-size: 0.95rem;
   line-height: 1.4;
   word-wrap: break-word;
-  animation: fadeIn 0.45s ease;
+  /* Removed fadeIn animation from here */
   opacity: 1;
   align-self: flex-start;
   transition: transform 0.18s ease;
@@ -287,6 +286,8 @@ nav h2 a {
   color: var(--button-text);
   border-radius: 20px 20px 0 20px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  /* Added fadeIn animation here */
+  animation: fadeIn 0.45s ease;
 }
 .message.received {
   align-self: flex-start;
@@ -869,7 +870,6 @@ emoji-picker {
 }
 
 @media (max-width: 768px) {
-  /* Key fix: Add this to prevent horizontal scroll on mobile */
   .chat-container {
     flex-direction: column;
     height: 100dvh;
