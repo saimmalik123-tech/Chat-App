@@ -579,15 +579,7 @@ emoji-picker {
   align-items: center;
   justify-content: center;
   z-index: 3000;
-}
-
-.profile-username {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-top: 8px;
-  text-align: center;
-  word-break: break-word;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 .profile-popup.hidden {
@@ -595,6 +587,7 @@ emoji-picker {
   opacity: 0;
   pointer-events: none;
 }
+
 .profile-content {
   background: var(--bg);
   color: var(--text-primary);
@@ -603,14 +596,16 @@ emoji-picker {
   width: min(95%, 420px);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
   position: relative;
-  animation: scaleIn 0.22s ease;
+  animation: scaleIn 0.22s ease forwards;
 }
+
 .profile-content h2 {
   margin: 0 0 12px;
   font-size: 1.25rem;
   color: var(--accent);
   text-align: center;
 }
+
 .close-btn {
   position: absolute;
   top: 12px;
@@ -618,10 +613,13 @@ emoji-picker {
   font-size: 1.2rem;
   color: var(--text-secondary);
   cursor: pointer;
+  transition: color 0.2s ease;
 }
+
 .close-btn:hover {
   color: var(--accent);
 }
+
 .profile-section {
   display: flex;
   flex-direction: column;
@@ -629,6 +627,32 @@ emoji-picker {
   gap: 10px;
   margin-bottom: 14px;
 }
+
+#profile-username {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 8px;
+  text-align: center;
+  word-break: break-word;
+}
+
+.small-btn {
+  background: none;
+  border: 1px solid var(--input-border);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.small-btn:hover {
+  background: var(--input-border);
+  transform: translateY(-2px);
+}
+
 .profile-section img {
   width: 100px;
   height: 100px;
@@ -637,9 +661,11 @@ emoji-picker {
   border: 3px solid var(--accent);
   transition: transform 0.18s;
 }
+
 .profile-section img:hover {
   transform: scale(1.05);
 }
+
 .profile-section input[type="file"] {
   width: 100%;
   padding: 6px;
@@ -647,7 +673,8 @@ emoji-picker {
   border: 1px solid var(--input-border);
   background: var(--input-bg);
 }
-.profile-section input {
+
+.profile-section textarea {
   width: 100%;
   min-height: 80px;
   padding: 10px;
@@ -655,8 +682,13 @@ emoji-picker {
   border: 1px solid var(--input-border);
   background: var(--input-bg);
   resize: none;
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--text-primary);
+  transition: border-color 0.2s ease;
 }
-.profile-section input:focus {
+
+.profile-section textarea:focus {
   outline: none;
   border-color: var(--accent);
 }
@@ -665,8 +697,8 @@ emoji-picker {
   display: flex;
   gap: 10px;
 }
-.profile-actions button,
-.small-btn{
+
+.profile-actions button {
   flex: 1;
   padding: 10px;
   border-radius: 8px;
@@ -678,13 +710,18 @@ emoji-picker {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  font-size: 1rem;
+  transition: transform 0.18s, background 0.18s;
 }
+
 .profile-actions button:hover {
   transform: translateY(-2px);
 }
+
 #logout {
   background: #ef4444;
 }
+
 #logout:hover {
   background: #dc2626;
 }
