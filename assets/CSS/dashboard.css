@@ -666,7 +666,7 @@ emoji-picker {
   gap: 10px;
 }
 .profile-actions button,
- small-btn{
+.small-btn{
   flex: 1;
   padding: 10px;
   border-radius: 8px;
