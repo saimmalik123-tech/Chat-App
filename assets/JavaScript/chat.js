@@ -705,6 +705,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             const chatBox = chatContainer.querySelector(".messages");
             const typingIndicator = chatContainer.querySelector("#typing-indicator");
 
+            input.addEventListener("focus", () => {
+                setTimeout(() => {
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }, 300);
+            });
+
             /* ---------------- Emoji Picker ---------------- */
             emojiBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
