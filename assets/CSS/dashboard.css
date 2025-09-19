@@ -87,6 +87,7 @@ nav h2 a {
   flex-grow: 1;
   height: 100%;
   width: 100%;
+  overflow: auto;
   background: var(--bg);
 }
 
@@ -1039,7 +1040,6 @@ emoji-picker {
   .chat-input {
     margin: 10px;
     border-radius: 16px;
-    position: sticky;
     bottom: 20px;
     border: 1px solid rgba(0, 0, 0, 0.05);
     background: var(--glass-bg);
