@@ -319,10 +319,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     /* ------------------ Fetch Friends / Chat List ------------------ */
     async function fetchFriends() {
+        showLoading("Fetching friends...");
         if (!currentUserId) return;
 
         try {
-            showLoading("Fetching friends...");
             const { data: friends, error } = await client
                 .from("friends")
                 .select("*")
