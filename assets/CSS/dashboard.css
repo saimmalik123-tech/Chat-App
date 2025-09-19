@@ -845,7 +845,7 @@ emoji-picker {
   display: flex;
   transform: translateY(20px);
   transition: all 0.28s ease;
-  z-index: 2001;
+  z-index: 2001123456789;
 }
 .modal-content,
 .popup-content {
