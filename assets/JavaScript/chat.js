@@ -20,7 +20,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    function showLoading(message = "Loading...") {
+    function showLoading(message) {
         const overlay = document.getElementById("loading-overlay");
         const msgEl = document.getElementById("loading-message");
         overlay.classList.remove('hidden');
