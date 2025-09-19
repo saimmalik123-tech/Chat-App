@@ -831,10 +831,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (chatHeaderImg) chatHeaderImg.src = friendAvatar || "./assets/icon/user.png";
 
         /* ------------------ Mobile Responsive Fix ------------------ */
+        const defaultArea = document.querySelector('.default');
+
         if (window.innerWidth <= 768) {
-            if (sidebar) sidebar.style.display = "none";   // ✅ hide sidebar
-            if (messageCon) messageCon.style.display = "none"; // ✅ hide requests
-            chatContainer.style.display = "flex"; // ✅ show chat area
+            if (sidebar) sidebar.style.display = "none";
+            if (messageCon) messageCon.style.display = "none";
+            chatContainer.style.display = "flex";
+            defaultArea.style.display = 'none';
         } else {
             if (messageCon) messageCon.style.display = "none";
             chatContainer.style.display = "flex";
