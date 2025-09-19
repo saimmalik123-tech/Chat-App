@@ -704,7 +704,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         `${senderName} Send Message`,
                         newMsg.content,
                         "./assets/icon/user.png",
-                        "https://chatrsaim.netlify.app/dashboard.html" + newMsg.sender_id
+                        "https://chatrsaim.netlify.app/dashboard.html#chat?id=" + newMsg.sender_id
                     );
                 }
             }
