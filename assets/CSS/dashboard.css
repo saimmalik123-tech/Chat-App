@@ -296,6 +296,7 @@ nav h2 a {
   min-height: 0;
   -webkit-overflow-scrolling: touch;
   will-change: scroll-position;
+  overflow-x: hidden;
 }
 
 /* Input Area */
