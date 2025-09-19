@@ -1,15 +1,12 @@
 import { client } from "../../supabase.js";
-import { showPopup, showLoading, hideLoading } from "../JavaScript/popups.js";
+import { showPopup, showLoading, hideLoading } from "./popups.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
 
-    /* ------------------ URL and Direct Chat Linking ------------------ */
-    // This function adds or removes the friend's ID from the URL hash.
     function setUrlForChat(friendId) {
         if (friendId) {
             window.location.hash = `chat?id=${friendId}`;
         } else {
-            // Clear the hash without reloading the page
             window.history.pushState("", document.title, window.location.pathname + window.location.search);
         }
     }
