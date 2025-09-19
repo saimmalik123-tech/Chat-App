@@ -771,25 +771,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     /* ------------------ Open Chat ------------------ */
     async function openChat(friendId, friendName, friendAvatar) {
-        // Select the correct chat content div using its class
         const chatContainer = document.querySelector("div.chat-area");
-        // Select the default screen div using its class
         const defaultScreen = document.querySelector('.default');
 
         const sidebar = document.querySelector('.sidebar');
         const messageCon = document.getElementById('message');
 
-        // Fallback to exit if elements are not found
         if (!chatContainer || !defaultScreen) {
             console.error("Missing necessary HTML elements for chat.");
             return;
         }
 
-        // Hide the default screen and show the chat area
         defaultScreen.style.display = 'none';
         chatContainer.style.display = 'flex';
 
-        // Set the URL to reflect the open chat
         setUrlForChat(friendId);
 
         // Update the header with the friend's info
@@ -798,9 +793,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         chatHeaderName.textContent = friendName || 'Unknown';
         chatHeaderImg.src = friendAvatar || './assets/icon/user.png';
 
-        // Show/hide UI elements for mobile
         if (window.innerWidth <= 768) {
-            sidebar.style.display = 'none';
+            sidebar.style.display = 'flex';
             chatContainer.style.display = 'flex';
             messageCon.style.display = 'flex';
         } else {
