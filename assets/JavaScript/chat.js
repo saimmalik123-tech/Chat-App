@@ -448,9 +448,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const name = nameEl ? nameEl.textContent.toLowerCase() : "";
 
                 if (name.includes(query)) {
-                    chat.style.display = "flex"; // show match
+                    chat.style.display = "flex";
                 } else {
-                    chat.style.display = "none"; // hide non-match
+                    chat.style.display = "none";
                 }
             });
         });
@@ -795,10 +795,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (window.innerWidth <= 768) {
             sidebar.style.display = 'flex';
-            chatContainer.style.display = 'flex';
+            chatContainer.style.display = 'none';
             messageCon.style.display = 'flex';
         } else {
             messageCon.style.display = 'none';
+            sidebar.style.display = 'none';
+            chatContainer.style.display = 'flex';
         }
 
         showLoading("Loading chat...");
@@ -811,7 +813,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             const chatBox = chatContainer.querySelector(".messages");
             const typingIndicator = chatContainer.querySelector("#typing-indicator");
 
-            // Clear the chat messages before loading new ones
             chatBox.innerHTML = '';
 
             // Handle emoji picker
@@ -829,7 +830,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 sendBtn.disabled = !input.value.trim();
             });
 
-            // Load messages and subscribe to real-time updates
             const oldMessages = await fetchMessages(friendId);
             renderChatMessages(chatBox, oldMessages, friendAvatar);
 
