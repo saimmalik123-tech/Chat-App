@@ -320,9 +320,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function fetchFriends() {
         if (!currentUserId) return;
 
-        showLoading("Fetching friends...");
-
         try {
+            showLoading("Fetching friends...");
             const { data: friends, error } = await client
                 .from("friends")
                 .select("*")
@@ -425,7 +424,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             hideLoading();
         }
     }
-        
+
     /* ------------------ Friend Search ------------------ */
     function enableFriendSearch() {
         const searchInput = document.getElementById("search-friends");
