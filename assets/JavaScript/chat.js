@@ -1,7 +1,7 @@
 import { client } from "../../supabase.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
-    
+
     function showPopup(message, type = "info") {
         const popup = document.getElementById("popup");
         const messageEl = document.getElementById("popup-message");
@@ -657,25 +657,60 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         /* ---------------- Messages Channel ---------------- */
-        const msgChannel = client.channel(`chat:${[currentUserId, friendId].sort().join(":")}`);
-        msgChannel.on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, async payload => {
-            const newMsg = payload.new;
-            const isRelevant =
-                (newMsg.sender_id === currentUserId && newMsg.receiver_id === friendId) ||
-                (newMsg.sender_id === friendId && newMsg.receiver_id === currentUserId);
-            if (!isRelevant) return;
+        // 🔹 Cache usernames so we don’t fetch from Supabase repeatedly
+        const userCache = {};
 
-            oldMessages.push(newMsg);
-            renderChatMessages(chatBox, oldMessages, friendAvatar);
+        async function getUsername(userId) {
+            if (userCache[userId]) return userCache[userId];
 
-            if (newMsg.receiver_id === currentUserId) {
-                const prev = unseenCounts[newMsg.sender_id] || 0;
-                unseenCounts[newMsg.sender_id] = prev + 1;
-                updateUnseenBadge(newMsg.sender_id, unseenCounts[newMsg.sender_id]);
+            const { data, error } = await client
+                .from("user_profiles")
+                .select("username")
+                .eq("user_id", userId)
+                .maybeSingle();
 
-                showNotification("New Message 💬", newMsg.content, "./assets/icon/user.png", "dashboard.html" + newMsg.sender_id);
+            if (error) {
+                console.error("Error fetching username:", error.message);
+                return "Someone";
             }
-        });
+
+            const username = data?.username || "Someone";
+            userCache[userId] = username; // cache result
+            return username;
+        }
+
+        const msgChannel = client.channel(`chat:${[currentUserId, friendId].sort().join(":")}`);
+
+        msgChannel.on(
+            "postgres_changes",
+            { event: "INSERT", schema: "public", table: "messages" },
+            async payload => {
+                const newMsg = payload.new;
+
+                const isRelevant =
+                    (newMsg.sender_id === currentUserId && newMsg.receiver_id === friendId) ||
+                    (newMsg.sender_id === friendId && newMsg.receiver_id === currentUserId);
+                if (!isRelevant) return;
+
+                oldMessages.push(newMsg);
+                renderChatMessages(chatBox, oldMessages, friendAvatar);
+
+                if (newMsg.receiver_id === currentUserId) {
+                    const prev = unseenCounts[newMsg.sender_id] || 0;
+                    unseenCounts[newMsg.sender_id] = prev + 1;
+                    updateUnseenBadge(newMsg.sender_id, unseenCounts[newMsg.sender_id]);
+
+                    const senderName = await getUsername(newMsg.sender_id);
+
+                    showNotification(
+                        `${senderName} Send Message`,
+                        newMsg.content,
+                        "./assets/icon/user.png",
+                        "dashboard.html" + newMsg.sender_id
+                    );
+                }
+            }
+        );
 
         msgChannel.on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, payload => {
             const updated = payload.new;

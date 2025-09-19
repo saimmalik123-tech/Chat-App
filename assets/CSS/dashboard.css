@@ -913,12 +913,14 @@ emoji-picker {
   color: #666;
   cursor: pointer;
 }
+
 #popup-close {
   font-size: 15px;
   font-weight: 700;
   color: #666;
   cursor: pointer;
 }
+
 .close:hover,
 #popup-close:hover {
   color: #000;
