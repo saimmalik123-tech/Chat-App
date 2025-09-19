@@ -41,6 +41,27 @@
                 <i class="fa-solid fa-comment-dots"></i>
                 <p>Start a conversation by typing a message above and connect with your friends instantly!</p>
             </div>
+            
+            <div class="chat-area" style="display: none;">
+                <div class="chat-header">
+                    <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
+                    <img src="./assets/icon/user.png" alt="User" style="object-fit:cover;">
+                    <div>
+                        <h4 id="chat-header-name"></h4>
+                        <p id="typing-indicator">Offline</p>
+                    </div>
+                </div>
+                <div class="messages">
+                    <!-- Message bubbles will be populated here by JavaScript -->
+                </div>
+                <div class="chat-input">
+                    <i class="fa-regular fa-face-smile" id='emoji-btn'></i>
+                    <input id='input' type="text" placeholder="Type a message..." inputmode="text">
+                    <button disabled class='sendBtn'>➤</button>
+                </div>
+                <emoji-picker id="emoji-picker"
+                    style="position:absolute; bottom:50px; left:0; display:none; z-index:1000;"></emoji-picker>
+            </div>
         </section>
     </main>
 

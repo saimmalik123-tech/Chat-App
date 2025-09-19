@@ -770,45 +770,42 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     /* ------------------ Open Chat ------------------ */
-    // Updated to call setUrlForChat()
     async function openChat(friendId, friendName, friendAvatar) {
         const chatContainer = document.querySelector(".chat-area");
         const sidebar = document.querySelector('.sidebar');
         const messageCon = document.getElementById('message');
-        if (!chatContainer) return;
+        const chatHeaderName = document.getElementById('chat-header-name');
+        const chatHeaderImg = chatContainer.querySelector('.chat-header img');
+        const defaultScreen = document.getElementById('default-screen');
+
+        if (!chatContainer || !defaultScreen) {
+            console.error("Missing necessary HTML elements for chat.");
+            return;
+        }
+
+        // Hide the default screen and show the chat area
+        defaultScreen.style.display = 'none';
+        chatContainer.style.display = 'flex';
 
         // Set the URL to reflect the open chat
         setUrlForChat(friendId);
 
+        // Update the header with the friend's info
+        chatHeaderName.textContent = friendName || 'Unknown';
+        chatHeaderImg.src = friendAvatar || './assets/icon/user.png';
+
+        // Show/hide UI elements for mobile
         if (window.innerWidth <= 768) {
             sidebar.style.display = 'none';
             chatContainer.style.display = 'flex';
-            messageCon.style.display = 'flex'
+            messageCon.style.display = 'flex';
         } else {
-            messageCon.style.display = 'none'
+            messageCon.style.display = 'none';
         }
 
         showLoading("Loading chat...");
 
         try {
-            chatContainer.innerHTML = `
-        <div class="chat-header">
-            <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
-            <img src="${friendAvatar || './assets/icon/user.png'}" alt="User" style="object-fit:cover;">
-            <div>
-                <h4>${friendName || 'Unknown'}</h4>
-                <p id="typing-indicator">Offline</p>
-            </div>
-        </div>
-        <div class="messages"></div>
-        <div class="chat-input">
-            <i class="fa-regular fa-face-smile" id='emoji-btn'></i>
-            <input id='input' type="text" placeholder="Type a message..." inputmode="text">
-            <button disabled class='sendBtn'>➤</button>
-            <emoji-picker id="emoji-picker" style="position:absolute; bottom:50px; left:0; display:none; z-index:1000;"></emoji-picker>
-        </div>
-        `;
-
             const emojiBtn = chatContainer.querySelector("#emoji-btn");
             const emojiPicker = chatContainer.querySelector("#emoji-picker");
             const input = chatContainer.querySelector("input");
@@ -816,39 +813,33 @@ document.addEventListener("DOMContentLoaded", async () => {
             const chatBox = chatContainer.querySelector(".messages");
             const typingIndicator = chatContainer.querySelector("#typing-indicator");
 
-            input.addEventListener("focus", () => {
-                setTimeout(() => {
-                    chatBox.scrollTop = chatBox.scrollHeight;
-                }, 300);
-            });
+            // Clear the chat messages before loading new ones
+            chatBox.innerHTML = '';
 
-            /* ---------------- Emoji Picker ---------------- */
+            // Handle emoji picker
             emojiBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
             });
-
             emojiPicker.addEventListener("click", (e) => e.stopPropagation());
             window.addEventListener('click', () => { emojiPicker.style.display = 'none'; });
-
             emojiPicker.addEventListener("emoji-click", event => {
                 input.value += event.detail.unicode;
                 input.focus();
                 sendBtn.disabled = !input.value.trim();
             });
 
-            /* ---------------- Messages + Realtime ---------------- */
+            // Load messages and subscribe to real-time updates
             const oldMessages = await fetchMessages(friendId);
             renderChatMessages(chatBox, oldMessages, friendAvatar);
 
-            // subscribe with fixed function (uses shared typing channel + status)
             const { msgChannel, typingChannel, statusChannelRef: statusChan } =
                 await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
 
             await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
             updateUnseenBadge(friendId, 0);
 
-            /* ---------------- Typing Broadcast ---------------- */
+            // Handle typing broadcast
             const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
             input.addEventListener("input", () => {
                 sendBtn.disabled = !input.value.trim();
@@ -859,7 +850,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 });
             });
 
-            /* ---------------- Send Button ---------------- */
+            // Handle sending messages
             async function handleSend() {
                 const content = input.value.trim();
                 if (!content) return;
@@ -867,20 +858,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                 input.value = "";
                 sendBtn.disabled = true;
             }
-
             sendBtn.addEventListener("click", handleSend);
             input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
 
-            /* ---------------- Back Button ---------------- */
+            // Handle back button for mobile
             const backBtn = chatContainer.querySelector('.backBtn');
             if (backBtn) {
                 backBtn.addEventListener('click', async () => {
                     sidebar.style.display = 'flex';
                     chatContainer.style.display = 'none';
-
-                    // Clear the URL hash when going back
+                    defaultScreen.style.display = 'flex';
                     setUrlForChat(null);
-
                     if (msgChannel) await client.removeChannel(msgChannel);
                     if (typingChannel) await client.removeChannel(typingChannel);
                     if (statusChan) await client.removeChannel(statusChan);
@@ -893,8 +881,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             hideLoading();
         }
     }
-
-
 
     /* ------------------ Button Listener ------------------ */
     document.querySelector(".submit-friend")?.addEventListener("click", () => {
