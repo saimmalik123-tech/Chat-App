@@ -819,9 +819,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
     /* ------------------ Button Listener ------------------ */
-    document.querySelector(".submit-friend")?.addEventListener("click", () => {
+   let sendRequestBtn = document.querySelector(".submit-friend")?.addEventListener("click", () => {
         const username = document.querySelector(".friend-input").value.trim();
-        alert('lkjhgfernyuij')
+        sendRequestBtn.textContent = 'Sending...';
         sendFriendRequest(username);
     });
 
@@ -879,34 +879,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         ).subscribe();
     }
 
-
-
-    function showPopup(message) {
-        const popup = document.getElementById("popup");
-        const messageEl = document.getElementById("popup-message");
-        const closeBtn = document.getElementById("popup-close");
-
-        if (!popup || !messageEl) return;
-
-        messageEl.textContent = message;
-        popup.classList.remove("hidden");
-
-        closeBtn?.addEventListener('click', () => {
-            popup.classList.add("hidden")
-        });
-    }
-
-    function showLoading(message = "Loading...") {
-        const overlay = document.getElementById("loading-overlay");
-        const msgEl = document.getElementById("loading-message");
-        if (msgEl) msgEl.textContent = message;
-        if (overlay) overlay.style.display = "flex";
-    }
-
-    function hideLoading() {
-        const overlay = document.getElementById("loading-overlay");
-        if (overlay) overlay.style.display = "none";
-    }
 
     // profile 
 
