@@ -657,7 +657,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         /* ---------------- Messages Channel ---------------- */
-        // 🔹 Cache usernames so we don’t fetch from Supabase repeatedly
         const userCache = {};
 
         async function getUsername(userId) {
@@ -675,7 +674,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             const username = data?.username || "Someone";
-            userCache[userId] = username; // cache result
             return username;
         }
 
@@ -706,7 +704,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         `${senderName} Send Message`,
                         newMsg.content,
                         "./assets/icon/user.png",
-                        "dashboard.html" + newMsg.sender_id
+                        "https://chatrsaim.netlify.app/dashboard.html" + newMsg.sender_id
                     );
                 }
             }
