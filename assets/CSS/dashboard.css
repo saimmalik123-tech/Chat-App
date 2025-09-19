@@ -272,6 +272,7 @@ nav h2 a {
   color: var(--button-text);
   align-self: flex-end;
   border-bottom-right-radius: 2px;
+  padding-left: 15px;
 }
 
 .received {
