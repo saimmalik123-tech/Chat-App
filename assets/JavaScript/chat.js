@@ -811,32 +811,34 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ------------- Open chat window -------------
     async function openChat(friendId, friendName, friendAvatar) {
         const chatContainer = document.querySelector("div.chat-area");
-        const defaultScreen = document.querySelector('.default');
-        const sidebar = document.querySelector('.sidebar');
-        const messageCon = document.getElementById('message');
+        const defaultScreen = document.querySelector(".default");
+        const sidebar = document.querySelector(".sidebar");
+        const messageCon = document.getElementById("message");
 
         if (!chatContainer || !defaultScreen) {
             console.error("Missing necessary HTML elements for chat.");
             return;
         }
 
-        defaultScreen.style.display = 'none';
-        chatContainer.style.display = 'flex';
+        // Hide default screen and show chat area
+        defaultScreen.style.display = "none";
+        chatContainer.style.display = "flex";
 
         setUrlForChat(friendId);
 
-        const chatHeaderName = chatContainer.querySelector('#chat-header-name');
-        const chatHeaderImg = chatContainer.querySelector('.chat-header img');
-        if (chatHeaderName) chatHeaderName.textContent = friendName || 'Unknown';
-        if (chatHeaderImg) chatHeaderImg.src = friendAvatar || './assets/icon/user.png';
+        const chatHeaderName = chatContainer.querySelector("#chat-header-name");
+        const chatHeaderImg = chatContainer.querySelector(".chat-header img");
+        if (chatHeaderName) chatHeaderName.textContent = friendName || "Unknown";
+        if (chatHeaderImg) chatHeaderImg.src = friendAvatar || "./assets/icon/user.png";
 
-        // mobile fallback
-        if (window.innerWidth <= 768 && sidebar && messageCon) {
-            sidebar.style.display = 'flex';
-            chatContainer.style.display = 'none';
-            messageCon.style.display = 'flex';
-        } else if (messageCon) {
-            messageCon.style.display = 'none';
+        /* ------------------ Mobile Responsive Fix ------------------ */
+        if (window.innerWidth <= 768) {
+            if (sidebar) sidebar.style.display = "none";   // ✅ hide sidebar
+            if (messageCon) messageCon.style.display = "none"; // ✅ hide requests
+            chatContainer.style.display = "flex"; // ✅ show chat area
+        } else {
+            if (messageCon) messageCon.style.display = "none";
+            chatContainer.style.display = "flex";
         }
 
         showLoading("Loading chat...");
@@ -853,9 +855,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 throw new Error("Missing chat controls (input/send button/messages container)");
             }
 
-            // prevent stacking listeners: replace elements with clones (clears old listeners)
-            function replaceElement(elSelectorWithin) {
-                const el = chatContainer.querySelector(elSelectorWithin);
+            // Prevent stacking listeners: replace with clones
+            function replaceElement(selector) {
+                const el = chatContainer.querySelector(selector);
                 if (!el) return null;
                 const clone = el.cloneNode(true);
                 el.parentNode.replaceChild(clone, el);
@@ -864,20 +866,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const emojiBtnSafe = emojiBtn ? replaceElement("#emoji-btn") : null;
             const emojiPickerSafe = emojiPicker ? replaceElement("#emoji-picker") : null;
-            const inputSafe = replaceElement("input") || input; // fallback
+            const inputSafe = replaceElement("input") || input;
             const sendBtnSafe = replaceElement(".sendBtn") || sendBtn;
 
-            // emoji handling
+            /* ------------------ Emoji Handling ------------------ */
             if (emojiBtnSafe && emojiPickerSafe) {
                 emojiBtnSafe.addEventListener("click", (e) => {
                     e.stopPropagation();
-                    emojiPickerSafe.style.display = emojiPickerSafe.style.display === "none" || !emojiPickerSafe.style.display ? "block" : "none";
+                    emojiPickerSafe.style.display =
+                        emojiPickerSafe.style.display === "block" ? "none" : "block";
                 });
                 emojiPickerSafe.addEventListener("click", (e) => e.stopPropagation());
-                window.addEventListener('click', () => {
-                    if (emojiPickerSafe) emojiPickerSafe.style.display = 'none';
+                window.addEventListener("click", () => {
+                    if (emojiPickerSafe) emojiPickerSafe.style.display = "none";
                 });
-                emojiPickerSafe.addEventListener("emoji-click", event => {
+                emojiPickerSafe.addEventListener("emoji-click", (event) => {
                     inputSafe.value += event.detail.unicode;
                     inputSafe.focus();
                     sendBtnSafe.disabled = !inputSafe.value.trim();
@@ -887,35 +890,45 @@ document.addEventListener("DOMContentLoaded", async () => {
             inputSafe.value = "";
             sendBtnSafe.disabled = true;
 
+            /* ------------------ Load Old Messages ------------------ */
             const oldMessages = await fetchMessages(friendId);
             renderChatMessages(chatBox, oldMessages, friendAvatar);
 
-            const { msgChannel, typingChannel, statusChannelRef: statusChan } = await subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator);
+            const { msgChannel, typingChannel, statusChannelRef: statusChan } =
+                await subscribeToMessages(
+                    friendId,
+                    chatBox,
+                    oldMessages,
+                    friendAvatar,
+                    typingIndicator
+                );
 
             await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
             updateUnseenBadge(friendId, 0);
             unseenCounts[friendId] = 0;
 
-            // handle typing broadcast - reuse typing channel topic
-            const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
+            /* ------------------ Typing Indicator ------------------ */
+            const typingChannelName = `typing:${[currentUserId, friendId]
+                .sort()
+                .join(":")}`;
 
             inputSafe.addEventListener("input", () => {
                 sendBtnSafe.disabled = !inputSafe.value.trim();
-                // broadcast typing on the typing channel for this pair
                 try {
                     client.channel(typingChannelName).send({
                         type: "broadcast",
                         event: "typing",
                         payload: {
                             userId: currentUserId,
-                            userName: "You"
-                        }
+                            userName: "You",
+                        },
                     });
-                } catch (err) {
-                    // ignore
+                } catch {
+                    // ignore errors
                 }
             });
 
+            /* ------------------ Send Message ------------------ */
             async function handleSend() {
                 const content = inputSafe.value.trim();
                 if (!content) return;
@@ -925,22 +938,24 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             sendBtnSafe.addEventListener("click", handleSend);
-            inputSafe.addEventListener("keypress", e => {
+            inputSafe.addEventListener("keypress", (e) => {
                 if (e.key === "Enter") handleSend();
             });
 
-            // back button - cleanup subscriptions
-            const backBtn = chatContainer.querySelector('.backBtn');
+            /* ------------------ Back Button ------------------ */
+            const backBtn = chatContainer.querySelector(".backBtn");
             if (backBtn) {
                 const backClone = backBtn.cloneNode(true);
                 backBtn.parentNode.replaceChild(backClone, backBtn);
-                backClone.addEventListener('click', async () => {
-                    if (sidebar) sidebar.style.display = 'flex';
-                    chatContainer.style.display = 'none';
-                    defaultScreen.style.display = 'flex';
+                backClone.addEventListener("click", async () => {
+                    if (window.innerWidth <= 768) {
+                        if (sidebar) sidebar.style.display = "flex";
+                        if (messageCon) messageCon.style.display = "flex";
+                        chatContainer.style.display = "none";
+                        defaultScreen.style.display = "flex";
+                    }
                     setUrlForChat(null);
 
-                    // remove channels
                     try {
                         if (msgChannel) await client.removeChannel(msgChannel);
                         if (typingChannel) await client.removeChannel(typingChannel);
