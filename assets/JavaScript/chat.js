@@ -351,10 +351,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 };
             });
 
-            // Wait for all promises to resolve
             const friendData = await Promise.all(friendPromises);
 
-            // Now render the UI with the complete data
             friendData.forEach(data => {
                 const { friendId, friendName, avatarUrl, isOnline, lastMessageText, lastMessageTime, unseenCount } = data;
 
@@ -409,9 +407,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const name = nameEl ? nameEl.textContent.toLowerCase() : "";
 
                 if (name.includes(query)) {
-                    chat.style.display = "flex"; // show match
+                    chat.style.display = "flex";
                 } else {
-                    chat.style.display = "none"; // hide non-match
+                    chat.style.display = "none";
                 }
             });
         });
@@ -823,6 +821,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     /* ------------------ Button Listener ------------------ */
     document.querySelector(".submit-friend")?.addEventListener("click", () => {
         const username = document.querySelector(".friend-input").value.trim();
+        alert('lkjhgfernyuij')
         sendFriendRequest(username);
     });
 
