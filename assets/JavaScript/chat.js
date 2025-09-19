@@ -700,12 +700,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     const senderName = await getUsername(newMsg.sender_id);
 
-                    showNotification(
-                        `${senderName} Send Message`,
-                        newMsg.content,
-                        "./assets/icon/user.png",
-                        "https://chatrsaim.netlify.app/dashboard.html#chat?id=" + newMsg.sender_id
-                    );
+                    // showNotification(
+                    //     `${senderName} Send Message`,
+                    //     newMsg.content,
+                    //     "./assets/icon/user.png",
+                    //     "https://chatrsaim.netlify.app/dashboard.html#chat?id=" + newMsg.sender_id
+                    // );
                 }
             }
         );
