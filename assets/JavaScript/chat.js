@@ -815,15 +815,36 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
 
+    // send friend request BTn
 
-    /* ------------------ Button Listener ------------------ */
     const sendRequestBtn = document.querySelector(".submit-friend");
+    const friendInput = document.querySelector(".friend-input");
 
-    sendRequestBtn?.addEventListener("click", () => {
-        const username = document.querySelector(".friend-input").value.trim();
-        sendRequestBtn.textContent = 'Sending...';
-        sendFriendRequest(username);
+    sendRequestBtn?.addEventListener("click", async () => {
+        const username = friendInput.value.trim();
+
+        if (!username) {
+            showPopup("⚠️ Please enter a username.", "warning");
+            return;
+        }
+
+        sendRequestBtn.disabled = true;
+        sendRequestBtn.textContent = "Sending...";
+
+        try {
+            await sendFriendRequest(username);
+            sendRequestBtn.textContent = "Request Sent ✅";
+            friendInput.value = ""; // clear input after success
+        } catch (err) {
+            console.error(err);
+            sendRequestBtn.textContent = "Send Request";
+            showPopup("❌ Failed to send request. Try again.", "error");
+        } finally {
+            // Re-enable button
+            sendRequestBtn.disabled = false;
+        }
     });
+
 
 
     function updateLastMessage(friendId, content, createdAt) {

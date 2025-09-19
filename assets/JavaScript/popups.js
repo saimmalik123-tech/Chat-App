@@ -24,3 +24,13 @@ export function hideLoading() {
     const overlay = document.getElementById("loading-overlay");
     if (overlay) overlay.style.display = "none";
 }
+
+export function showNotification(title, body, icon = "./assets/icon/user.png") {
+        if (!("Notification" in window)) return;
+        if (Notification.permission !== "granted") return;
+
+        new Notification(title, {
+            body,
+            icon
+        });
+    }
