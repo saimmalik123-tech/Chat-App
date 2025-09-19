@@ -945,7 +945,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         "New Message 💬",
                         newMsg.content,
                         "./assets/icon/user.png",
-                        "dashboard.html" + newMsg.sender_id
+                        "https://chatrsaim.netlify.app/dashboard.html#chat?id=" + newMsg.sender_id
                     );
                 }
             }
