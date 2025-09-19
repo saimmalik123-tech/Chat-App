@@ -77,32 +77,32 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener('resize', smallScreen);
     smallScreen();
 
-    function showPopup(message) {
-        const popup = document.getElementById("popup");
-        const messageEl = document.getElementById("popup-message");
-        const closeBtn = document.getElementById("popup-close");
+    // function showPopup(message) {
+    //     const popup = document.getElementById("popup");
+    //     const messageEl = document.getElementById("popup-message");
+    //     const closeBtn = document.getElementById("popup-close");
 
-        if (!popup || !messageEl) return;
+    //     if (!popup || !messageEl) return;
 
-        messageEl.textContent = message;
-        popup.classList.remove("hidden");
+    //     messageEl.textContent = message;
+    //     popup.classList.remove("hidden");
 
-        closeBtn?.addEventListener('click', () => {
-            popup.classList.add("hidden")
-        });
-    }
+    //     closeBtn?.addEventListener('click', () => {
+    //         popup.classList.add("hidden")
+    //     });
+    // }
 
-    function showLoading(message = "Loading...") {
-        const overlay = document.getElementById("loading-overlay");
-        const msgEl = document.getElementById("loading-message");
-        if (msgEl) msgEl.textContent = message;
-        if (overlay) overlay.style.display = "flex";
-    }
+    // function showLoading(message = "Loading...") {
+    //     const overlay = document.getElementById("loading-overlay");
+    //     const msgEl = document.getElementById("loading-message");
+    //     if (msgEl) msgEl.textContent = message;
+    //     if (overlay) overlay.style.display = "flex";
+    // }
 
-    function hideLoading() {
-        const overlay = document.getElementById("loading-overlay");
-        if (overlay) overlay.style.display = "none";
-    }
+    // function hideLoading() {
+    //     const overlay = document.getElementById("loading-overlay");
+    //     if (overlay) overlay.style.display = "none";
+    // }
 
 
 });

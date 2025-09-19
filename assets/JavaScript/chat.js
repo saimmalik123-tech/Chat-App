@@ -2,6 +2,36 @@ import { client } from "../../supabase.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
 
+    function showPopup(message, type = "info") {
+        const popup = document.getElementById("popup");
+        const messageEl = document.getElementById("popup-message");
+        const closeBtn = document.getElementById("popup-close");
+
+        if (!popup || !messageEl) return;
+
+        messageEl.textContent = message;
+        popup.classList.remove("hidden");
+        popup.classList.remove("error", "success", "info");
+        popup.classList.add(type);
+
+        closeBtn?.addEventListener('click', () => {
+            popup.classList.add("hidden");
+        });
+    }
+
+    function showLoading(message = "Loading...") {
+        const overlay = document.getElementById("loading-overlay");
+        const msgEl = document.getElementById("loading-message");
+        if (msgEl) msgEl.textContent = message;
+        if (overlay) overlay.style.display = "flex";
+    }
+
+    function hideLoading() {
+        const overlay = document.getElementById("loading-overlay");
+        if (overlay) overlay.style.display = "none";
+    }
+
+
     /* ------------------ URL and Direct Chat Linking ------------------ */
     // This function adds or removes the friend's ID from the URL hash.
     function setUrlForChat(friendId) {
@@ -880,8 +910,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         ).subscribe();
     }
-
-
 
     // function showPopup(message) {
     //     const popup = document.getElementById("popup");
