@@ -55,23 +55,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (window.innerWidth <= 768) {
             contactCon.style.display = 'flex';
             chatContainer.style.display = 'none';
-            chatContainer.classList.add('width');
-
-            const input = document.querySelector(".chat-input input");
-            const messages = document.querySelector(".messages");
-
-            if (input && messages) {
-                input.addEventListener("focus", () => {
-                    setTimeout(() => {
-                        messages.scrollTop = messages.scrollHeight;
-                    }, 300);
-                });
-            }
 
         } else {
             contactCon.style.display = 'flex';
             chatContainer.style.display = 'flex';
-            chatContainer.classList.remove('width');
         }
     }
     window.addEventListener('resize', smallScreen);

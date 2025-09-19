@@ -1032,6 +1032,7 @@ emoji-picker {
   .chat-area {
     width: 100%;
     display: none;
+    height: 100%;
     flex-direction: column;
     flex: 1;
   }
