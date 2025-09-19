@@ -153,6 +153,7 @@ nav h2 a {
   align-items: center;
   gap: 10px;
   padding: 12px;
+  min-height: 70px;
   width: 100%;
   cursor: pointer;
   border-radius: 8px;
@@ -477,6 +478,7 @@ nav h2 a {
   background: var(--bg);
   font-size: 1rem;
   min-width: 0;
+  color: var(--text-primary);
 }
 .chat-input input:focus {
   outline: none;
