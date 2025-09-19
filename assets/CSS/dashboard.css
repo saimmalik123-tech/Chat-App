@@ -36,7 +36,6 @@ body.dark {
   box-sizing: border-box;
 }
 
-/* Fix: Use dvh to prevent mobile keyboard from breaking layout */
 html,
 body {
   height: 100dvh;
@@ -244,7 +243,7 @@ nav h2 a {
   gap: 10px;
   padding: 16px;
   overflow-y: auto;
-  min-height: 0; /* Ensures the flex item can shrink properly */
+  min-height: 0;
   -webkit-overflow-scrolling: touch;
   will-change: scroll-position;
 }
