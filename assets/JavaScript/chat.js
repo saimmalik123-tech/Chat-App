@@ -414,8 +414,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 li.addEventListener("click", () => {
                     openChat(friendId, friendName, avatarUrl);
+                    let chatArea = document.querySelector('.chat-area');
                     if (innerWidth <= 768) {
                         document.querySelector('#message').classList.add("hidden");
+                        chatArea.style.display = 'flex';
                     }
                 });
 
@@ -787,7 +789,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         setUrlForChat(friendId);
 
-        // Update the header with the friend's info
         const chatHeaderName = chatContainer.querySelector('#chat-header-name');
         const chatHeaderImg = chatContainer.querySelector('.chat-header img');
         chatHeaderName.textContent = friendName || 'Unknown';
@@ -799,8 +800,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             messageCon.style.display = 'flex';
         } else {
             messageCon.style.display = 'none';
-            sidebar.style.display = 'none';
-            chatContainer.style.display = 'flex';
         }
 
         showLoading("Loading chat...");
