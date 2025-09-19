@@ -1,12 +1,14 @@
 import { client } from "../../supabase.js";
-import { showPopup, showLoading, hideLoading } from "./popups.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
 
+    /* ------------------ URL and Direct Chat Linking ------------------ */
+    // This function adds or removes the friend's ID from the URL hash.
     function setUrlForChat(friendId) {
         if (friendId) {
             window.location.hash = `chat?id=${friendId}`;
         } else {
+            // Clear the hash without reloading the page
             window.history.pushState("", document.title, window.location.pathname + window.location.search);
         }
     }
@@ -283,6 +285,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     /* ------------------ Fetch Friends / Chat List ------------------ */
+    /* ------------------ Fetch Friends / Chat List ------------------ */
     async function fetchFriends() {
         if (!currentUserId) return;
 
@@ -349,8 +352,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 };
             });
 
+            // Wait for all promises to resolve
             const friendData = await Promise.all(friendPromises);
 
+            // Now render the UI with the complete data
             friendData.forEach(data => {
                 const { friendId, friendName, avatarUrl, isOnline, lastMessageText, lastMessageTime, unseenCount } = data;
 
@@ -405,9 +410,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const name = nameEl ? nameEl.textContent.toLowerCase() : "";
 
                 if (name.includes(query)) {
-                    chat.style.display = "flex";
+                    chat.style.display = "flex"; // show match
                 } else {
-                    chat.style.display = "none";
+                    chat.style.display = "none"; // hide non-match
                 }
             });
         });
@@ -815,37 +820,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
 
-    // send friend request BTn
 
-    const sendRequestBtn = document.querySelector(".submit-friend");
-    const friendInput = document.querySelector(".friend-input");
-
-    sendRequestBtn?.addEventListener("click", async () => {
-        const username = friendInput.value.trim();
-
-        if (!username) {
-            showPopup("⚠️ Please enter a username.", "warning");
-            return;
-        }
-
-        sendRequestBtn.disabled = true;
-        sendRequestBtn.textContent = "Sending...";
-
-        try {
-            await sendFriendRequest(username);
-            sendRequestBtn.textContent = "Request Sent ✅";
-            friendInput.value = ""; // clear input after success
-        } catch (err) {
-            console.error(err);
-            sendRequestBtn.textContent = "Send Request";
-            showPopup("❌ Failed to send request. Try again.", "error");
-        } finally {
-            // Re-enable button
-            sendRequestBtn.disabled = false;
-        }
+    /* ------------------ Button Listener ------------------ */
+    document.querySelector(".submit-friend")?.addEventListener("click", () => {
+        const username = document.querySelector(".friend-input").value.trim();
+        sendFriendRequest(username);
     });
-
-
 
     function updateLastMessage(friendId, content, createdAt) {
         const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
@@ -901,6 +881,34 @@ document.addEventListener("DOMContentLoaded", async () => {
         ).subscribe();
     }
 
+
+
+    function showPopup(message) {
+        const popup = document.getElementById("popup");
+        const messageEl = document.getElementById("popup-message");
+        const closeBtn = document.getElementById("popup-close");
+
+        if (!popup || !messageEl) return;
+
+        messageEl.textContent = message;
+        popup.classList.remove("hidden");
+
+        closeBtn?.addEventListener('click', () => {
+            popup.classList.add("hidden")
+        });
+    }
+
+    function showLoading(message = "Loading...") {
+        const overlay = document.getElementById("loading-overlay");
+        const msgEl = document.getElementById("loading-message");
+        if (msgEl) msgEl.textContent = message;
+        if (overlay) overlay.style.display = "flex";
+    }
+
+    function hideLoading() {
+        const overlay = document.getElementById("loading-overlay");
+        if (overlay) overlay.style.display = "none";
+    }
 
     // profile 
 
