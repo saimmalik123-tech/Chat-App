@@ -285,7 +285,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     /* ------------------ Fetch Friends / Chat List ------------------ */
-    /* ------------------ Fetch Friends / Chat List ------------------ */
     async function fetchFriends() {
         if (!currentUserId) return;
 

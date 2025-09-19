@@ -842,7 +842,7 @@ emoji-picker {
   font-size: 14px;
   color: #fff;
   opacity: 0;
-  display: none;
+  display: flex;
   transform: translateY(20px);
   transition: all 0.28s ease;
   z-index: 2001;
