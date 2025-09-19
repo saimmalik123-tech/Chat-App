@@ -10,6 +10,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!popup || !messageEl) return;
 
         messageEl.textContent = message;
+        popup.classList.add('show')
         popup.classList.remove("hidden");
         popup.classList.remove("error", "success", "info");
         popup.classList.add(type);
