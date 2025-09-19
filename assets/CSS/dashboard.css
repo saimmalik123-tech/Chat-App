@@ -38,9 +38,8 @@ body.dark {
 
 html,
 body {
-  height: 100dvh;
+  height: 100%;
   width: 100%;
-  overflow: hidden;
 }
 
 body {
@@ -1008,7 +1007,7 @@ emoji-picker {
 @media (max-width: 768px) {
   .chat-container {
     flex-direction: column;
-    height: 100dvh;
+    height: 100%;
     flex: 1;
     overflow-x: hidden;
   }
