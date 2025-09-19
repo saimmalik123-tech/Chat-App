@@ -822,7 +822,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     /* ------------------ Button Listener ------------------ */
     let sendRequestBtn = document.querySelector(".submit-friend")?.addEventListener("click", () => {
         const username = document.querySelector(".friend-input").value.trim();
-        sendRequestBtn.textContent = 'Sending...';
+        sendRequestBtn?.textContent = 'Sending...';
         sendFriendRequest(username);
     });
 
