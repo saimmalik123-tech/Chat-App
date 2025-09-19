@@ -844,6 +844,9 @@ emoji-picker {
   color: #fff;
   opacity: 0;
   display: flex;
+  justify-content: center;
+  align-items: center;
+  column-gap: 20px;
   transform: translateY(20px);
   transition: all 0.28s ease;
   z-index: 2001123456789;
@@ -901,12 +904,17 @@ emoji-picker {
   filter: brightness(0.95);
 }
 
-.close,
+.close {
+  position: relative;
+  top: -15px;
+  left: 48%;
+  font-size: 28px;
+  font-weight: 700;
+  color: #666;
+  cursor: pointer;
+}
 #popup-close {
-  position: absolute;
-  top: 12px;
-  right: 16px;
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 700;
   color: #666;
   cursor: pointer;
