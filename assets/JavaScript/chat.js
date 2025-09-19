@@ -771,13 +771,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     /* ------------------ Open Chat ------------------ */
     async function openChat(friendId, friendName, friendAvatar) {
-        const chatContainer = document.querySelector(".chat-area");
+        // Select the correct chat content div using its class
+        const chatContainer = document.querySelector("div.chat-area");
+        // Select the default screen div using its class
+        const defaultScreen = document.querySelector('.default');
+
         const sidebar = document.querySelector('.sidebar');
         const messageCon = document.getElementById('message');
-        const chatHeaderName = document.getElementById('chat-header-name');
-        const chatHeaderImg = chatContainer.querySelector('.chat-header img');
-        const defaultScreen = document.getElementById('default-screen');
 
+        // Fallback to exit if elements are not found
         if (!chatContainer || !defaultScreen) {
             console.error("Missing necessary HTML elements for chat.");
             return;
@@ -791,6 +793,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         setUrlForChat(friendId);
 
         // Update the header with the friend's info
+        const chatHeaderName = chatContainer.querySelector('#chat-header-name');
+        const chatHeaderImg = chatContainer.querySelector('.chat-header img');
         chatHeaderName.textContent = friendName || 'Unknown';
         chatHeaderImg.src = friendAvatar || './assets/icon/user.png';
 
@@ -822,7 +826,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
             });
             emojiPicker.addEventListener("click", (e) => e.stopPropagation());
-            window.addEventListener('click', () => { emojiPicker.style.display = 'none'; });
+            window.addEventListener('click', () => {
+                emojiPicker.style.display = 'none';
+            });
             emojiPicker.addEventListener("emoji-click", event => {
                 input.value += event.detail.unicode;
                 input.focus();
@@ -846,7 +852,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 client.channel(typingChannelName).send({
                     type: "broadcast",
                     event: "typing",
-                    payload: { userId: currentUserId, userName: "You" }
+                    payload: {
+                        userId: currentUserId,
+                        userName: "You"
+                    }
                 });
             });
 
@@ -859,7 +868,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 sendBtn.disabled = true;
             }
             sendBtn.addEventListener("click", handleSend);
-            input.addEventListener("keypress", e => { if (e.key === "Enter") handleSend(); });
+            input.addEventListener("keypress", e => {
+                if (e.key === "Enter") handleSend();
+            });
 
             // Handle back button for mobile
             const backBtn = chatContainer.querySelector('.backBtn');
