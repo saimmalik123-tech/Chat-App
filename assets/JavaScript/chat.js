@@ -1,8 +1,8 @@
 import { client } from "../../supabase.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
-
-    function showPopup(message) {
+    
+    function showPopup(message, type = "info") {
         const popup = document.getElementById("popup");
         const messageEl = document.getElementById("popup-message");
         const closeBtn = document.getElementById("popup-close");
@@ -10,30 +10,36 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!popup || !messageEl) return;
 
         messageEl.textContent = message;
-        popup.classList.add('show')
-        popup.classList.remove("hidden");
-        popup.classList.remove("error", "success", "info");
+        popup.classList.add('show');
+        popup.classList.remove("hidden", "error", "success", "info");
         popup.classList.add(type);
 
         closeBtn?.addEventListener('click', () => {
             popup.classList.add("hidden");
-            popup.classList.remove('show')
+            popup.classList.remove('show');
         });
     }
 
     function showLoading(message = 'Loading...') {
         const overlay = document.getElementById("loading-overlay");
         const msgEl = document.getElementById("loading-message");
+
+        if (!overlay) {
+            console.warn("⚠️ Missing #loading-overlay element");
+            return;
+        }
+
         overlay.classList.remove('hidden');
+        overlay.style.display = "flex";
         if (msgEl) msgEl.textContent = message;
-        if (overlay) overlay.style.display = "flex";
     }
 
     function hideLoading() {
         const overlay = document.getElementById("loading-overlay");
-        if (overlay) overlay.classList.add('hidden');
+        if (!overlay) return;
+        overlay.classList.add('hidden');
+        overlay.style.display = "none";
     }
-
 
     /* ------------------ URL and Direct Chat Linking ------------------ */
     // This function adds or removes the friend's ID from the URL hash.
