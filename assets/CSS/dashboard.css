@@ -15,19 +15,21 @@
 }
 
 body.dark {
-  --bg: #0f172a;
-  --text-primary: #f9fafb;
-  --text-secondary: #9ca3af;
-  --bubble-sent: linear-gradient(135deg, #2563eb, #1e40af);
-  --bubble-received: rgba(30, 41, 59, 0.7);
-  --input-bg: rgba(15, 23, 42, 0.8);
-  --input-border: #334155;
-  --accent: #3b82f6;
-  --button-text: #f9fafb;
-  --footer-bg: #1e293b;
-  --glass-bg: rgba(30, 41, 59, 0.6);
+  --bg: #101c2c;
+  --text-primary: #e6eefc;
+  --text-secondary: #8c9bac;
+  --bubble-sent: linear-gradient(135deg, #16a34a, #166534);
+  --bubble-received: rgba(43, 56, 76, 0.85);
+  --input-bg: #1e2d40;
+  --input-border: #3b4e69;
+  --accent: #1e90ff;
+  --button-text: #ffffff;
+  --footer-bg: #1a2737;
+  --glass-bg: rgba(26, 39, 55, 0.7);
   --glass-blur: blur(10px);
 }
+
+/* All other CSS remains the same */
 
 /* Reset + Typography */
 *,

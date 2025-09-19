@@ -1037,6 +1037,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         fetchFriends();
         fetchFriendRequests();
         subscribeToGlobalMessages();
-        checkUrlForChatId(); // Check the URL for an ID and open the chat
+        checkUrlForChatId();
     });
 });
