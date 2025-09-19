@@ -774,6 +774,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function openChat(friendId, friendName, friendAvatar) {
         const chatContainer = document.querySelector(".chat-area");
         const sidebar = document.querySelector('.sidebar');
+        const messageCon = document.getElementById('message');
         if (!chatContainer) return;
 
         // Set the URL to reflect the open chat
@@ -782,6 +783,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (window.innerWidth <= 768) {
             sidebar.style.display = 'none';
             chatContainer.style.display = 'flex';
+            messageCon.style.display = 'flex'
+        } else {
+            messageCon.style.display = 'none'
         }
 
         showLoading("Loading chat...");

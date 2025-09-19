@@ -49,18 +49,15 @@ document.addEventListener("DOMContentLoaded", () => {
     // ---------- CHAT SWITCHING ----------
     const chatContainer = document.querySelector('.chat-area');
     const contactCon = document.querySelector('.sidebar');
-    const messageCon = document.getElementById('message');
 
     function smallScreen() {
         if (!contactCon || !chatContainer) return;
         if (window.innerWidth <= 768) {
             contactCon.style.display = 'flex';
             chatContainer.style.display = 'none';
-            messageCon.style.display = 'flex'
         } else {
             contactCon.style.display = 'flex';
             chatContainer.style.display = 'flex';
-            messageCon.style.display = 'none'
         }
     }
     window.addEventListener('resize', smallScreen);
