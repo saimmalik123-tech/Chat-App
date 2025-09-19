@@ -2,7 +2,7 @@ import { client } from "../../supabase.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
 
-    function showPopup(message, type = "info") {
+    function showPopup(message) {
         const popup = document.getElementById("popup");
         const messageEl = document.getElementById("popup-message");
         const closeBtn = document.getElementById("popup-close");
@@ -20,7 +20,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    function showLoading(message) {
+    function showLoading(message = 'Loading...') {
         const overlay = document.getElementById("loading-overlay");
         const msgEl = document.getElementById("loading-message");
         overlay.classList.remove('hidden');
@@ -30,7 +30,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     function hideLoading() {
         const overlay = document.getElementById("loading-overlay");
-        if (overlay) overlay.style.display = "none";
+        if (overlay) overlay.classList.add('hidden');
     }
 
 
@@ -316,7 +316,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    /* ------------------ Fetch Friends / Chat List ------------------ */
     /* ------------------ Fetch Friends / Chat List ------------------ */
     async function fetchFriends() {
         if (!currentUserId) return;
