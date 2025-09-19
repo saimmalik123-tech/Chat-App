@@ -1,4 +1,5 @@
 import { client } from "../../supabase.js";
+import { showPopup, showLoading, hideLoading } from "../JavaScript/popups.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
 
@@ -819,7 +820,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
     /* ------------------ Button Listener ------------------ */
-   let sendRequestBtn = document.querySelector(".submit-friend")?.addEventListener("click", () => {
+    let sendRequestBtn = document.querySelector(".submit-friend")?.addEventListener("click", () => {
         const username = document.querySelector(".friend-input").value.trim();
         sendRequestBtn.textContent = 'Sending...';
         sendFriendRequest(username);
