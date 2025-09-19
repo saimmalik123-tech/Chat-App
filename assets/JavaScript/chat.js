@@ -425,6 +425,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             hideLoading();
         }
     }
+        
     /* ------------------ Friend Search ------------------ */
     function enableFriendSearch() {
         const searchInput = document.getElementById("search-friends");
