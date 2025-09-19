@@ -939,15 +939,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     // Update the last message text in the friend list
                     updateLastMessage(senderId, newMsg.content, newMsg.created_at);
-
-                    // Show a notification
-                    showNotification(
-                        "New Message 💬",
-                        newMsg.content,
-                        "./assets/icon/user.png",
-                        "https://chatrsaim.netlify.app/dashboard.html#chat?id=" + newMsg.sender_id
-                    );
-                }
             }
         ).subscribe();
     }
