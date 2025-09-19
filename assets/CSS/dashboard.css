@@ -902,7 +902,7 @@ emoji-picker {
 }
 
 .close,
-.popup-close {
+#popup-close {
   position: absolute;
   top: 12px;
   right: 16px;
@@ -912,7 +912,7 @@ emoji-picker {
   cursor: pointer;
 }
 .close:hover,
-.popup-close:hover {
+#popup-close:hover {
   color: #000;
 }
 

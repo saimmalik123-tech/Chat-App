@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         closeBtn?.addEventListener('click', () => {
             popup.classList.add("hidden");
+            popup.classList.remove('show')
         });
     }
 
