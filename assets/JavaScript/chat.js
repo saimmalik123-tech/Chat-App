@@ -45,46 +45,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         overlay.style.display = "none";
     }
 
-    // ---------------- URL / direct chat linking ----------------
-    function setUrlForChat(friendId) {
-        if (friendId) {
-            window.location.hash = `chat?id=${friendId}`;
-        } else {
-            window.history.pushState("", document.title, window.location.pathname + window.location.search);
-        }
-    }
-
-    async function checkUrlForChatId() {
-        const hash = window.location.hash || "";
-        const match = hash.match(/#chat\?id=(.*)/);
-        if (match && match[1]) {
-            const friendId = match[1];
-            showLoading("Loading chat from URL...");
-            try {
-                const { data: userProfile, error } = await client
-                    .from("user_profiles")
-                    .select("user_name, profile_image_url")
-                    .eq("user_id", friendId)
-                    .maybeSingle();
-
-                if (error) throw error;
-                if (userProfile) {
-                    await openChat(friendId, userProfile.user_name, userProfile.profile_image_url);
-                } else {
-                    showPopup("Chat user not found.", "error");
-                }
-            } catch (err) {
-                console.error("Error loading chat from URL:", err.message || err);
-                showPopup("Failed to load chat from URL.", "error");
-            } finally {
-                hideLoading();
-            }
-        }
-    }
-
     // ---------------- Notifications ----------------
     async function requestNotificationPermission() {
-        if (!("Notification" in window)) return;
+        if (!("Notification" in window)) {
+            console.warn("Browser does not support notifications.");
+            return;
+        }
         try {
             const permission = await Notification.requestPermission();
             if (permission !== "granted") {
@@ -96,7 +62,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.warn("Notification permission error", err);
         }
     }
-    requestNotificationPermission();
+    await requestNotificationPermission(); // Request permission early
 
     // ---------------- Current user avatar & identity ----------------
     const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
@@ -305,12 +271,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                         avatar: avatarUrl
                     });
 
+                    // Send notification for new friend request
                     try {
                         if (Notification.permission === "granted") {
                             new Notification("Friend Request 👥", { body: `${senderName} sent you a request` });
                         }
                     } catch (err) {
-                        // ignore
+                        console.warn("Error sending friend request notification:", err);
                     }
                 }
             }
@@ -777,8 +744,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         defaultScreen.style.display = "none";
         chatContainer.style.display = "flex";
 
-        setUrlForChat(friendId);
-
         const chatHeaderName = chatContainer.querySelector("#chat-header-name");
         const chatHeaderImg = chatContainer.querySelector(".chat-header img");
         if (chatHeaderName) chatHeaderName.textContent = friendName || "Unknown";
@@ -908,7 +873,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         chatContainer.style.display = "none";
                         defaultScreen.style.display = "flex"; // Or keep the friend list visible
                     }
-                    setUrlForChat(null);
 
                     try {
                         if (msgChannel) await client.removeChannel(msgChannel);
@@ -973,6 +937,24 @@ document.addEventListener("DOMContentLoaded", async () => {
                         unseenCounts[senderId] = (unseenCounts[senderId] || 0) + 1;
                         updateUnseenBadge(senderId, unseenCounts[senderId]);
                         updateLastMessage(senderId, newMsg.content, newMsg.created_at);
+
+                        // Also send a browser notification for new messages
+                        (async () => {
+                            try {
+                                if (Notification.permission === "granted") {
+                                    const { data: senderProfile, error } = await client
+                                        .from("user_profiles")
+                                        .select("user_name")
+                                        .eq("user_id", senderId)
+                                        .maybeSingle();
+
+                                    const senderName = senderProfile?.user_name || "New Message";
+                                    new Notification(senderName, { body: newMsg.content });
+                                }
+                            } catch (err) {
+                                console.warn("Error sending message notification:", err);
+                            }
+                        })();
                     }
                 }
             );
@@ -1145,6 +1127,5 @@ document.addEventListener("DOMContentLoaded", async () => {
         await fetchFriends();
         await fetchFriendRequests();
         await subscribeToGlobalMessages();
-        await checkUrlForChatId();
     }
 });
