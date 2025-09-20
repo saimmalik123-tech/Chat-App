@@ -863,15 +863,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const backClone = backBtn.cloneNode(true);
                 backBtn.parentNode.replaceChild(backClone, backBtn);
                 backClone.addEventListener("click", async () => {
+                    document.getElementById('message').classList.remove('hidden');
                     if (window.innerWidth <= 768) {
                         if (sidebar) sidebar.style.display = "flex";
                         if (messageCon) messageCon.style.display = "flex";
                         chatContainer.style.display = "none";
                         defaultScreen.style.display = "flex";
                     } else {
-                        // On larger screens, simply hide chat and show default if needed
                         chatContainer.style.display = "none";
-                        defaultScreen.style.display = "flex"; // Or keep the friend list visible
+                        defaultScreen.style.display = "flex";
                     }
 
                     try {
