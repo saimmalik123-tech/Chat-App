@@ -99,7 +99,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     requestNotificationPermission();
 
     // ---------------- Current user avatar & identity ----------------
-    const DEFAULT_PROFILE_IMG = "./assets/icon/default-user.png";
+    const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
 
     async function fetchCurrentUserAvatar(profileImageSelector = '.profile-pic') {
         const profileImage = document.querySelector(profileImageSelector);
@@ -413,20 +413,22 @@ document.addEventListener("DOMContentLoaded", async () => {
             friendData.forEach(data => {
                 const { friendId, friendName, avatarUrl, isOnline, lastMessageText, lastMessageTime, unseenCount } = data;
 
+                const defaultImg = './assets/icon/download.jpeg';
+
                 const li = document.createElement("li");
                 li.classList.add("chat");
                 li.setAttribute("data-friend-id", friendId);
                 li.innerHTML = `
                     <div class="avatar-wrapper" style="position:relative;">
-                        <img src="${avatarUrl}" alt="User" style="object-fit: cover; border-radius:50%;">
-                        ${isOnline ? '<span class="online-dot"></span>' : ''}
+                        <img src="${avatarUrl ? avatarUrl : defaultImg}" alt="User" style="object-fit: cover; border-radius:50%;">
+                            ${isOnline ? '<span class="online-dot"></span>' : ''}
                     </div>
                     <div class="chat-meta">
                         <h4>${friendName}</h4>
                         <p class="last-message" title="${lastMessageText}">${lastMessageText}</p>
                     </div>
-                    <span class="time">${lastMessageTime}</span>
-                    ${unseenCount > 0 ? `<p class="non-seen-msg">${unseenCount}</p>` : ''}
+                        <span class="time">${lastMessageTime}</span>
+                        ${unseenCount > 0 ? `<p class="non-seen-msg">${unseenCount}</p>` : ''}
                 `;
 
                 li.addEventListener("click", () => {
