@@ -412,7 +412,7 @@ nav h2 a {
   position: absolute;
   top: 80px;
   right: 20px;
-  width: 320px;
+  width: 290px;
   max-height: 400px;
   background: var(--bg);
   border: 1px solid var(--input-border);
