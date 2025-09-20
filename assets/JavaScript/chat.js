@@ -97,6 +97,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let statusChannelRef = null;
     let unseenCounts = {}; // map friendId -> count
     let currentOpenChatId = null; // Track currently open chat
+    let notificationData = {}; // Store notification data for redirect
 
     // ------------- Get current user -------------
     async function getCurrentUser() {
@@ -274,7 +275,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                     // Send notification for new friend request
                     try {
                         if (Notification.permission === "granted") {
-                            new Notification("Friend Request 👥", { body: `${senderName} sent you a request` });
+                            const notif = new Notification("Friend Request 👥", {
+                                body: `${senderName} sent you a request`,
+                                data: { type: 'friend_request', senderId: req.sender_id }
+                            });
+
+                            notif.addEventListener('click', () => {
+                                window.focus();
+                                notif.close();
+                            });
                         }
                     } catch (err) {
                         console.warn("Error sending friend request notification:", err);
@@ -682,6 +691,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 oldMessages[idx].seen = true;
                             }
                             renderChatMessages(chatBox, oldMessages, friendAvatar);
+
+                            // Update unseen count in real-time
+                            unseenCounts[newMsg.sender_id] = 0;
+                            updateUnseenBadge(newMsg.sender_id, 0);
                         } catch (err) {
                             console.error("Error marking message as seen:", err);
                         }
@@ -694,7 +707,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                         try {
                             const senderName = await getUsername(newMsg.sender_id);
                             if (Notification.permission === "granted") {
-                                new Notification(`${senderName}`, { body: newMsg.content });
+                                const notif = new Notification(`${senderName}`, {
+                                    body: newMsg.content,
+                                    data: { type: 'message', senderId: newMsg.sender_id, senderName }
+                                });
+
+                                notif.addEventListener('click', () => {
+                                    window.focus();
+                                    // Store notification data for redirect
+                                    notificationData = {
+                                        type: 'message',
+                                        senderId: newMsg.sender_id,
+                                        senderName
+                                    };
+                                    // Redirect to dashboard
+                                    window.location.href = '#dashboard';
+                                    notif.close();
+                                });
                             }
                         } catch (err) { /* ignore */ }
                     }
@@ -773,7 +802,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // ------------- Open chat window -------------
-    async function openChat(friendId, friendName, friendAvatar) {
+    async function openChat(friendId, friendName, friendAvatar, fromNotification = false) {
         // Set the currently open chat
         currentOpenChatId = friendId;
 
@@ -795,7 +824,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (chatHeaderName) chatHeaderName.textContent = friendName || "Unknown";
         if (chatHeaderImg) chatHeaderImg.src = friendAvatar || DEFAULT_PROFILE_IMG;
 
-        if (window.innerWidth <= 768) {
+        // For mobile view, adjust UI
+        if (window.innerWidth <= 768 || fromNotification) {
             if (sidebar) sidebar.style.display = "none";
             if (messageCon) messageCon.style.display = "none";
             chatContainer.style.display = "flex";
@@ -998,8 +1028,20 @@ document.addEventListener("DOMContentLoaded", async () => {
                                             .maybeSingle();
 
                                         const senderName = senderProfile?.user_name || "New Message";
-                                        const notif = new Notification(senderName, { body: newMsg.content });
+                                        const notif = new Notification(senderName, {
+                                            body: newMsg.content,
+                                            data: { type: 'message', senderId, senderName }
+                                        });
+
                                         notif.addEventListener('click', () => {
+                                            window.focus();
+                                            // Store notification data for redirect
+                                            notificationData = {
+                                                type: 'message',
+                                                senderId,
+                                                senderName
+                                            };
+                                            // Redirect to dashboard
                                             window.location.href = '#dashboard';
                                             notif.close();
                                         });
@@ -1044,6 +1086,72 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.warn("subscribeToGlobalMessages subscribe failed:", err);
             }
         }
+    }
+
+    // ------------- Subscribe to friend requests updates -------------
+    async function subscribeToFriendRequests() {
+        if (!window._friendRequestChannel) {
+            window._friendRequestChannel = client.channel("friend-requests");
+
+            window._friendRequestChannel.on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "requests" },
+                payload => {
+                    const newRequest = payload.new;
+                    if (!newRequest || !currentUserId) return;
+
+                    // Only handle requests sent to current user
+                    if (newRequest.receiver_id === currentUserId && newRequest.status === "pending") {
+                        // Refresh friend requests
+                        fetchFriendRequests();
+                    }
+                }
+            );
+
+            window._friendRequestChannel.on(
+                "postgres_changes",
+                { event: "UPDATE", schema: "public", table: "requests" },
+                payload => {
+                    const updatedRequest = payload.new;
+                    if (!updatedRequest || !currentUserId) return;
+
+                    // Only handle requests involving current user
+                    if ((updatedRequest.receiver_id === currentUserId || updatedRequest.sender_id === currentUserId) &&
+                        (updatedRequest.status === "accepted" || updatedRequest.status === "rejected")) {
+                        // Refresh friend requests and friends list
+                        fetchFriendRequests();
+                        fetchFriends();
+                    }
+                }
+            );
+
+            try {
+                await window._friendRequestChannel.subscribe();
+                console.log("Subscribed to friend-requests channel.");
+            } catch (err) {
+                console.warn("subscribeToFriendRequests subscribe failed:", err);
+            }
+        }
+    }
+
+    // ------------- Handle notification redirects -------------
+    function handleNotificationRedirect() {
+        if (notificationData.type === 'message' && notificationData.senderId) {
+            // Get friend details
+            client
+                .from("user_profiles")
+                .select("user_name, profile_image_url")
+                .eq("user_id", notificationData.senderId)
+                .maybeSingle()
+                .then(({ data, error }) => {
+                    if (!error && data) {
+                        openChat(notificationData.senderId, data.user_name, data.profile_image_url, true);
+                    }
+                });
+        }
+
+        // Reset notification data
+        notificationData = {};
     }
 
     // ------------- PROFILE UI -------------
@@ -1205,5 +1313,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         await fetchFriends();
         await fetchFriendRequests();
         await subscribeToGlobalMessages();
+        await subscribeToFriendRequests();
+
+        // Check if we need to handle a notification redirect
+        if (Object.keys(notificationData).length > 0) {
+            handleNotificationRedirect();
+        }
     }
 });
