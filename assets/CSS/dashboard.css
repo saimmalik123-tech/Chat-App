@@ -1,12 +1,12 @@
 :root {
   --bg: #e5ddd5;
-  --accent: #075e54;
+  --accent: #0a6e5c;
   --footer-bg: #f0f2f5;
   --text-primary: #111b21;
   --text-secondary: #36454f;
   --button-text: #ffffff;
-  --bubble-sent: #075e54;
-  --bubble-received: #0b8067;
+  --bubble-sent: #0a6e5c;
+  --bubble-received: #128c7e;
   --input-bg: #ffffff;
   --input-border: #d1d7db;
   --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.12);
