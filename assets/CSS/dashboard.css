@@ -375,10 +375,10 @@ nav h2 a {
   border-bottom-left-radius: 0.25rem;
 }
 
-.messages {
+/* .messages { */
   /* Renamed chat-messages to messages for consistency and clarity */
   /* This section effectively handled by .chat-messages above */
-}
+/* } */
 
 /* Input Area */
 .chat-input {
