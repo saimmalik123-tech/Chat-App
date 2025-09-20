@@ -1,7 +1,6 @@
 import { client } from "../../supabase.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
-
     // ---------------- Utility UI helpers ----------------
     function showPopup(message, type = "info") {
         const popup = document.getElementById("popup");
@@ -612,6 +611,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // ------------- Realtime: subscribeToMessages -------------
+    function updateMessageSeenStatus(chatBox, messageId) {
+        const chatMessage = chatBox.querySelector(`.message[data-message-id="${messageId}"] .seen-status`);
+        if (chatMessage) {
+            chatMessage.textContent = "✓✓";
+        }
+    }
+
     async function subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator) {
         function upsertMessageAndRender(oldMessagesArr, msgObj) {
             const idx = oldMessagesArr.findIndex(m => m.id === msgObj.id);
@@ -624,7 +630,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         const userCache = {};
-        // Asynchronously fetch and cache the username
         async function getUsername(userId) {
             if (userCache[userId]) return userCache[userId];
             try {
@@ -647,6 +652,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const channelTopic = `chat:${[currentUserId, friendId].sort().join(":")}`;
         const msgChannel = client.channel(channelTopic);
 
+        // Listen for new messages
         msgChannel.on(
             "postgres_changes",
             { event: "INSERT", schema: "public", table: "messages" },
@@ -673,6 +679,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         );
 
+        // Listen for message updates
         msgChannel.on(
             "postgres_changes",
             { event: "UPDATE", schema: "public", table: "messages" },
@@ -683,12 +690,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                     (updated.sender_id === friendId && updated.receiver_id === currentUserId);
                 if (!isRelevant) return;
 
-                const messageElement = chatBox.querySelector(`.message[data-message-id="${updated.id}"]`);
-                if (messageElement && updated.sender_id === currentUserId && updated.seen === true) {
-                    const seenStatusEl = messageElement.querySelector(".seen-status");
-                    if (seenStatusEl) {
-                        seenStatusEl.textContent = "✓✓";
-                    }
+                const idx = oldMessages.findIndex(m => m.id === updated.id);
+                if (idx !== -1) {
+                    oldMessages[idx] = { ...oldMessages[idx], ...updated };
+                }
+
+                if (updated.sender_id === currentUserId && updated.seen === true) {
+                    updateMessageSeenStatus(chatBox, updated.id);
                 }
 
                 if (updated.receiver_id === currentUserId && updated.seen === true) {
@@ -740,96 +748,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         return { msgChannel, typingChannel, statusChannelRef };
     }
-
-    const channelTopic = `chat:${[currentUserId, friendId].sort().join(":")}`;
-    const msgChannel = client.channel(channelTopic);
-
-    msgChannel.on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        async payload => {
-            const newMsg = payload.new;
-            const isRelevant =
-                (newMsg.sender_id === currentUserId && newMsg.receiver_id === friendId) ||
-                (newMsg.sender_id === friendId && newMsg.receiver_id === currentUserId);
-            if (!isRelevant) return;
-
-            upsertMessageAndRender(oldMessages, newMsg);
-
-            if (newMsg.receiver_id === currentUserId) {
-                unseenCounts[newMsg.sender_id] = (unseenCounts[newMsg.sender_id] || 0) + 1;
-                updateUnseenBadge(newMsg.sender_id, unseenCounts[newMsg.sender_id]);
-
-                try {
-                    const senderName = await getUsername(newMsg.sender_id);
-                    if (Notification.permission === "granted") {
-                        new Notification(`${senderName}`, { body: newMsg.content });
-                    }
-                } catch (err) { /* ignore */ }
-            }
-        }
-    );
-
-    msgChannel.on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "messages" },
-        payload => {
-            const updated = payload.new;
-            const isRelevant =
-                (updated.sender_id === currentUserId && updated.receiver_id === friendId) ||
-                (updated.sender_id === friendId && updated.receiver_id === currentUserId);
-            if (!isRelevant) return;
-            upsertMessageAndRender(oldMessages, updated);
-
-            if (updated.receiver_id === currentUserId && updated.seen === true) {
-                unseenCounts[updated.sender_id] = 0;
-                updateUnseenBadge(updated.sender_id, 0);
-            }
-        }
-    );
-
-    const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
-    const typingChannel = client.channel(typingChannelName)
-        .on("broadcast", { event: "typing" }, payload => {
-            if (payload.userId === friendId) {
-                typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
-                setTimeout(async () => {
-                    try {
-                        const { data: profile } = await client
-                            .from("user_profiles")
-                            .select("is_online")
-                            .eq("user_id", friendId)
-                            .maybeSingle();
-                        typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
-                    } catch (err) {
-                        typingIndicator.textContent = "Offline";
-                    }
-                }, 1500);
-            }
-        });
-
-    if (statusChannelRef) {
-        try { await client.removeChannel(statusChannelRef); } catch (err) { /* ignore */ }
-        statusChannelRef = null;
-    }
-
-    statusChannelRef = client.channel("user_status")
-        .on("postgres_changes", {
-            event: "*",
-            schema: "public",
-            table: "user_profiles",
-            filter: `user_id=eq.${friendId}`
-        }, payload => {
-            const onlineTextElt = typingIndicator;
-            if (onlineTextElt) onlineTextElt.textContent = payload.new?.is_online ? "Online" : "Offline";
-        });
-
-    await msgChannel.subscribe();
-    await typingChannel.subscribe();
-    await statusChannelRef.subscribe();
-
-    return { msgChannel, typingChannel, statusChannelRef };
-}
 
     // ------------- Open chat window -------------
     async function openChat(friendId, friendName, friendAvatar) {
@@ -939,8 +857,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                             userName: "You",
                         },
                     });
-                } catch {
-                    console.error('Something Wents Wrong', error);
+                } catch (err) {
+                    console.error('Something went wrong', err);
                 }
             });
 
@@ -980,8 +898,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (msgChannel) await client.removeChannel(msgChannel);
                         if (typingChannel) await client.removeChannel(typingChannel);
                         if (statusChan) await client.removeChannel(statusChan);
-                        // Also unsubscribe the global channel if it's managed per-chat, though it's typically global
-                        // This might be redundant if globalChannel is truly global and handled once at boot
                     } catch (err) {
                         console.warn("Error removing channels:", err);
                     }
@@ -1002,257 +918,235 @@ document.addEventListener("DOMContentLoaded", async () => {
         sendFriendRequest(username);
     });
 
-function updateLastMessage(friendId, content, createdAt) {
-    const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
-    if (!chatLi) return;
+    function updateLastMessage(friendId, content, createdAt) {
+        const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
+        if (!chatLi) return;
 
-    const lastMessageEl = chatLi.querySelector(".last-message");
-    const timeEl = chatLi.querySelector(".time");
+        const lastMessageEl = chatLi.querySelector(".last-message");
+        const timeEl = chatLi.querySelector(".time");
 
-    if (lastMessageEl) lastMessageEl.textContent = content;
-    if (timeEl) {
-        const timeStr = new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        timeEl.textContent = timeStr;
+        if (lastMessageEl) lastMessageEl.textContent = content;
+        if (timeEl) {
+            const timeStr = new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            timeEl.textContent = timeStr;
+        }
+
+        const chatList = chatLi.parentElement;
+        if (chatList && chatList.firstChild !== chatLi) {
+            chatList.prepend(chatLi);
+        }
     }
 
-    const chatList = chatLi.parentElement;
-    if (chatList && chatList.firstChild !== chatLi) {
-        chatList.prepend(chatLi);
-    }
-}
+    // ------------- Subscribe to global messages for unseen + last message updates -------------
+    async function subscribeToGlobalMessages() {
+        if (!window._globalMessageChannel) {
+            window._globalMessageChannel = client.channel("global-messages");
 
-// ------------- Subscribe to global messages for unseen + last message updates -------------
-async function subscribeToGlobalMessages() {
-    if (!window._globalMessageChannel) {
-        window._globalMessageChannel = client.channel("global-messages");
+            window._globalMessageChannel.on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "messages" },
+                payload => {
+                    const newMsg = payload.new;
+                    if (!newMsg || !currentUserId) return;
 
-        window._globalMessageChannel.on(
-            "postgres_changes",
-            { event: "INSERT", schema: "public", table: "messages" },
-            payload => {
-                const newMsg = payload.new;
-                if (!newMsg || !currentUserId) return;
-
-                if (newMsg.receiver_id === currentUserId) {
-                    const senderId = newMsg.sender_id;
-                    unseenCounts[senderId] = (unseenCounts[senderId] || 0) + 1;
-                    updateUnseenBadge(senderId, unseenCounts[senderId]);
-                    updateLastMessage(senderId, newMsg.content, newMsg.created_at);
-
-                    // Also send a browser notification for new messages
-                    (async () => {
-                        try {
-                            if (Notification.permission === "granted") {
-                                const { data: senderProfile, error } = await client
-                                    .from("user_profiles")
-                                    .select("user_name")
-                                    .eq("user_id", senderId)
-                                    .maybeSingle();
-
-                                const senderName = senderProfile?.user_name || "New Message";
-                                const notif = new Notification(senderName, { body: newMsg.content });
-                                notif.addEventListener('click', () => {
-                                    window.location.href = '#dashboard'; // Replace with your dashboard URL
-                                    notif.close();
-                                });
-                            }
-                        } catch (err) {
-                            console.warn("Error sending message notification:", err);
-                        }
-                    })();
-                }
-            }
-        );
-
-        window._globalMessageChannel.on(
-            "postgres_changes",
-            { event: "INSERT", schema: "public", table: "messages" },
-            payload => {
-                const newMsg = payload.new;
-                if (!newMsg || !currentUserId) return;
-
-                if (newMsg.receiver_id === currentUserId) {
-                    const senderId = newMsg.sender_id;
-
-                    const openChatFriendId = chatContainer?.getAttribute("data-friend-id");
-                    if (openChatFriendId && openChatFriendId === senderId) {
-                        markMessagesAsSeen(senderId);
-                    } else {
+                    if (newMsg.receiver_id === currentUserId) {
+                        const senderId = newMsg.sender_id;
                         unseenCounts[senderId] = (unseenCounts[senderId] || 0) + 1;
                         updateUnseenBadge(senderId, unseenCounts[senderId]);
+                        updateLastMessage(senderId, newMsg.content, newMsg.created_at);
+
+                        // Also send a browser notification for new messages
+                        (async () => {
+                            try {
+                                if (Notification.permission === "granted") {
+                                    const { data: senderProfile, error } = await client
+                                        .from("user_profiles")
+                                        .select("user_name")
+                                        .eq("user_id", senderId)
+                                        .maybeSingle();
+
+                                    const senderName = senderProfile?.user_name || "New Message";
+                                    const notif = new Notification(senderName, { body: newMsg.content });
+                                    notif.addEventListener('click', () => {
+                                        window.location.href = '#dashboard'; // Replace with your dashboard URL
+                                        notif.close();
+                                    });
+                                }
+                            } catch (err) {
+                                console.warn("Error sending message notification:", err);
+                            }
+                        })();
                     }
-                    updateLastMessage(senderId, newMsg.content, newMsg.created_at);
                 }
+            );
+
+            try {
+                await window._globalMessageChannel.subscribe();
+                console.log("Subscribed to global-messages channel.");
+            } catch (err) {
+                console.warn("subscribeToGlobalMessages subscribe failed:", err);
             }
-        );
+        }
+    }
+
+    // ------------- PROFILE UI -------------
+    const profilePic = document.querySelector(".profile-pic");
+    const profilePopup = document.getElementById("profile-popup");
+    const closeProfile = document.getElementById("close-profile");
+    const profilePreview = document.getElementById("profile-preview");
+    const profileUpload = document.getElementById("profile-upload");
+    const bioInput = document.getElementById("bio");
+    const saveProfileBtn = document.getElementById("save-profile");
+    const logoutBtn = document.getElementById("logout");
+    const profileUsername = document.getElementById("profile-username");
+
+    const usernamePopup = document.getElementById("username-popup");
+    const changeUsernameBtn = document.getElementById("change-username-btn");
+    const closeUsername = document.getElementById("close-username");
+    const cancelUsername = document.getElementById("cancel-username");
+    const saveUsernameBtn = document.getElementById("save-username");
+    const newUsernameInput = document.getElementById("new-username");
+
+    profilePic?.addEventListener("click", async () => {
+        if (!profilePopup) return;
+        profilePopup.classList.remove("hidden");
 
         try {
-            await window._globalMessageChannel.subscribe();
-            console.log("Subscribed to global-messages channel.");
+            const { data: profile, error } = await client
+                .from("user_profiles")
+                .select("profile_image_url, bio, user_name")
+                .eq("user_id", currentUserId)
+                .limit(1)
+                .maybeSingle();
+
+            if (error) throw error;
+
+            profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
+            bioInput.value = profile?.bio || "";
+            profileUsername.textContent = profile?.user_name || "Unknown User";
+            newUsernameInput.value = profile?.user_name || ""; // Pre-fill username for editing
         } catch (err) {
-            console.warn("subscribeToGlobalMessages subscribe failed:", err);
+            console.error("Error loading profile:", err);
+            showPopup("Failed to load profile details.", "error");
         }
-    }
-}
+    });
 
-// ------------- PROFILE UI -------------
-const profilePic = document.querySelector(".profile-pic");
-const profilePopup = document.getElementById("profile-popup");
-const closeProfile = document.getElementById("close-profile");
-const profilePreview = document.getElementById("profile-preview");
-const profileUpload = document.getElementById("profile-upload");
-const bioInput = document.getElementById("bio");
-const saveProfileBtn = document.getElementById("save-profile");
-const logoutBtn = document.getElementById("logout");
-const profileUsername = document.getElementById("profile-username");
-
-const usernamePopup = document.getElementById("username-popup");
-const changeUsernameBtn = document.getElementById("change-username-btn");
-const closeUsername = document.getElementById("close-username");
-const cancelUsername = document.getElementById("cancel-username");
-const saveUsernameBtn = document.getElementById("save-username");
-const newUsernameInput = document.getElementById("new-username");
-
-profilePic?.addEventListener("click", async () => {
-    if (!profilePopup) return;
-    profilePopup.classList.remove("hidden");
-
-    try {
-        const { data: profile, error } = await client
-            .from("user_profiles")
-            .select("profile_image_url, bio, user_name")
-            .eq("user_id", currentUserId)
-            .limit(1)
-            .maybeSingle();
-
-        if (error) throw error;
-
-        profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
-        bioInput.value = profile?.bio || "";
-        profileUsername.textContent = profile?.user_name || "Unknown User";
-        newUsernameInput.value = profile?.user_name || ""; // Pre-fill username for editing
-    } catch (err) {
-        console.error("Error loading profile:", err);
-        showPopup("Failed to load profile details.", "error");
-    }
-});
-
-closeProfile?.addEventListener("click", () => {
-    profilePopup?.classList.add("hidden");
-});
-
-profileUpload?.addEventListener("change", (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            profilePreview.src = ev.target.result;
-        };
-        reader.readAsDataURL(file);
-    }
-});
-
-saveProfileBtn?.addEventListener("click", async () => {
-    showLoading("Saving profile...");
-    try {
-        let imageUrl = profilePreview?.src || DEFAULT_PROFILE_IMG;
-        const bio = bioInput?.value.trim() || "";
-
-        const file = profileUpload?.files[0];
-        if (file) {
-            const fileName = `${currentUserId}_${Date.now()}_${file.name}`;
-            const { data, error: uploadError } = await client.storage
-                .from('avatars')
-                .upload(fileName, file, {
-                    cacheControl: '3600',
-                    upsert: false
-                });
-
-            if (uploadError) throw uploadError;
-
-            const { data: publicUrlData } = client.storage.from('avatars').getPublicUrl(data.path);
-            imageUrl = publicUrlData.publicUrl;
-        }
-
-        const { error } = await client
-            .from("user_profiles")
-            .update({ profile_image_url: imageUrl, bio })
-            .eq("user_id", currentUserId);
-
-        if (error) throw error;
-
-        showPopup("Profile updated successfully!", "success");
+    closeProfile?.addEventListener("click", () => {
         profilePopup?.classList.add("hidden");
-        fetchCurrentUserAvatar();
-        fetchFriends(); // refresh friend avatars
-    } catch (err) {
-        console.error("Error updating profile:", err);
-        showPopup(`Failed to update profile: ${err.message || err}`, "error");
-    } finally {
-        hideLoading();
-    }
-});
+    });
 
-logoutBtn?.addEventListener("click", async () => {
-    showLoading("Logging out...");
-    try {
-        await setUserOnlineStatus(false);
-        await client.auth.signOut();
-        showPopup("Logged out!", "info");
-        window.location.href = "signup.html";
-    } catch (err) {
-        console.error("Logout error:", err);
-        showPopup("Logout failed.", "error");
-    } finally {
-        hideLoading();
-    }
-});
+    profileUpload?.addEventListener("change", (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                profilePreview.src = ev.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
 
-changeUsernameBtn?.addEventListener("click", () => {
-    profilePopup?.classList.add("hidden");
-    usernamePopup?.classList.remove("hidden");
-});
+    saveProfileBtn?.addEventListener("click", async () => {
+        showLoading("Saving profile...");
+        try {
+            let imageUrl = profilePreview?.src || DEFAULT_PROFILE_IMG;
+            const bio = bioInput?.value.trim() || "";
 
-closeUsername?.addEventListener("click", () => {
-    usernamePopup?.classList.add("hidden");
-});
-cancelUsername?.addEventListener("click", () => {
-    usernamePopup?.classList.add("hidden");
-});
+            const file = profileUpload?.files[0];
+            if (file) {
+                const fileName = `${currentUserId}_${Date.now()}_${file.name}`;
+                const { data, error: uploadError } = await client.storage
+                    .from('avatars')
+                    .upload(fileName, file, {
+                        cacheControl: '3600',
+                        upsert: false
+                    });
 
-saveUsernameBtn?.addEventListener("click", async () => {
-    const newUsername = newUsernameInput?.value.trim();
-    if (!newUsername) {
-        showPopup("Username cannot be empty!", "error");
-        return;
-    }
+                if (uploadError) throw uploadError;
 
-    showLoading("Updating username...");
-    try {
-        const { error } = await client
-            .from("user_profiles")
-            .update({ user_name: newUsername })
-            .eq("user_id", currentUserId);
+                const { data: publicUrlData } = client.storage.from('avatars').getPublicUrl(data.path);
+                imageUrl = publicUrlData.publicUrl;
+            }
 
-        if (error) throw error;
+            const { error } = await client
+                .from("user_profiles")
+                .update({ profile_image_url: imageUrl, bio })
+                .eq("user_id", currentUserId);
 
-        showPopup("Username updated!", "success");
-        profileUsername.textContent = newUsername;
+            if (error) throw error;
+
+            showPopup("Profile updated successfully!", "success");
+            profilePopup?.classList.add("hidden");
+            fetchCurrentUserAvatar();
+            fetchFriends(); // refresh friend avatars
+        } catch (err) {
+            console.error("Error updating profile:", err);
+            showPopup(`Failed to update profile: ${err.message || err}`, "error");
+        } finally {
+            hideLoading();
+        }
+    });
+
+    logoutBtn?.addEventListener("click", async () => {
+        showLoading("Logging out...");
+        try {
+            await setUserOnlineStatus(false);
+            await client.auth.signOut();
+            showPopup("Logged out!", "info");
+            window.location.href = "signup.html";
+        } catch (err) {
+            console.error("Logout error:", err);
+            showPopup("Logout failed.", "error");
+        } finally {
+            hideLoading();
+        }
+    });
+
+    changeUsernameBtn?.addEventListener("click", () => {
+        profilePopup?.classList.add("hidden");
+        usernamePopup?.classList.remove("hidden");
+    });
+
+    closeUsername?.addEventListener("click", () => {
         usernamePopup?.classList.add("hidden");
-        fetchFriends();
-    } catch (err) {
-        console.error("Error updating username:", err);
-        showPopup(`Failed to update username: ${err.message || err}`, "error");
-    } finally {
-        hideLoading();
-    }
-});
+    });
+    cancelUsername?.addEventListener("click", () => {
+        usernamePopup?.classList.add("hidden");
+    });
 
-// ------------- boot -------------
-const me = await getCurrentUser();
-if (me) {
-    await fetchFriends();
-    await fetchFriendRequests();
-    await subscribeToGlobalMessages();
-}
+    saveUsernameBtn?.addEventListener("click", async () => {
+        const newUsername = newUsernameInput?.value.trim();
+        if (!newUsername) {
+            showPopup("Username cannot be empty!", "error");
+            return;
+        }
+
+        showLoading("Updating username...");
+        try {
+            const { error } = await client
+                .from("user_profiles")
+                .update({ user_name: newUsername })
+                .eq("user_id", currentUserId);
+
+            if (error) throw error;
+
+            showPopup("Username updated!", "success");
+            profileUsername.textContent = newUsername;
+            usernamePopup?.classList.add("hidden");
+            fetchFriends();
+        } catch (err) {
+            console.error("Error updating username:", err);
+            showPopup(`Failed to update username: ${err.message || err}`, "error");
+        } finally {
+            hideLoading();
+        }
+    });
+
+    // ------------- boot -------------
+    const me = await getCurrentUser();
+    if (me) {
+        await fetchFriends();
+        await fetchFriendRequests();
+        await subscribeToGlobalMessages();
+    }
 });
