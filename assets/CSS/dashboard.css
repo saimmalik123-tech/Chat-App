@@ -1013,7 +1013,7 @@ emoji-picker {
 
 @media (max-width: 768px) {
   .default{
-    display: none;
+    display: none !important;
   }
   .chat-container {
     flex-direction: column;
