@@ -1,14 +1,14 @@
 :root {
   --bg: #d6e2db;
   --accent: #0a6e5c;
-  --footer-bg: #e0ebe7;
-  --text-primary: #111b21;
-  --text-secondary: #36454f;
-  --button-text: #ffffff;
+  --footer-bg: #cddfd7;
+  --text-primary: #0b2e26;
+  --text-secondary: #2e4d44;
+  --button-text: #eaf4f0;
   --bubble-sent: #0a6e5c;
   --bubble-received: #128c7e;
-  --input-bg: #edf3f0;
-  --input-border: #c3d2cc;
+  --input-bg: #b9d4ca;
+  --input-border: #8fb5a7;
   --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
