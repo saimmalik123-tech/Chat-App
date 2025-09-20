@@ -14,16 +14,16 @@ document.addEventListener("DOMContentLoaded", () => {
     // ---------- THEME TOGGLE ----------
     const toggleBtn = document.getElementById("themeToggle");
     if (toggleBtn) {
-        toggleBtn.textContent = localStorage.getItem("theme") === "dark" ? "☼" : "☽";
+        toggleBtn.textContent = localStorage.getItem("theme") === "dark" ? "𖤓" : "⏾";
         if (localStorage.getItem("theme") === "dark") document.body.classList.add("dark");
 
         toggleBtn.addEventListener("click", () => {
             document.body.classList.toggle("dark");
             if (document.body.classList.contains("dark")) {
-                toggleBtn.textContent = "☼";
+                toggleBtn.textContent = "𖤓";
                 localStorage.setItem("theme", "dark");
             } else {
-                toggleBtn.textContent = "☽";
+                toggleBtn.textContent = "⏾";
                 localStorage.setItem("theme", "light");
             }
         });
