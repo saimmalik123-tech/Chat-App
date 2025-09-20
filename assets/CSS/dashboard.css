@@ -1,15 +1,15 @@
 :root {
-  --bg: #d8e2c8;
-  --accent: #3a5a40;
-  --footer-bg: #b5c99a;
-  --text-primary: #1b2d20;
-  --text-secondary: #3d4f3b;
-  --button-text: #f6f1d1;
-  --bubble-sent: #588157;
-  --bubble-received: #a3b18a;
-  --input-bg: #ccd5ae;
-  --input-border: #87986a;
-  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --bg: #cfd8d3;
+  --accent: #4a635d;
+  --footer-bg: #b7c4bf;
+  --text-primary: #1c2623;
+  --text-secondary: #3a4a46;
+  --button-text: #e3ebe7;
+  --bubble-sent: #6b8f71;
+  --bubble-received: #8ca98c;
+  --input-bg: #aebfba;
+  --input-border: #7d8f87;
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 body.dark {
@@ -27,7 +27,6 @@ body.dark {
   --glass-blur: blur(10px);
 }
 
-/* Reset + Typography */
 *,
 *::before,
 *::after {
