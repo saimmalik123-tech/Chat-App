@@ -1,14 +1,14 @@
 :root {
-  --bg: #d6e2db;
-  --accent: #0a6e5c;
-  --footer-bg: #cddfd7;
-  --text-primary: #0b2e26;
-  --text-secondary: #2e4d44;
-  --button-text: #eaf4f0;
-  --bubble-sent: #0a6e5c;
-  --bubble-received: #128c7e;
-  --input-bg: #b9d4ca;
-  --input-border: #8fb5a7;
+  --bg: #d8e2c8;
+  --accent: #3a5a40;
+  --footer-bg: #b5c99a;
+  --text-primary: #1b2d20;
+  --text-secondary: #3d4f3b;
+  --button-text: #f6f1d1;
+  --bubble-sent: #588157;
+  --bubble-received: #a3b18a;
+  --input-bg: #ccd5ae;
+  --input-border: #87986a;
   --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
