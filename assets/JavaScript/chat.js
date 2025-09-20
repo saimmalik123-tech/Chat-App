@@ -755,7 +755,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             chatContainer.style.display = "flex";
             defaultScreen.style.display = 'none';
         } else {
-            if (messageCon) messageCon.style.display = "none";
+            if (messageCon) messageCon.style.display = "flex";
             chatContainer.style.display = "flex";
         }
 
@@ -838,7 +838,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         },
                     });
                 } catch {
-                    // ignore errors
+                    console.error('Something Wents Wrong', error);
                 }
             });
 
@@ -853,7 +853,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             sendBtnSafe.addEventListener("click", handleSend);
             inputSafe.addEventListener("keypress", (e) => {
                 if (e.key === "Enter") {
-                    e.preventDefault(); // Prevent default form submission if input is part of a form
+                    e.preventDefault();
                     handleSend();
                 }
             });
