@@ -1,5 +1,26 @@
 import { client } from "../../supabase.js";
 
+function showPopup(message, type = "info") {
+    const popup = document.getElementById("popup");
+    const messageEl = document.getElementById("popup-message");
+    const closeBtn = document.getElementById("popup-close");
+
+    if (!popup || !messageEl) return;
+
+    messageEl.textContent = message;
+    popup.classList.remove("hidden", "error", "success", "info");
+    popup.classList.add("show", String(type));
+
+    if (closeBtn) {
+        const newClose = closeBtn.cloneNode(true);
+        closeBtn.parentNode.replaceChild(newClose, closeBtn);
+        newClose.addEventListener('click', () => {
+            popup.classList.add("hidden");
+            popup.classList.remove('show');
+        });
+    }
+}
+
 /* ------------------ SIGN UP ------------------ */
 async function signUp() {
     const signName = document.querySelector('#name').value;
