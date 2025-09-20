@@ -1099,11 +1099,11 @@ emoji-picker {
 /* Tablets and larger phones (landscape) */
 @media (max-width: 992px) {
   .sidebar {
-    width: 28%;
+    width: 35%;
     min-width: 16rem; /* Keep a reasonable minimum */
   }
   .chat-area {
-    width: 72%;
+    width: 65%;
   }
   .message {
     max-width: 80%;
