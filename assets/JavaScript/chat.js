@@ -96,6 +96,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let friendRequests = [];
     let statusChannelRef = null;
     let unseenCounts = {}; // map friendId -> count
+    let currentOpenChatId = null; // Track currently open chat
 
     // ------------- Get current user -------------
     async function getCurrentUser() {
@@ -665,16 +666,38 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 upsertMessageAndRender(oldMessages, newMsg);
 
+                // Only handle unseen count if this is a received message
                 if (newMsg.receiver_id === currentUserId) {
-                    unseenCounts[newMsg.sender_id] = (unseenCounts[newMsg.sender_id] || 0) + 1;
-                    updateUnseenBadge(newMsg.sender_id, unseenCounts[newMsg.sender_id]);
+                    // If this chat is currently open, mark as seen immediately
+                    if (currentOpenChatId === friendId) {
+                        try {
+                            await client
+                                .from("messages")
+                                .update({ seen: true })
+                                .eq("id", newMsg.id);
 
-                    try {
-                        const senderName = await getUsername(newMsg.sender_id);
-                        if (Notification.permission === "granted") {
-                            new Notification(`${senderName}`, { body: newMsg.content });
+                            // Update local message state
+                            const idx = oldMessages.findIndex(m => m.id === newMsg.id);
+                            if (idx !== -1) {
+                                oldMessages[idx].seen = true;
+                            }
+                            renderChatMessages(chatBox, oldMessages, friendAvatar);
+                        } catch (err) {
+                            console.error("Error marking message as seen:", err);
                         }
-                    } catch (err) { /* ignore */ }
+                    } else {
+                        // Only increment unseen count if chat is not open
+                        unseenCounts[newMsg.sender_id] = (unseenCounts[newMsg.sender_id] || 0) + 1;
+                        updateUnseenBadge(newMsg.sender_id, unseenCounts[newMsg.sender_id]);
+
+                        // Show notification
+                        try {
+                            const senderName = await getUsername(newMsg.sender_id);
+                            if (Notification.permission === "granted") {
+                                new Notification(`${senderName}`, { body: newMsg.content });
+                            }
+                        } catch (err) { /* ignore */ }
+                    }
                 }
             }
         );
@@ -751,6 +774,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // ------------- Open chat window -------------
     async function openChat(friendId, friendName, friendAvatar) {
+        // Set the currently open chat
+        currentOpenChatId = friendId;
+
         const chatContainer = document.querySelector("div.chat-area");
         const defaultScreen = document.querySelector(".default");
         const sidebar = document.querySelector(".sidebar");
@@ -883,6 +909,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const backClone = backBtn.cloneNode(true);
                 backBtn.parentNode.replaceChild(backClone, backBtn);
                 backClone.addEventListener("click", async () => {
+                    // Reset the currently open chat
+                    currentOpenChatId = null;
+
                     document.getElementById('message').classList.remove('hidden');
                     if (window.innerWidth <= 768) {
                         if (sidebar) sidebar.style.display = "flex";
@@ -951,31 +980,59 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     if (newMsg.receiver_id === currentUserId) {
                         const senderId = newMsg.sender_id;
-                        unseenCounts[senderId] = (unseenCounts[senderId] || 0) + 1;
-                        updateUnseenBadge(senderId, unseenCounts[senderId]);
-                        updateLastMessage(senderId, newMsg.content, newMsg.created_at);
 
-                        // Also send a browser notification for new messages
-                        (async () => {
-                            try {
-                                if (Notification.permission === "granted") {
-                                    const { data: senderProfile, error } = await client
-                                        .from("user_profiles")
-                                        .select("user_name")
-                                        .eq("user_id", senderId)
-                                        .maybeSingle();
+                        // Only update if this chat is not currently open
+                        if (currentOpenChatId !== senderId) {
+                            unseenCounts[senderId] = (unseenCounts[senderId] || 0) + 1;
+                            updateUnseenBadge(senderId, unseenCounts[senderId]);
+                            updateLastMessage(senderId, newMsg.content, newMsg.created_at);
 
-                                    const senderName = senderProfile?.user_name || "New Message";
-                                    const notif = new Notification(senderName, { body: newMsg.content });
-                                    notif.addEventListener('click', () => {
-                                        window.location.href = '#dashboard'; // Replace with your dashboard URL
-                                        notif.close();
-                                    });
+                            // Show notification
+                            (async () => {
+                                try {
+                                    if (Notification.permission === "granted") {
+                                        const { data: senderProfile, error } = await client
+                                            .from("user_profiles")
+                                            .select("user_name")
+                                            .eq("user_id", senderId)
+                                            .maybeSingle();
+
+                                        const senderName = senderProfile?.user_name || "New Message";
+                                        const notif = new Notification(senderName, { body: newMsg.content });
+                                        notif.addEventListener('click', () => {
+                                            window.location.href = '#dashboard';
+                                            notif.close();
+                                        });
+                                    }
+                                } catch (err) {
+                                    console.warn("Error sending message notification:", err);
                                 }
-                            } catch (err) {
-                                console.warn("Error sending message notification:", err);
+                            })();
+                        }
+                    }
+                }
+            );
+
+            // Add UPDATE event handler for seen status
+            window._globalMessageChannel.on(
+                "postgres_changes",
+                { event: "UPDATE", schema: "public", table: "messages" },
+                payload => {
+                    const updatedMsg = payload.new;
+                    if (!updatedMsg || !currentUserId) return;
+
+                    // Handle seen status updates
+                    if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
+                        const senderId = updatedMsg.sender_id;
+
+                        // Only update if this chat is not currently open
+                        if (currentOpenChatId !== senderId) {
+                            // Decrement unseen count but don't go below zero
+                            if (unseenCounts[senderId] > 0) {
+                                unseenCounts[senderId]--;
+                                updateUnseenBadge(senderId, unseenCounts[senderId]);
                             }
-                        })();
+                        }
                     }
                 }
             );
