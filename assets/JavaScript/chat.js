@@ -14,7 +14,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         popup.classList.remove("hidden", "error", "success", "info");
         popup.classList.add("show", String(type));
 
-        // remove previous click handlers by cloning the node
         if (closeBtn) {
             const newClose = closeBtn.cloneNode(true);
             closeBtn.parentNode.replaceChild(newClose, closeBtn);
@@ -51,7 +50,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (friendId) {
             window.location.hash = `chat?id=${friendId}`;
         } else {
-            // clear hash without reload
             window.history.pushState("", document.title, window.location.pathname + window.location.search);
         }
     }
@@ -101,6 +99,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     requestNotificationPermission();
 
     // ---------------- Current user avatar & identity ----------------
+    const DEFAULT_PROFILE_IMG = "./assets/icon/default-user.png";
+
     async function fetchCurrentUserAvatar(profileImageSelector = '.profile-pic') {
         const profileImage = document.querySelector(profileImageSelector);
         if (!profileImage) return;
@@ -115,7 +115,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .eq("user_id", user.id)
                 .maybeSingle();
 
-            let avatarUrl = './assets/icon/download.jpeg';
+            let avatarUrl = DEFAULT_PROFILE_IMG;
             if (!profileError && profile?.profile_image_url) {
                 avatarUrl = profile.profile_image_url;
             }
@@ -128,7 +128,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // ------------- state -------------
     let currentUserId = null;
-    let messages = [];
+    let friendRequests = [];
     let statusChannelRef = null;
     let unseenCounts = {}; // map friendId -> count
 
@@ -138,7 +138,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             const { data: { user }, error } = await client.auth.getUser();
             if (error || !user) {
                 showPopup("User not logged in", "error");
-                // redirect to signup/login
                 window.location.href = 'signup.html';
                 return null;
             }
@@ -176,7 +175,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             showPopup("Friend request accepted!", "success");
-            fetchFriends();
+            fetchFriendRequests(); // Refresh requests
+            fetchFriends(); // Refresh friends list
         } catch (err) {
             console.error("Unexpected error:", err);
             showPopup("An error occurred while accepting request.", "error");
@@ -196,6 +196,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             showPopup("Friend request rejected!", "info");
+            fetchFriendRequests(); // Refresh requests
         } catch (err) {
             console.error("Unexpected error rejecting request:", err);
             showPopup("Failed to reject friend request.", "error");
@@ -214,23 +215,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     window.addEventListener('beforeunload', () => setUserOnlineStatus(false));
 
-    // ------------- Messages popup rendering -------------
-    function renderMessages() {
+    // ------------- Friend Request popup rendering -------------
+    function renderFriendRequests() {
         const messageList = document.getElementById("message-list");
         const unreadBadge = document.getElementById("unread-count");
         if (!messageList || !unreadBadge) return;
 
         messageList.innerHTML = "";
-        if (!messages || messages.length === 0) {
-            messageList.textContent = "No Requests";
+        if (!friendRequests || friendRequests.length === 0) {
+            messageList.textContent = "No pending friend requests.";
+            messageList.style.textAlign = "center";
         } else {
-            messages.forEach((msg, index) => {
+            messageList.style.textAlign = "left";
+            friendRequests.forEach((req) => {
                 const li = document.createElement("li");
                 li.className = "message-item";
                 li.innerHTML = `
-                    <img src="${msg.avatar}" alt="User" class="msg-avatar" style="width:30px;height:30px;border-radius:50%;object-fit:cover;">
-                    <div class="message-text">${msg.text}</div>
-                    <div class="message-time">${msg.time}</div>
+                    <img src="${req.avatar}" alt="User" class="msg-avatar" style="width:30px;height:30px;border-radius:50%;object-fit:cover;">
+                    <div class="message-text">${req.text}</div>
                     <div class="message-actions">
                         <button class="accept-btn">Accept</button>
                         <button class="reject-btn">Reject</button>
@@ -239,33 +241,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const acceptBtn = li.querySelector(".accept-btn");
                 const rejectBtn = li.querySelector(".reject-btn");
                 acceptBtn?.addEventListener("click", async () => {
-                    await acceptRequest(msg.requestId, msg.senderId);
-                    messages.splice(index, 1);
-                    renderMessages();
+                    await acceptRequest(req.requestId, req.senderId);
                 });
                 rejectBtn?.addEventListener("click", async () => {
-                    await rejectRequest(msg.requestId);
-                    messages.splice(index, 1);
-                    renderMessages();
+                    await rejectRequest(req.requestId);
                 });
                 messageList.appendChild(li);
             });
         }
 
-        unreadBadge.textContent = (messages && messages.length) ? messages.length : "0";
-    }
-
-    function addMessage(text, requestId, senderId, avatar) {
-        if (!messages.some(m => m.requestId === requestId)) {
-            messages.push({
-                text,
-                time: new Date().toLocaleTimeString(),
-                requestId,
-                senderId,
-                avatar
-            });
-            renderMessages();
-        }
+        unreadBadge.textContent = (friendRequests && friendRequests.length) ? friendRequests.length : "0";
     }
 
     // toggle message popup
@@ -297,9 +282,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (error) throw error;
 
-            messages = [];
+            friendRequests = [];
             if (requests && requests.length) {
-                // fetch all sender profiles in parallel for performance
                 const senderIds = Array.from(new Set(requests.map(r => r.sender_id)));
                 const { data: profilesMap } = await client
                     .from("user_profiles")
@@ -311,17 +295,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 for (const req of requests) {
                     const senderProfile = profileById[req.sender_id] || {};
-                    const avatarUrl = senderProfile.profile_image_url || "./assets/icon/user.png";
+                    const avatarUrl = senderProfile.profile_image_url || DEFAULT_PROFILE_IMG;
                     const senderName = senderProfile.user_name || "Someone";
 
-                    addMessage(
-                        `${senderName} sent you a friend request`,
-                        req.id,
-                        req.sender_id,
-                        avatarUrl
-                    );
+                    friendRequests.push({
+                        text: `${senderName} sent you a friend request`,
+                        requestId: req.id,
+                        senderId: req.sender_id,
+                        avatar: avatarUrl
+                    });
 
-                    // lightweight notification (silent if not allowed)
                     try {
                         if (Notification.permission === "granted") {
                             new Notification("Friend Request 👥", { body: `${senderName} sent you a request` });
@@ -330,9 +313,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                         // ignore
                     }
                 }
-            } else {
-                renderMessages();
             }
+            renderFriendRequests();
         } catch (err) {
             console.error("Error fetching requests:", err);
             showPopup("Failed to fetch friend requests.", "error");
@@ -382,10 +364,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!chatList) return;
             chatList.innerHTML = "";
 
-            // Build unique friendIds
             const friendIds = friends.map(f => (f.user1_id === currentUserId ? f.user2_id : f.user1_id));
 
-            // fetch profiles for all friendIds
             const { data: profiles } = await client
                 .from("user_profiles")
                 .select("user_id, user_name, profile_image_url, is_online")
@@ -394,11 +374,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             const profilesById = {};
             (profiles || []).forEach(p => { profilesById[p.user_id] = p; });
 
-            // fetch last message for each friend concurrently
             const friendDataPromises = friendIds.map(async (friendId) => {
                 const profile = profilesById[friendId] || {};
                 const friendName = profile.user_name || "Unknown";
-                const avatarUrl = profile.profile_image_url || "./assets/icon/user.png";
+                const avatarUrl = profile.profile_image_url || DEFAULT_PROFILE_IMG;
                 const isOnline = profile.is_online || false;
 
                 const { data: lastMsgData } = await client
@@ -412,7 +391,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const lastMessageText = lastMsgData?.content || "No messages yet";
                 const lastMessageTime = lastMsgData ? new Date(lastMsgData.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
 
-                // unseen count
                 let unseenCount = 0;
                 try {
                     const { count, error: unseenError } = await client
@@ -479,7 +457,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         const chatList = document.querySelector(".chat-list");
         if (!searchInput || !chatList) return;
 
-        // avoid attaching multiple listeners
         if (searchInput.dataset.hasListener) return;
         searchInput.dataset.hasListener = "true";
 
@@ -511,29 +488,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.error("Error sending message:", error);
                 showPopup("Message failed to send. Please try again.", "error");
             } else {
-                // update last message UI locally (optimistic)
                 updateLastMessage(friendId, content, new Date().toISOString());
             }
         } catch (err) {
             console.error("sendMessage error:", err);
             showPopup("Message failed to send. Please try again.", "error");
-        }
-    }
-
-    async function logMessagesTable() {
-        try {
-            const { data, error } = await client
-                .from("messages")
-                .select("*")
-                .order("created_at", { ascending: true });
-
-            if (error) {
-                console.error("Error fetching messages table:", error);
-                return;
-            }
-            console.log("📌 Current messages table:", data);
-        } catch (err) {
-            console.error("Unexpected error logging messages table:", err);
         }
     }
 
@@ -691,7 +650,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             renderChatMessages(chatBox, oldMessagesArr, friendAvatar);
         }
 
-        // simple cache for username lookups
         const userCache = {};
         async function getUsername(userId) {
             if (userCache[userId]) return userCache[userId];
@@ -725,14 +683,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                     (newMsg.sender_id === friendId && newMsg.receiver_id === currentUserId);
                 if (!isRelevant) return;
 
-                // push/update
                 upsertMessageAndRender(oldMessages, newMsg);
 
                 if (newMsg.receiver_id === currentUserId) {
                     unseenCounts[newMsg.sender_id] = (unseenCounts[newMsg.sender_id] || 0) + 1;
                     updateUnseenBadge(newMsg.sender_id, unseenCounts[newMsg.sender_id]);
 
-                    // optional desktop notification
                     try {
                         const senderName = await getUsername(newMsg.sender_id);
                         if (Notification.permission === "granted") {
@@ -761,7 +717,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         );
 
-        // typing broadcast channel
         const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
         const typingChannel = client.channel(typingChannelName)
             .on("broadcast", { event: "typing" }, payload => {
@@ -782,7 +737,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             });
 
-        // status channel for friend's online status (clean up previous)
         if (statusChannelRef) {
             try { await client.removeChannel(statusChannelRef); } catch (err) { /* ignore */ }
             statusChannelRef = null;
@@ -799,7 +753,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (onlineTextElt) onlineTextElt.textContent = payload.new?.is_online ? "Online" : "Offline";
             });
 
-        // subscribe all channels
         await msgChannel.subscribe();
         await typingChannel.subscribe();
         await statusChannelRef.subscribe();
@@ -819,7 +772,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        // Hide default screen and show chat area
         defaultScreen.style.display = "none";
         chatContainer.style.display = "flex";
 
@@ -828,16 +780,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         const chatHeaderName = chatContainer.querySelector("#chat-header-name");
         const chatHeaderImg = chatContainer.querySelector(".chat-header img");
         if (chatHeaderName) chatHeaderName.textContent = friendName || "Unknown";
-        if (chatHeaderImg) chatHeaderImg.src = friendAvatar || "./assets/icon/user.png";
-
-        /* ------------------ Mobile Responsive Fix ------------------ */
-        const defaultArea = document.querySelector('.default');
+        if (chatHeaderImg) chatHeaderImg.src = friendAvatar || DEFAULT_PROFILE_IMG;
 
         if (window.innerWidth <= 768) {
             if (sidebar) sidebar.style.display = "none";
             if (messageCon) messageCon.style.display = "none";
             chatContainer.style.display = "flex";
-            defaultArea.style.display = 'none';
+            defaultScreen.style.display = 'none';
         } else {
             if (messageCon) messageCon.style.display = "none";
             chatContainer.style.display = "flex";
@@ -857,7 +806,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 throw new Error("Missing chat controls (input/send button/messages container)");
             }
 
-            // Prevent stacking listeners: replace with clones
             function replaceElement(selector) {
                 const el = chatContainer.querySelector(selector);
                 if (!el) return null;
@@ -868,10 +816,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const emojiBtnSafe = emojiBtn ? replaceElement("#emoji-btn") : null;
             const emojiPickerSafe = emojiPicker ? replaceElement("#emoji-picker") : null;
-            const inputSafe = replaceElement("input") || input;
+            const inputSafe = replaceElement("input[type='text']") || input;
             const sendBtnSafe = replaceElement(".sendBtn") || sendBtn;
 
-            /* ------------------ Emoji Handling ------------------ */
             if (emojiBtnSafe && emojiPickerSafe) {
                 emojiBtnSafe.addEventListener("click", (e) => {
                     e.stopPropagation();
@@ -892,7 +839,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             inputSafe.value = "";
             sendBtnSafe.disabled = true;
 
-            /* ------------------ Load Old Messages ------------------ */
             const oldMessages = await fetchMessages(friendId);
             renderChatMessages(chatBox, oldMessages, friendAvatar);
 
@@ -909,7 +855,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             updateUnseenBadge(friendId, 0);
             unseenCounts[friendId] = 0;
 
-            /* ------------------ Typing Indicator ------------------ */
             const typingChannelName = `typing:${[currentUserId, friendId]
                 .sort()
                 .join(":")}`;
@@ -930,7 +875,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             });
 
-            /* ------------------ Send Message ------------------ */
             async function handleSend() {
                 const content = inputSafe.value.trim();
                 if (!content) return;
@@ -941,10 +885,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             sendBtnSafe.addEventListener("click", handleSend);
             inputSafe.addEventListener("keypress", (e) => {
-                if (e.key === "Enter") handleSend();
+                if (e.key === "Enter") {
+                    e.preventDefault(); // Prevent default form submission if input is part of a form
+                    handleSend();
+                }
             });
 
-            /* ------------------ Back Button ------------------ */
             const backBtn = chatContainer.querySelector(".backBtn");
             if (backBtn) {
                 const backClone = backBtn.cloneNode(true);
@@ -955,6 +901,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (messageCon) messageCon.style.display = "flex";
                         chatContainer.style.display = "none";
                         defaultScreen.style.display = "flex";
+                    } else {
+                        // On larger screens, simply hide chat and show default if needed
+                        chatContainer.style.display = "none";
+                        defaultScreen.style.display = "flex"; // Or keep the friend list visible
                     }
                     setUrlForChat(null);
 
@@ -962,9 +912,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (msgChannel) await client.removeChannel(msgChannel);
                         if (typingChannel) await client.removeChannel(typingChannel);
                         if (statusChan) await client.removeChannel(statusChan);
+                        // Also unsubscribe the global channel if it's managed per-chat, though it's typically global
+                        // This might be redundant if globalChannel is truly global and handled once at boot
                     } catch (err) {
                         console.warn("Error removing channels:", err);
                     }
+                    fetchFriends(); // Re-fetch friends to update last messages/unseen counts
                 });
             }
         } catch (err) {
@@ -994,7 +947,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             timeEl.textContent = timeStr;
         }
 
-        // Move chat to top of list (like WhatsApp)
         const chatList = chatLi.parentElement;
         if (chatList && chatList.firstChild !== chatLi) {
             chatList.prepend(chatLi);
@@ -1003,35 +955,36 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // ------------- Subscribe to global messages for unseen + last message updates -------------
     async function subscribeToGlobalMessages() {
-        const globalChannel = client.channel("global-messages");
+        // Ensure a single global channel instance
+        if (!window._globalMessageChannel) {
+            window._globalMessageChannel = client.channel("global-messages");
 
-        globalChannel.on(
-            "postgres_changes",
-            { event: "INSERT", schema: "public", table: "messages" },
-            payload => {
-                const newMsg = payload.new;
-                if (!newMsg || !currentUserId) return;
+            window._globalMessageChannel.on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "messages" },
+                payload => {
+                    const newMsg = payload.new;
+                    if (!newMsg || !currentUserId) return;
 
-                // Only handle messages sent to current user
-                if (newMsg.receiver_id === currentUserId) {
-                    const senderId = newMsg.sender_id;
-                    unseenCounts[senderId] = (unseenCounts[senderId] || 0) + 1;
-                    updateUnseenBadge(senderId, unseenCounts[senderId]);
-                    updateLastMessage(senderId, newMsg.content, newMsg.created_at);
+                    if (newMsg.receiver_id === currentUserId) {
+                        const senderId = newMsg.sender_id;
+                        unseenCounts[senderId] = (unseenCounts[senderId] || 0) + 1;
+                        updateUnseenBadge(senderId, unseenCounts[senderId]);
+                        updateLastMessage(senderId, newMsg.content, newMsg.created_at);
+                    }
                 }
-            }
-        );
+            );
 
-        try {
-            await globalChannel.subscribe();
-        } catch (err) {
-            console.warn("subscribeToGlobalMessages subscribe failed:", err);
+            try {
+                await window._globalMessageChannel.subscribe();
+                console.log("Subscribed to global-messages channel.");
+            } catch (err) {
+                console.warn("subscribeToGlobalMessages subscribe failed:", err);
+            }
         }
     }
 
     // ------------- PROFILE UI -------------
-    const DEFAULT_PROFILE_IMG = "./assets/icon/default-user.png";
-
     const profilePic = document.querySelector(".profile-pic");
     const profilePopup = document.getElementById("profile-popup");
     const closeProfile = document.getElementById("close-profile");
@@ -1061,11 +1014,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .limit(1)
                 .maybeSingle();
 
+            if (error) throw error;
+
             profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
             bioInput.value = profile?.bio || "";
             profileUsername.textContent = profile?.user_name || "Unknown User";
+            newUsernameInput.value = profile?.user_name || ""; // Pre-fill username for editing
         } catch (err) {
             console.error("Error loading profile:", err);
+            showPopup("Failed to load profile details.", "error");
         }
     });
 
@@ -1085,9 +1042,26 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     saveProfileBtn?.addEventListener("click", async () => {
+        showLoading("Saving profile...");
         try {
-            const imageUrl = profilePreview?.src || DEFAULT_PROFILE_IMG;
+            let imageUrl = profilePreview?.src || DEFAULT_PROFILE_IMG;
             const bio = bioInput?.value.trim() || "";
+
+            const file = profileUpload?.files[0];
+            if (file) {
+                const fileName = `${currentUserId}_${Date.now()}_${file.name}`;
+                const { data, error: uploadError } = await client.storage
+                    .from('avatars')
+                    .upload(fileName, file, {
+                        cacheControl: '3600',
+                        upsert: false
+                    });
+
+                if (uploadError) throw uploadError;
+
+                const { data: publicUrlData } = client.storage.from('avatars').getPublicUrl(data.path);
+                imageUrl = publicUrlData.publicUrl;
+            }
 
             const { error } = await client
                 .from("user_profiles")
@@ -1102,18 +1076,24 @@ document.addEventListener("DOMContentLoaded", async () => {
             fetchFriends(); // refresh friend avatars
         } catch (err) {
             console.error("Error updating profile:", err);
-            showPopup("Failed to update profile.", "error");
+            showPopup(`Failed to update profile: ${err.message || err}`, "error");
+        } finally {
+            hideLoading();
         }
     });
 
     logoutBtn?.addEventListener("click", async () => {
+        showLoading("Logging out...");
         try {
+            await setUserOnlineStatus(false);
             await client.auth.signOut();
             showPopup("Logged out!", "info");
             window.location.href = "signup.html";
         } catch (err) {
             console.error("Logout error:", err);
             showPopup("Logout failed.", "error");
+        } finally {
+            hideLoading();
         }
     });
 
@@ -1136,6 +1116,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
+        showLoading("Updating username...");
         try {
             const { error } = await client
                 .from("user_profiles")
@@ -1150,14 +1131,15 @@ document.addEventListener("DOMContentLoaded", async () => {
             fetchFriends();
         } catch (err) {
             console.error("Error updating username:", err);
-            showPopup("Failed to update username.", "error");
+            showPopup(`Failed to update username: ${err.message || err}`, "error");
+        } finally {
+            hideLoading();
         }
     });
 
     // ------------- boot -------------
     const me = await getCurrentUser();
     if (me) {
-        // initial loads
         await fetchFriends();
         await fetchFriendRequests();
         await subscribeToGlobalMessages();
