@@ -1,15 +1,15 @@
 :root {
-  --bg: #ddece4;
-  --accent: #075e54;
-  --footer-bg: #e6f2ed;
-  --text-primary: #111b21;
-  --text-secondary: #465a59;
-  --button-text: hsl(0, 0%, 100%);
-  --bubble-sent: #3b4f40;
-  --bubble-received: #f5f0e6;
-  --input-bg: #afffd7;
-  --input-border: #c3d4cd;
-  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --bg: #fafaf7;
+  --accent: #8aaae5;
+  --footer-bg: #f2f5f1;
+  --text-primary: #2c2c2c;
+  --text-secondary: #5f6f73;
+  --button-text: #ffffff;
+  --bubble-sent: #e0ebf9;
+  --bubble-received: #fdf7e6;
+  --input-bg: #f6f9f7;
+  --input-border: #dcdcdc;
+  --shadow-1: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 body.dark {
