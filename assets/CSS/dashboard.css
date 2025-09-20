@@ -33,11 +33,11 @@ body.dark {
   box-sizing: border-box;
 }
 
-/* html,
+html,
 body {
   height: 100%;
   width: 100%;
-} */
+}
 
 body {
   margin: 0;
