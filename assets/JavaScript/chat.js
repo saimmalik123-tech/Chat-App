@@ -949,12 +949,28 @@ document.addEventListener("DOMContentLoaded", async () => {
                                         .maybeSingle();
 
                                     const senderName = senderProfile?.user_name || "New Message";
-                                    new Notification(senderName, { body: newMsg.content });
+                                    const notif = new Notification(senderName, { body: newMsg.content });
+                                    notif.addEventListener('click', () => {
+                                        window.location.href = '#dashboard'; // Replace with your dashboard URL
+                                        notif.close();
+                                    });
                                 }
                             } catch (err) {
                                 console.warn("Error sending message notification:", err);
                             }
                         })();
+                    }
+                }
+            );
+
+            window._globalMessageChannel.on(
+                "postgres_changes",
+                { event: "UPDATE", schema: "public", table: "messages" },
+                payload => {
+                    const updatedMsg = payload.new;
+                    if (updatedMsg && updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
+                        unseenCounts[updatedMsg.sender_id] = 0;
+                        updateUnseenBadge(updatedMsg.sender_id, 0);
                     }
                 }
             );
