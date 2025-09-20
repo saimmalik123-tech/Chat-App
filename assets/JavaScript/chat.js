@@ -921,7 +921,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // ------------- Subscribe to global messages for unseen + last message updates -------------
     async function subscribeToGlobalMessages() {
-        // Ensure a single global channel instance
         if (!window._globalMessageChannel) {
             window._globalMessageChannel = client.channel("global-messages");
 
