@@ -158,7 +158,7 @@ nav h2 a {
 .chat {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 5px;
   padding: 12px;
   min-height: 70px;
   width: 100%;
