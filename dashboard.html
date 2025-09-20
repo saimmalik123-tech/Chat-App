@@ -7,8 +7,8 @@
     <title>ChatrSaim - Dashboard</title>
     <link rel="stylesheet" href="./assets/CSS/dashboard.css">
     <link rel="shortcut icon" href="./assets/icon/fav-icon.png" type="image/x-icon">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
-        integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6jJ8B7zJ2iS3sW88A+YlH2X5o1D8b7oA5a+q8gC9a/1V8Lw=="
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css"
+        integrity="sha512-DxV+EoADOkOygM4IR9yXP8Sb2qwgidEmeqAEmDKIOfPRQZOWbXCzLC6vjbZyy0vPisbH2SyW27+ddLVCN+OMzQ=="
         crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 
@@ -21,26 +21,28 @@
     </header>
 
     <main class="chat-container">
+        <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <img src="./assets/icon/download.jpeg" alt="Profile" class="profile-pic">
                 <input type="text" placeholder="Search Friends" id="search-friends">
-                <button class="addFriends">
-                    <img src="./assets/SVG/add-a-contact-on-phone-interface-symbol-of-a-user-with-a-plus-sign-svgrepo-com.svg"
-                        alt="Add Friends" id="addFriendsSVG">
-                </button>
+                <button class="addFriends"><img
+                        src="./assets/SVG/add-a-contact-on-phone-interface-symbol-of-a-user-with-a-plus-sign-svgrepo-com.svg"
+                        alt="Add Friends" id="addFriendsSVG"></button>
             </div>
             <ul class="chat-list">
             </ul>
+
         </aside>
 
-        <section class="chat-area-main">
+        <!-- Chat Area -->
+        <section class="chat-area">
             <div class="default">
                 <i class="fa-solid fa-comment-dots"></i>
                 <p>Start a conversation by typing a message above and connect with your friends instantly!</p>
             </div>
 
-            <div class="chat-content hidden">
+            <div class="chat-area" style="display: none; width: 100%;">
                 <div class="chat-header">
                     <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
                     <img src="./assets/icon/user.png" alt="User" style="object-fit:cover;">
@@ -49,18 +51,21 @@
                         <p id="typing-indicator">Offline</p>
                     </div>
                 </div>
-                <div class="chat-messages">
+                <div class="messages">
+                    <!-- Message bubbles will be populated here by JavaScript -->
                 </div>
                 <div class="chat-input">
                     <i class="fa-regular fa-face-smile" id='emoji-btn'></i>
-                    <input id='input' type="text" placeholder="Type a message...">
+                    <input id='input' type="text" placeholder="Type a message..." inputmode="text">
                     <button disabled class='sendBtn'>➤</button>
                 </div>
-                <emoji-picker id="emoji-picker" class="hidden-picker"></emoji-picker>
+                <emoji-picker id="emoji-picker"
+                    style="position:absolute; bottom:50px; left:0; display:none; z-index:1000;"></emoji-picker>
             </div>
         </section>
     </main>
 
+    <!--Ad Friends Modal -->
     <div id="friendModal" class="modal hidden">
         <div class="modal-content">
             <span class="close">&times;</span>
@@ -70,22 +75,26 @@
         </div>
     </div>
 
-    <div id="message">
+    <div id="message" style="display: flex;">
         ✉︎
         <span id="unread-count">0</span>
     </div>
 
-    <div id="message-popup" class="hidden">
+
+    <!-- Popup for messages -->
+    <div id="message-popup">
         <ul id="message-list">
-            <li>No Request!</li>
+            No Request!
         </ul>
     </div>
 
+    <!-- Popup -->
     <div id="popup" class="hidden popup">
         <span id="popup-message"></span>
         <button id="popup-close">×</button>
     </div>
 
+    <!-- Loading Overlay -->
     <div id="loading-overlay" class="hidden">
         <div class="loading-box">
             <div class="spinner"></div>
@@ -93,24 +102,30 @@
         </div>
     </div>
 
+
+    <!-- Profile Popup -->
     <div id="profile-popup" class="profile-popup hidden">
         <div class="profile-content">
             <span id="close-profile" class="close-btn">&times;</span>
             <h2>My Profile</h2>
+
             <div class="profile-section">
                 <h3 id="profile-username">Username</h3>
                 <button id="change-username-btn" class="small-btn">
                     <i class="fa-solid fa-pen"></i> Change Username
                 </button>
             </div>
+
             <div class="profile-section">
                 <img id="profile-preview" src="./assets/icon/user.png" alt="Profile" />
                 <input type="file" id="profile-upload" accept="image/*" />
             </div>
+
             <div class="profile-section">
                 <label for="bio">Bio</label>
                 <textarea id="bio" placeholder="Write something..."></textarea>
             </div>
+
             <div class="profile-actions">
                 <button id="save-profile"><i class="fa-solid fa-save"></i> Save</button>
                 <button id="logout"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
@@ -118,20 +133,25 @@
         </div>
     </div>
 
+    <!-- Change Username Modal -->
     <div id="username-popup" class="profile-popup hidden">
         <div class="profile-content">
             <span id="close-username" class="close-btn">&times;</span>
             <h2>Change Username</h2>
+
             <div class="profile-section">
                 <label for="new-username">New Username</label>
                 <input type="text" id="new-username" placeholder="Enter new username" />
             </div>
+
             <div class="profile-actions">
                 <button id="save-username"><i class="fa-solid fa-save"></i> Save</button>
                 <button id="cancel-username">Cancel</button>
             </div>
         </div>
     </div>
+
+
 
     <script src="https://unpkg.com/@supabase/supabase-js"></script>
     <script src="./assets/JavaScript/main.js"></script>
