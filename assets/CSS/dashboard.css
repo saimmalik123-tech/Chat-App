@@ -1,17 +1,17 @@
 :root {
-  --bg: #f4f7fb;
-  --text-primary: #1e293b;
-  --text-secondary: #6b7280;
-  --bubble-sent: linear-gradient(135deg, #4f46e5, #3b82f6);
-  --bubble-received: rgba(255, 255, 255, 0.8);
-  --input-bg: #ffffff;
-  --input-border: #e5e7eb;
-  --accent: #6366f1;
+  --bg: #ffffff;
+  --text-primary: #2c3e50;
+  --text-secondary: #7f8c8d;
+  --bubble-sent: linear-gradient(135deg, #6ee7b7, #3b82f6);
+  --bubble-received: #f1f5f9;
+  --input-bg: #fdfdfd;
+  --input-border: #e2e8f0;
+  --accent: #3b82f6;
   --button-text: #ffffff;
   --footer-bg: #f9fafb;
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-blur: blur(12px);
-  --shadow-1: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-blur: blur(16px);
+  --shadow-1: 0 6px 14px rgba(0, 0, 0, 0.06);
 }
 
 body.dark {
@@ -1012,7 +1012,7 @@ emoji-picker {
 }
 
 @media (max-width: 768px) {
-  .default{
+  .default {
     display: none !important;
   }
   .chat-container {
