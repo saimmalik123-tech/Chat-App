@@ -1000,10 +1000,10 @@ emoji-picker {
 /* Responsive tweaks */
 @media (max-width: 992px) {
   .sidebar {
-    width: 35%;
+    width: 40%;
   }
   .chat-area {
-    width: 65%;
+    width: 60%;
   }
 }
 
