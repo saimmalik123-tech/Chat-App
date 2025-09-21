@@ -104,14 +104,12 @@
 
     <!-- Profile POPUP -->
 
-    <div id="profile-popup" class="profile-popup hidden">
-        <div class="profile-modal">
-            <div class="profile-header">
-                <div class="profile-title">
-                    <h2>Profile Settings</h2>
-                    <p>Manage your account information</p>
-                </div>
-                <button id="close-profile" class="icon-btn">
+    <div id="user-settings-modal" class="settings-modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">Account Settings</h3>
+                <button id="close-settings" class="modal-close">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -120,80 +118,68 @@
                 </button>
             </div>
 
-            <div class="profile-content">
-                <div class="profile-avatar-wrapper">
-                    <div class="profile-avatar">
-                        <img id="profile-preview" src="./assets/icon/user.png" alt="Profile" />
-                        <div class="avatar-edit">
-                            <input type="file" id="profile-upload" accept="image/*" />
-                            <label for="profile-upload" class="edit-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <path d="M12 20h9"></path>
-                                    <path
-                                        d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 9.5-9.5a2.121 2.121 0 0 1 0-3z">
-                                    </path>
-                                </svg>
-                            </label>
-                        </div>
+            <div class="modal-body">
+                <div class="user-avatar-section">
+                    <div class="avatar-container">
+                        <img id="user-avatar" src="./assets/icon/user.png" alt="User Avatar" />
+                        <label for="avatar-upload" class="avatar-upload-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path
+                                    d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z">
+                                </path>
+                                <circle cx="12" cy="13" r="4"></circle>
+                            </svg>
+                        </label>
+                        <input type="file" id="avatar-upload" accept="image/*" />
                     </div>
-                    <div class="profile-name">
-                        <h3 id="profile-username">Loading...</h3>
-                        <button id="change-username-btn" class="text-btn">Edit username</button>
+                    <div class="user-info">
+                        <h4 id="display-name" class="username">Loading...</h4>
+                        <button id="edit-name-btn" class="edit-name-btn">Edit Name</button>
                     </div>
                 </div>
 
-                <div class="profile-section">
-                    <div class="section-header">
-                        <h4>About Me</h4>
-                        <span class="optional">Optional</span>
+                <div class="user-bio-section">
+                    <div class="section-label">
+                        <span>About You</span>
+                        <span class="optional-tag">Optional</span>
                     </div>
-                    <div class="bio-container">
-                        <textarea id="bio" placeholder="Write a short bio about yourself..."></textarea>
-                        <div class="bio-footer">
-                            <span class="char-count"><span id="bio-count">0</span>/150</span>
-                            <button class="clear-btn" id="clear-bio">Clear</button>
+                    <div class="bio-wrapper">
+                        <textarea id="user-bio" class="bio-textarea"
+                            placeholder="Tell others about yourself..."></textarea>
+                        <div class="bio-controls">
+                            <span class="char-counter"><span id="bio-char-count">0</span>/150</span>
+                            <button id="clear-bio" class="clear-bio-btn">Clear</button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="profile-actions">
-                <button id="save-profile" class="btn primary">
-                    <span class="btn-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            <div class="modal-footer">
+                <button id="save-settings" class="save-btn">
+                    <span class="btn-text">Save Changes</span>
+                    <div class="btn-loader hidden">
+                        <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                            <polyline points="7 3 7 8 15 8"></polyline>
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M12 6v6l4 2"></path>
                         </svg>
-                    </span>
-                    Save Changes
+                    </div>
                 </button>
-                <button id="logout" class="btn secondary">
-                    <span class="btn-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                            <polyline points="16 17 21 21 21 17"></polyline>
-                            <line x1="21" y1="21" x2="16" y2="21"></line>
-                        </svg>
-                    </span>
-                    Logout
+                <button id="logout-user" class="logout-btn">
+                    <span class="btn-text">Logout</span>
                 </button>
             </div>
         </div>
     </div>
 
-    <div id="username-popup" class="username-popup hidden">
-        <div class="profile-modal">
-            <div class="profile-header">
-                <div class="profile-title">
-                    <h2>Change Username</h2>
-                    <p>Update your display name</p>
-                </div>
-                <button id="close-username" class="icon-btn">
+    <div id="name-editor-modal" class="name-editor-modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">Change Display Name</h3>
+                <button id="close-name-editor" class="modal-close">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -202,20 +188,21 @@
                 </button>
             </div>
 
-            <div class="profile-content">
+            <div class="modal-body">
                 <div class="form-group">
-                    <label for="new-username">Username</label>
+                    <label for="new-display-name" class="form-label">Display Name</label>
                     <div class="input-wrapper">
-                        <input type="text" id="new-username" placeholder="Enter new username" maxlength="20" />
-                        <span class="input-count"><span id="username-count">0</span>/20</span>
+                        <input type="text" id="new-display-name" class="text-input"
+                            placeholder="Enter your display name" maxlength="20" />
+                        <span class="input-counter"><span id="name-char-count">0</span>/20</span>
                     </div>
-                    <p class="input-help">This is how other users will see you</p>
+                    <p class="input-help">This name will be visible to other users</p>
                 </div>
             </div>
 
-            <div class="profile-actions">
-                <button id="cancel-username" class="btn ghost">Cancel</button>
-                <button id="save-username" class="btn primary">Save Username</button>
+            <div class="modal-footer">
+                <button id="cancel-name-change" class="cancel-btn">Cancel</button>
+                <button id="confirm-name-change" class="confirm-btn">Save Name</button>
             </div>
         </div>
     </div>
@@ -224,11 +211,6 @@
     <script src="./assets/JavaScript/main.js"></script>
     <script type="module" src="./assets/JavaScript/chat.js"></script>
     <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js"></script>
-    <script>
-        window.visualViewport.addEventListener('resize', () => {
-            const keyboardHeight = window.visualViewport.height - window.innerHeight;
-        });
-    </script>
 </body>
 
 </html>
