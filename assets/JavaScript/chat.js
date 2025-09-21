@@ -1538,7 +1538,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Profile popup functionality
     profilePic?.addEventListener("click", async () => {
-        alert('clicked')
         if (!profilePopup) return;
         profilePopup.classList.remove("hidden");
 
