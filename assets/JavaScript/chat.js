@@ -1502,9 +1502,45 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
+    // ------------- Initialize database schema if needed -------------
+    async function initializeDatabaseSchema() {
+        try {
+            // Check if deleted_at column exists in messages table
+            const { data: columns, error: columnsError } = await client
+                .from("information_schema.columns")
+                .select("column_name")
+                .eq("table_name", "messages")
+                .eq("column_name", "deleted_at");
+
+            if (columnsError) {
+                console.error("Error checking for deleted_at column:", columnsError);
+                return;
+            }
+
+            // If deleted_at column doesn't exist, add it
+            if (!columns || columns.length === 0) {
+                console.log("Adding deleted_at column to messages table...");
+                const { error: alterError } = await client.rpc('exec_sql', {
+                    sql: "ALTER TABLE messages ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;"
+                });
+
+                if (alterError) {
+                    console.error("Error adding deleted_at column:", alterError);
+                } else {
+                    console.log("Successfully added deleted_at column");
+                }
+            }
+        } catch (err) {
+            console.error("Error initializing database schema:", err);
+        }
+    }
+
     // ------------- boot -------------
     const me = await getCurrentUser();
     if (me) {
+        // Initialize database schema if needed
+        await initializeDatabaseSchema();
+
         await fetchFriends();
         await fetchFriendRequests();
         await subscribeToGlobalMessages();
