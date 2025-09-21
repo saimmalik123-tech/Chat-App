@@ -222,11 +222,19 @@ nav h2 a {
 }
 
 /* Chat area */
-.chat-area {
+.chat-area-main {
   display: flex;
   flex-direction: column;
   height: 100%;
   width: 70%;
+  flex-grow: 1;
+}
+
+.chat-area-child {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
   flex-grow: 1;
 }
 
@@ -960,7 +968,7 @@ emoji-picker {
 }
 
 /* Notification Popup Styles */
-#popup-message {
+#notification-popup #popup-message {
   margin: 0;
   padding: 10px 0;
   color: var(--text-primary);
@@ -1121,7 +1129,7 @@ emoji-picker {
 }
 
 /* Floating message button */
-#message {
+#message-notification {
   position: fixed;
   left: 20px;
   bottom: 70px;
@@ -1289,7 +1297,7 @@ emoji-picker {
   .sidebar {
     width: 40%;
   }
-  .chat-area {
+  .chat-area-main {
     width: 60%;
   }
 }
@@ -1315,14 +1323,21 @@ emoji-picker {
     transform: translateX(0);
     opacity: 1;
   }
-  .chat-area {
+  .chat-area-main {
     width: 100%;
     display: none;
     height: 100%;
     flex-direction: column;
     flex: 1;
   }
-  .chat-area.active {
+  .chat-area-child {
+    width: 100%;
+    display: none;
+    height: 100%;
+    flex-direction: column;
+    flex: 1;
+  }
+  .chat-area-child.active {
     display: flex;
   }
   .chat-input {
@@ -1353,7 +1368,7 @@ emoji-picker {
   .message {
     max-width: 70%;
   }
-  #message {
+  #message-notification {
     width: 56px;
     height: 56px;
     font-size: 1.6rem;
@@ -1361,7 +1376,7 @@ emoji-picker {
 }
 
 @media (max-width: 420px) {
-  #message {
+  #message-notification {
     left: auto;
     right: 16px;
     bottom: 80px;

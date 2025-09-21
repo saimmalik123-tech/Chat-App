@@ -3,7 +3,7 @@ import { client } from "../../supabase.js";
 document.addEventListener("DOMContentLoaded", async () => {
     // UI helpers
     function showPopup(message, type = "info") {
-        const popup = document.getElementById("popup");
+        const popup = document.getElementById("notification-popup");
         const messageEl = document.getElementById("popup-message");
         const closeBtn = document.getElementById("popup-close");
 
@@ -240,13 +240,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Toggle message popup
-    document.getElementById("message")?.addEventListener("click", () => {
+    document.getElementById("message-notification")?.addEventListener("click", () => {
         const popup = document.getElementById("message-popup");
         if (popup) popup.style.display = popup.style.display === "block" ? "none" : "block";
     });
 
     document.addEventListener("click", (e) => {
-        const messageIcon = document.getElementById("message");
+        const messageIcon = document.getElementById("message-notification");
         const messagePopup = document.getElementById("message-popup");
         if (messageIcon && messagePopup && !messageIcon.contains(e.target) && !messagePopup.contains(e.target)) {
             messagePopup.style.display = "none";
@@ -555,9 +555,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 li.addEventListener("click", () => {
                     openChat(friendId, friendName, avatarUrl);
-                    const chatArea = document.querySelector('.chat-area');
+                    const chatArea = document.querySelector('.chat-area-main');
                     if (window.innerWidth <= 768) {
-                        document.querySelector('#message')?.classList.add("hidden");
+                        document.getElementById('message-notification')?.classList.add("hidden");
                         if (chatArea) chatArea.style.display = 'flex';
                     }
                 });
@@ -902,7 +902,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                             renderChatMessages(chatBox, oldMessages, friendAvatar);
                         }
                     }
-                    updateLastMessageInChatList(friendId);
+                    updateLastMessageInChatList(updated.sender_id);
+                    updateLastMessageInChatList(updated.receiver_id);
+
+                    if (currentOpenChatId !== updated.sender_id) {
+                        updateUnseenCountForFriend(updated.sender_id);
+                    }
                     return;
                 }
 
@@ -969,10 +974,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function openChat(friendId, friendName, friendAvatar, fromNotification = false) {
         currentOpenChatId = friendId;
 
-        const chatContainer = document.querySelector("div.chat-area");
+        const chatContainer = document.querySelector("div.chat-area-child");
         const defaultScreen = document.querySelector(".default");
         const sidebar = document.querySelector(".sidebar");
-        const messageCon = document.getElementById("message");
+        const messageCon = document.getElementById("message-notification");
 
         if (!chatContainer || !defaultScreen) {
             console.error("Missing necessary HTML elements for chat.");
@@ -1104,7 +1109,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     currentOpenChatId = null;
                     await deleteSeenMessagesForChat(friendId);
 
-                    document.getElementById('message').classList.remove('hidden');
+                    document.getElementById('message-notification').classList.remove('hidden');
                     if (window.innerWidth <= 768) {
                         if (sidebar) sidebar.style.display = "flex";
                         if (messageCon) messageCon.style.display = "flex";
@@ -1747,7 +1752,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Confirmation popup function
     function showConfirmPopup(message, onConfirm, onCancel) {
-        const popup = document.getElementById("popup");
+        const popup = document.getElementById("notification-popup");
         const messageEl = document.getElementById("popup-message");
         const closeBtn = document.getElementById("popup-close");
 

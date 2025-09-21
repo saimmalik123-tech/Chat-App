@@ -35,13 +35,13 @@
         </aside>
 
         <!-- Chat Area -->
-        <section class="chat-area">
+        <section class="chat-area-main">
             <div class="default">
                 <i class="fa-solid fa-comment-dots"></i>
                 <p>Start a conversation by typing a message above and connect with your friends instantly!</p>
             </div>
 
-            <div class="chat-area" style="display: none; width: 100%;">
+            <div class="chat-area-child" style="display: none; width: 100%;">
                 <div class="chat-header">
                     <button class="backBtn"><i class="fa-solid fa-backward"></i></button>
                     <img src="./assets/icon/user.png" alt="User" style="object-fit:cover;">
@@ -74,7 +74,7 @@
         </div>
     </div>
 
-    <div id="message" style="display: flex;">
+    <div id="message-notification" style="display: flex;">
         ✉︎
         <span id="unread-count">0</span>
     </div>
@@ -241,7 +241,7 @@
     </div>
 
     <!-- Notification Popup -->
-    <div id="popup" class="popup hidden">
+    <div id="notification-popup" class="popup hidden">
         <div class="popup-container">
             <div class="popup-header">
                 <h3 id="popup-title">Notification</h3>
@@ -264,7 +264,7 @@
         </div>
     </div>
 
-    <div id="loading-overlay" class="loading-overlay hidden">
+    <div id="loading-overlay-end" class="loading-overlay hidden">
         <div class="loading-spinner"></div>
         <p id="loading-message">Loading...</p>
     </div>

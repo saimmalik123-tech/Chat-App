@@ -21,6 +21,20 @@ function showPopup(message, type = "info") {
     }
 }
 
+/* ------------------ COMMON FUNCTIONS FOR FORM VALIDATION ------------------ */
+
+// Function to check if all given input fields are filled
+function areInputsFilled(inputs) {
+    return inputs.every(input => input.value.trim() !== '');
+}
+
+// Function to handle the button's disabled state based on input
+function handleButtonState(inputs, button) {
+    if (button) {
+        button.disabled = !areInputsFilled(inputs);
+    }
+}
+
 /* ------------------ SIGN UP ------------------ */
 async function signUp() {
     const signName = document.querySelector('#name').value;
@@ -60,12 +74,21 @@ async function signUp() {
 }
 
 const signUpBtn = document.querySelector('.signUpBtn');
+const signUpInputs = document.querySelectorAll('#name, #email, #password');
+
+// Initially disable the button
+handleButtonState(signUpInputs, signUpBtn);
+
+// Add event listeners to input fields to check for changes
+signUpInputs.forEach(input => {
+    input.addEventListener('input', () => handleButtonState(signUpInputs, signUpBtn));
+});
+
 signUpBtn?.addEventListener('click', async e => {
     e.preventDefault();
     signUpBtn.innerHTML = '<div class="loader"></div>';
     await signUp();
 });
-
 
 /* ------------------ CHECK PROFILE & REDIRECT ------------------ */
 async function checkProfileAndRedirect() {
@@ -111,12 +134,21 @@ async function login() {
 }
 
 const loginBtn = document.querySelector('.signInBtn');
+const loginInputs = document.querySelectorAll('#loginEmail, #loginPassword');
+
+// Initially disable the button
+handleButtonState(loginInputs, loginBtn);
+
+// Add event listeners to input fields to check for changes
+loginInputs.forEach(input => {
+    input.addEventListener('input', () => handleButtonState(loginInputs, loginBtn));
+});
+
 loginBtn?.addEventListener('click', async e => {
     e.preventDefault();
     loginBtn.innerHTML = '<div class="loader"></div>';
     await login();
 });
-
 
 /* ------------------ GOOGLE SIGN UP / LOGIN ------------------ */
 async function handleGoogleAuth(redirectUrl) {
@@ -140,12 +172,22 @@ googleLoginBtn?.addEventListener('click', async e => {
     await handleGoogleAuth('http://chatrsaim.netlify.app/oauthHandler.html');
 });
 
-
 /* ------------------ SETUP PROFILE ------------------ */
 const setUpBtn = document.getElementById("setUpBtn");
 const avatarInput = document.getElementById("avatar");
 const avatarPreview = document.getElementById("avatarPreview");
 let avatarFile = null;
+
+// New elements for profile setup
+const profileSetupInputs = document.querySelectorAll('#name, #username, #bio');
+
+// Initially disable the button
+handleButtonState(profileSetupInputs, setUpBtn);
+
+// Add event listeners to input fields to check for changes
+profileSetupInputs.forEach(input => {
+    input.addEventListener('input', () => handleButtonState(profileSetupInputs, setUpBtn));
+});
 
 avatarInput?.addEventListener("change", e => {
     avatarFile = e.target.files[0];
@@ -154,6 +196,8 @@ avatarInput?.addEventListener("change", e => {
         reader.onload = event => avatarPreview.src = event.target.result;
         reader.readAsDataURL(avatarFile);
     }
+    // Also check the state of other inputs here to enable/disable the button
+    handleButtonState(profileSetupInputs, setUpBtn);
 });
 
 async function setupProfile() {
