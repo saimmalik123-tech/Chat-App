@@ -1813,27 +1813,30 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Initialize database schema
     async function initializeDatabaseSchema() {
         try {
-            const { data: columns, error: columnsError } = await client
-                .from("information_schema.columns")
-                .select("column_name")
-                .eq("table_name", "messages")
-                .eq("column_name", "deleted_at");
+            // Try a simpler approach - just attempt to use the deleted_at column
+            // If it doesn't exist, we'll catch the error and handle it gracefully
+            const { data, error } = await client
+                .from("messages")
+                .select("id")
+                .limit(1)
+                .is('deleted_at', null);
 
-            if (columnsError) {
-                console.error("Error checking for deleted_at column:", columnsError);
-                return;
-            }
+            if (error && error.message.includes("column \"deleted_at\" does not exist")) {
+                console.log("deleted_at column does not exist, adding it...");
 
-            if (!columns || columns.length === 0) {
-                console.log("Adding deleted_at column to messages table...");
-                const { error: alterError } = await client.rpc('exec_sql', {
-                    sql: "ALTER TABLE messages ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;"
-                });
+                // Use a simpler approach - try to add the column directly
+                try {
+                    const { error: alterError } = await client.rpc('exec_sql', {
+                        sql: "ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;"
+                    });
 
-                if (alterError) {
-                    console.error("Error adding deleted_at column:", alterError);
-                } else {
-                    console.log("Successfully added deleted_at column");
+                    if (alterError) {
+                        console.error("Error adding deleted_at column:", alterError);
+                    } else {
+                        console.log("Successfully added deleted_at column");
+                    }
+                } catch (alterErr) {
+                    console.error("Exception when adding deleted_at column:", alterErr);
                 }
             }
         } catch (err) {
