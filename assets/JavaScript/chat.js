@@ -320,6 +320,47 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // ------------- Delete seen messages (ephemeral messaging) -------------
+    async function deleteSeenMessages(friendId) {
+        if (!currentUserId) return;
+
+        try {
+            // Get all messages that have been seen by the current user
+            const { data: seenMessages, error: fetchError } = await client
+                .from("messages")
+                .select("id")
+                .eq("receiver_id", currentUserId)
+                .eq("sender_id", friendId)
+                .eq("seen", true);
+
+            if (fetchError) {
+                console.error("Error fetching seen messages:", fetchError);
+                return;
+            }
+
+            if (!seenMessages || seenMessages.length === 0) {
+                return; // No seen messages to delete
+            }
+
+            // Extract IDs of seen messages
+            const messageIds = seenMessages.map(msg => msg.id);
+
+            // Soft delete the seen messages by setting deleted_at timestamp
+            const { error: updateError } = await client
+                .from("messages")
+                .update({ deleted_at: new Date().toISOString() })
+                .in('id', messageIds);
+
+            if (updateError) {
+                console.error("Error soft-deleting seen messages:", updateError);
+            } else {
+                console.log(`Soft-deleted ${messageIds.length} seen messages from ${friendId}`);
+            }
+        } catch (err) {
+            console.error("deleteSeenMessages error:", err);
+        }
+    }
+
     // ------------- Fetch friends / chat list -------------
     async function fetchFriends() {
         showLoading("Fetching friends...");
@@ -360,6 +401,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     .from("messages")
                     .select("content, created_at, sender_id, receiver_id")
                     .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                    .is('deleted_at', null) // Exclude deleted messages
                     .order("created_at", { ascending: false })
                     .limit(1)
                     .maybeSingle();
@@ -374,7 +416,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                         .select("*", { count: "exact", head: true })
                         .eq("sender_id", friendId)
                         .eq("receiver_id", currentUserId)
-                        .eq("seen", false);
+                        .eq("seen", false)
+                        .is('deleted_at', null); // Exclude deleted messages
 
                     if (!unseenError) unseenCount = count || 0;
                 } catch (err) {
@@ -474,7 +517,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Mark messages as seen -------------
+    // ------------- Mark messages as seen and delete them (ephemeral) -------------
     async function markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar) {
         if (!currentUserId) return;
         try {
@@ -483,7 +526,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .select("*")
                 .eq("receiver_id", currentUserId)
                 .eq("sender_id", friendId)
-                .eq("seen", false);
+                .eq("seen", false)
+                .is('deleted_at', null); // Exclude already deleted messages
 
             if (fetchError) {
                 console.error("Error fetching unseen messages:", fetchError);
@@ -506,26 +550,38 @@ document.addEventListener("DOMContentLoaded", async () => {
             } else {
                 unseenCounts[friendId] = 0;
                 updateUnseenBadge(friendId, 0);
+
+                // Update the UI to show messages as seen
+                unseenMessages.forEach(msg => {
+                    const idx = oldMessages.findIndex(m => m.id === msg.id);
+                    if (idx !== -1) oldMessages[idx].seen = true;
+                });
+                renderChatMessages(chatBox, oldMessages, friendAvatar);
+
+                // Delete the seen messages immediately after marking them as seen
+                await deleteSeenMessages(friendId);
+
+                // Remove the deleted messages from the UI
+                const remainingMessages = oldMessages.filter(msg =>
+                    !unseenMessages.some(unseen => unseen.id === msg.id)
+                );
+                oldMessages.length = 0;
+                oldMessages.push(...remainingMessages);
+                renderChatMessages(chatBox, oldMessages, friendAvatar);
             }
-
-            unseenMessages.forEach(msg => {
-                const idx = oldMessages.findIndex(m => m.id === msg.id);
-                if (idx !== -1) oldMessages[idx].seen = true;
-            });
-
-            renderChatMessages(chatBox, oldMessages, friendAvatar);
         } catch (err) {
             console.error("markMessagesAsSeen error:", err);
         }
     }
 
-    // ------------- Fetch messages -------------
+    // ------------- Fetch messages (excluding deleted ones) -------------
     async function fetchMessages(friendId) {
         try {
             const { data, error } = await client
                 .from("messages")
                 .select("*")
                 .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                .is('deleted_at', null) // Exclude deleted messages
                 .order("created_at", { ascending: true });
 
             if (error) {
@@ -695,6 +751,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                             // Update unseen count in real-time
                             unseenCounts[newMsg.sender_id] = 0;
                             updateUnseenBadge(newMsg.sender_id, 0);
+
+                            // Delete the seen message immediately
+                            await deleteSeenMessages(friendId);
+
+                            // Remove the deleted message from the UI
+                            const remainingMessages = oldMessages.filter(msg => msg.id !== newMsg.id);
+                            oldMessages.length = 0;
+                            oldMessages.push(...remainingMessages);
+                            renderChatMessages(chatBox, oldMessages, friendAvatar);
                         } catch (err) {
                             console.error("Error marking message as seen:", err);
                         }
@@ -731,7 +796,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         );
 
-        // Listen for message updates
+        // Listen for message updates (including deletions)
         msgChannel.on(
             "postgres_changes",
             { event: "UPDATE", schema: "public", table: "messages" },
@@ -742,6 +807,20 @@ document.addEventListener("DOMContentLoaded", async () => {
                     (updated.sender_id === friendId && updated.receiver_id === currentUserId);
                 if (!isRelevant) return;
 
+                // Handle message deletion
+                if (updated.deleted_at) {
+                    // Only remove from UI if current user is the receiver
+                    if (updated.receiver_id === currentUserId) {
+                        const idx = oldMessages.findIndex(m => m.id === updated.id);
+                        if (idx !== -1) {
+                            oldMessages.splice(idx, 1);
+                            renderChatMessages(chatBox, oldMessages, friendAvatar);
+                        }
+                    }
+                    return;
+                }
+
+                // Handle seen status updates
                 const idx = oldMessages.findIndex(m => m.id === updated.id);
                 if (idx !== -1) {
                     oldMessages[idx] = { ...oldMessages[idx], ...updated };
@@ -1055,13 +1134,26 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             );
 
-            // Add UPDATE event handler for seen status
+            // Add UPDATE event handler for seen status and deletions
             window._globalMessageChannel.on(
                 "postgres_changes",
                 { event: "UPDATE", schema: "public", table: "messages" },
                 payload => {
                     const updatedMsg = payload.new;
                     if (!updatedMsg || !currentUserId) return;
+
+                    // Handle message deletion
+                    if (updatedMsg.deleted_at) {
+                        // Only update if this chat is not currently open
+                        if (currentOpenChatId !== updatedMsg.sender_id) {
+                            // Decrement unseen count but don't go below zero
+                            if (unseenCounts[updatedMsg.sender_id] > 0) {
+                                unseenCounts[updatedMsg.sender_id]--;
+                                updateUnseenBadge(updatedMsg.sender_id, unseenCounts[updatedMsg.sender_id]);
+                            }
+                        }
+                        return;
+                    }
 
                     // Handle seen status updates
                     if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
@@ -1137,6 +1229,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ------------- Handle notification redirects -------------
     function handleNotificationRedirect() {
         if (notificationData.type === 'message' && notificationData.senderId) {
+            // Get friend details
             client
                 .from("user_profiles")
                 .select("user_name, profile_image_url")
@@ -1314,7 +1407,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         await subscribeToGlobalMessages();
         await subscribeToFriendRequests();
 
-        // Check if we need to handle a notification redirect
         if (Object.keys(notificationData).length > 0) {
             handleNotificationRedirect();
         }
