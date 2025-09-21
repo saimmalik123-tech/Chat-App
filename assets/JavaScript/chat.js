@@ -345,6 +345,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     console.error("Error deleting message:", error);
                 } else {
                     console.log(`Message ${messageId} deleted after timeout`);
+                    // Update the last message in the chat list
+                    updateLastMessageInChatList(friendId);
                 }
             } catch (err) {
                 console.error("Error in scheduled message deletion:", err);
@@ -396,9 +398,41 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.error("Error deleting seen messages for chat:", updateError);
             } else {
                 console.log(`Deleted ${messageIds.length} seen messages for chat with ${friendId}`);
+                // Update the last message in the chat list
+                updateLastMessageInChatList(friendId);
             }
         } catch (err) {
             console.error("deleteSeenMessagesForChat error:", err);
+        }
+    }
+
+    // ------------- Update last message in chat list -------------
+    async function updateLastMessageInChatList(friendId) {
+        try {
+            // Get the latest non-deleted message for this chat
+            const { data: lastMsgData } = await client
+                .from("messages")
+                .select("content, created_at, sender_id, receiver_id")
+                .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                .is('deleted_at', null) // Exclude deleted messages
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const lastMessageText = lastMsgData?.content || "No messages yet";
+            const lastMessageTime = lastMsgData ? new Date(lastMsgData.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+
+            // Update the chat list item
+            const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
+            if (chatLi) {
+                const lastMessageEl = chatLi.querySelector(".last-message");
+                const timeEl = chatLi.querySelector(".time");
+
+                if (lastMessageEl) lastMessageEl.textContent = lastMessageText;
+                if (timeEl) timeEl.textContent = lastMessageTime;
+            }
+        } catch (err) {
+            console.error("Error updating last message in chat list:", err);
         }
     }
 
@@ -764,6 +798,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 upsertMessageAndRender(oldMessages, newMsg);
 
+                // Update the last message in the chat list
+                updateLastMessage(friendId, newMsg.content, newMsg.created_at);
+
                 // Only handle unseen count if this is a received message
                 if (newMsg.receiver_id === currentUserId) {
                     // If this chat is currently open, mark as seen immediately
@@ -844,6 +881,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                             renderChatMessages(chatBox, oldMessages, friendAvatar);
                         }
                     }
+                    // Update the last message in the chat list
+                    updateLastMessageInChatList(friendId);
                     return;
                 }
 
@@ -1174,6 +1213,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     // Handle message deletion
                     if (updatedMsg.deleted_at) {
+                        // Update the last message in the chat list
+                        updateLastMessageInChatList(updatedMsg.sender_id);
+                        updateLastMessageInChatList(updatedMsg.receiver_id);
+
                         // Only update if this chat is not currently open
                         if (currentOpenChatId !== updatedMsg.sender_id) {
                             // Decrement unseen count but don't go below zero
