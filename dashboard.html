@@ -86,12 +86,6 @@
         </ul>
     </div>
 
-    <!-- Popup -->
-    <div id="popup" class="hidden popup">
-        <span id="popup-message"></span>
-        <button id="popup-close">×</button>
-    </div>
-
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="hidden">
         <div class="loading-box">
@@ -100,12 +94,12 @@
         </div>
     </div>
 
-    <!-- Profile Popup -->
-    <div id="profile-popup" class="popup hidden">
-        <div class="popup-container">
-            <div class="popup-header">
+    <!-- Profile Modal Popup -->
+    <div id="profile-popup" class="modal-popup hidden">
+        <div class="modal-popup-container">
+            <div class="modal-popup-header">
                 <h3>My Profile</h3>
-                <button id="close-profile" class="close-btn">
+                <button id="close-profile" class="modal-close-btn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -114,7 +108,7 @@
                 </button>
             </div>
 
-            <div class="popup-content">
+            <div class="modal-popup-content">
                 <div class="profile-image-section">
                     <div class="profile-preview-container">
                         <img id="profile-preview" src="./assets/icon/download.jpeg" alt="Profile"
@@ -171,7 +165,7 @@
                 </div>
             </div>
 
-            <div class="popup-footer">
+            <div class="modal-popup-footer">
                 <button id="save-profile" class="save-profile-btn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -194,12 +188,12 @@
         </div>
     </div>
 
-    <!-- Username Change Popup -->
-    <div id="username-popup" class="popup hidden">
-        <div class="popup-container">
-            <div class="popup-header">
+    <!-- Username Change Modal Popup -->
+    <div id="username-popup" class="modal-popup hidden">
+        <div class="modal-popup-container">
+            <div class="modal-popup-header">
                 <h3>Change Username</h3>
-                <button id="close-username" class="close-btn">
+                <button id="close-username" class="modal-close-btn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -208,7 +202,7 @@
                 </button>
             </div>
 
-            <div class="popup-content">
+            <div class="modal-popup-content">
                 <div class="form-group">
                     <label for="new-username">New Username</label>
                     <div class="input-container">
@@ -218,8 +212,8 @@
                 </div>
             </div>
 
-            <div class="popup-footer">
-                <button id="cancel-username" class="cancel-btn">
+            <div class="modal-popup-footer">
+                <button id="cancel-username" class="cancel-username-btn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -240,12 +234,12 @@
         </div>
     </div>
 
-    <!-- Notification Popup -->
-    <div id="notification-popup" class="popup hidden">
-        <div class="popup-container">
-            <div class="popup-header">
+    <!-- Notification Modal Popup -->
+    <div id="notification-popup" class="modal-popup hidden">
+        <div class="modal-popup-container">
+            <div class="modal-popup-header">
                 <h3 id="popup-title">Notification</h3>
-                <button id="popup-close" class="close-btn">
+                <button id="popup-close" class="modal-close-btn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -254,14 +248,20 @@
                 </button>
             </div>
 
-            <div class="popup-content">
+            <div class="modal-popup-content">
                 <p id="popup-message">Message content</p>
             </div>
 
-            <div class="popup-footer">
-                <button id="popup-ok" class="btn-ok">OK</button>
+            <div class="modal-popup-footer">
+                <button id="popup-ok" class="modal-btn-ok">OK</button>
             </div>
         </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast-notification" class="toast-notification hidden">
+        <span id="toast-message"></span>
+        <button id="toast-close">×</button>
     </div>
 
     <div id="loading-overlay-end" class="loading-overlay hidden">

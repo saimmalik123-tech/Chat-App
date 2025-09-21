@@ -639,8 +639,8 @@ emoji-picker {
   background: #43a047;
 }
 
-/* Profile Popup Styles */
-.popup {
+/* Modal Popup Styles */
+.modal-popup {
   position: fixed;
   top: 0;
   left: 0;
@@ -655,16 +655,16 @@ emoji-picker {
   transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
-.popup.show {
+.modal-popup.show {
   opacity: 1;
   visibility: visible;
 }
 
-.popup.hidden {
+.modal-popup.hidden {
   display: none;
 }
 
-.popup-container {
+.modal-popup-container {
   background-color: var(--bg);
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
@@ -678,11 +678,11 @@ emoji-picker {
   transition: transform 0.3s ease;
 }
 
-.popup.show .popup-container {
+.modal-popup.show .modal-popup-container {
   transform: scale(1);
 }
 
-.popup-header {
+.modal-popup-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -690,13 +690,13 @@ emoji-picker {
   border-bottom: 1px solid var(--border-color);
 }
 
-.popup-header h3 {
+.modal-popup-header h3 {
   margin: 0;
   font-size: 1.2rem;
   color: var(--text-primary);
 }
 
-.close-btn {
+.modal-close-btn {
   background: none;
   border: none;
   cursor: pointer;
@@ -706,17 +706,17 @@ emoji-picker {
   transition: background-color 0.2s ease;
 }
 
-.close-btn:hover {
+.modal-close-btn:hover {
   background-color: var(--bg-hover);
 }
 
-.popup-content {
+.modal-popup-content {
   padding: 20px;
   overflow-y: auto;
   flex: 1;
 }
 
-.popup-footer {
+.modal-popup-footer {
   padding: 16px 20px;
   border-top: 1px solid var(--border-color);
   display: flex;
@@ -933,7 +933,7 @@ emoji-picker {
   border-color: var(--primary-color);
 }
 
-.cancel-btn,
+.cancel-username-btn,
 .save-username-btn {
   padding: 10px 16px;
   border-radius: 6px;
@@ -946,13 +946,13 @@ emoji-picker {
   border: none;
 }
 
-.cancel-btn {
+.cancel-username-btn {
   background-color: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
 }
 
-.cancel-btn:hover {
+.cancel-username-btn:hover {
   background-color: var(--bg-hover);
   border-color: var(--accent);
   color: var(--accent);
@@ -968,13 +968,7 @@ emoji-picker {
 }
 
 /* Notification Popup Styles */
-#notification-popup #popup-message {
-  margin: 0;
-  padding: 10px 0;
-  color: var(--text-primary);
-}
-
-.btn-ok {
+.modal-btn-ok {
   padding: 10px 16px;
   border-radius: 6px;
   font-weight: 500;
@@ -985,44 +979,44 @@ emoji-picker {
   transition: background-color 0.2s ease;
 }
 
-.btn-ok:hover {
+.modal-btn-ok:hover {
   background-color: var(--primary-dark);
 }
 
-.popup.error .popup-header {
+.modal-popup.error .modal-popup-header {
   background-color: rgba(220, 53, 69, 0.1);
   border-bottom-color: rgba(220, 53, 69, 0.3);
 }
 
-.popup.error .popup-header h3 {
+.modal-popup.error .modal-popup-header h3 {
   color: var(--danger);
 }
 
-.popup.success .popup-header {
+.modal-popup.success .modal-popup-header {
   background-color: rgba(25, 135, 84, 0.1);
   border-bottom-color: rgba(25, 135, 84, 0.3);
 }
 
-.popup.success .popup-header h3 {
+.modal-popup.success .modal-popup-header h3 {
   color: var(--success);
 }
 
-.popup.info .popup-header {
+.modal-popup.info .modal-popup-header {
   background-color: rgba(13, 110, 253, 0.1);
   border-bottom-color: rgba(13, 110, 253, 0.3);
 }
 
-.popup.info .popup-header h3 {
+.modal-popup.info .modal-popup-header h3 {
   color: var(--info);
 }
 
-.popup.confirm .popup-footer {
+.modal-popup.confirm .modal-popup-footer {
   justify-content: center;
   gap: 16px;
 }
 
-.btn-confirm,
-.btn-cancel {
+.modal-btn-confirm,
+.modal-btn-cancel {
   padding: 10px 16px;
   border-radius: 6px;
   font-weight: 500;
@@ -1034,22 +1028,22 @@ emoji-picker {
   border: none;
 }
 
-.btn-confirm {
+.modal-btn-confirm {
   background-color: var(--primary-color);
   color: white;
 }
 
-.btn-confirm:hover {
+.modal-btn-confirm:hover {
   background-color: var(--primary-dark);
 }
 
-.btn-cancel {
+.modal-btn-cancel {
   background-color: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
 }
 
-.btn-cancel:hover {
+.modal-btn-cancel:hover {
   background-color: var(--bg-hover);
   border-color: var(--accent);
   color: var(--accent);
@@ -1175,26 +1169,7 @@ emoji-picker {
   z-index: 9999;
 }
 
-.popup {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  padding: 12px 18px;
-  border-radius: 8px;
-  font-size: 14px;
-  color: #fff;
-  opacity: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  column-gap: 20px;
-  transform: translateY(20px);
-  transition: all 0.28s ease;
-  z-index: 2001123456789;
-}
-
-.modal-content,
-.popup-content {
+.modal-content {
   background: var(--bg);
   color: var(--text-primary);
   padding: 20px;
@@ -1214,24 +1189,43 @@ emoji-picker {
   font-size: 0.95rem;
 }
 
-.popup.show {
+/* Toast Notification Styles */
+.toast-notification {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #fff;
+  opacity: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  column-gap: 20px;
+  transform: translateY(20px);
+  transition: all 0.28s ease;
+  z-index: 2001123456789;
+}
+
+.toast-notification.show {
   opacity: 1;
   transform: translateY(0);
 }
 
-.popup.success {
+.toast-notification.success {
   background: #16a34a;
 }
 
-.popup.error {
+.toast-notification.error {
   background: #dc2626;
 }
 
-.popup.info {
+.toast-notification.info {
   background: var(--accent);
 }
 
-.popup.warning {
+.toast-notification.warning {
   background: #f59e0b;
 }
 
@@ -1264,7 +1258,8 @@ emoji-picker {
   cursor: pointer;
 }
 
-#popup-close {
+#popup-close,
+#toast-close {
   font-size: 15px;
   font-weight: 700;
   color: #666;
@@ -1272,20 +1267,9 @@ emoji-picker {
 }
 
 .close:hover,
-#popup-close:hover {
+#popup-close:hover,
+#toast-close:hover {
   color: #000;
-}
-
-.popup.success {
-  border-left: 6px solid #16a34a;
-}
-
-.popup.error {
-  border-left: 6px solid #dc2626;
-}
-
-.popup.info {
-  border-left: 6px solid var(--accent);
 }
 
 .hidden {
@@ -1315,7 +1299,7 @@ emoji-picker {
   .sidebar {
     width: 100%;
     height: 100%;
-    display: none;
+    display: flex;
     transition: transform 0.28s, opacity 0.28s;
   }
   .sidebar.active {
@@ -1385,20 +1369,20 @@ emoji-picker {
 
 /* Responsive Styles */
 @media (max-width: 600px) {
-  .popup-container {
+  .modal-popup-container {
     width: 95%;
     max-height: 95vh;
   }
 
-  .popup-header {
+  .modal-popup-header {
     padding: 12px 16px;
   }
 
-  .popup-content {
+  .modal-popup-content {
     padding: 16px;
   }
 
-  .popup-footer {
+  .modal-popup-footer {
     padding: 12px 16px;
     flex-direction: column;
     gap: 10px;
@@ -1406,7 +1390,7 @@ emoji-picker {
 
   .save-profile-btn,
   .logout-btn,
-  .cancel-btn,
+  .cancel-username-btn,
   .save-username-btn {
     width: 100%;
     justify-content: center;

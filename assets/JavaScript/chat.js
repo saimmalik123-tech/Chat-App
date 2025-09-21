@@ -23,6 +23,33 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    function showToast(message, type = "info") {
+        const toast = document.getElementById("toast-notification");
+        const messageEl = document.getElementById("toast-message");
+        const closeBtn = document.getElementById("toast-close");
+
+        if (!toast || !messageEl) return;
+
+        messageEl.textContent = message;
+        toast.classList.remove("hidden", "success", "error", "info", "warning");
+        toast.classList.add("show", String(type));
+
+        if (closeBtn) {
+            const newClose = closeBtn.cloneNode(true);
+            closeBtn.parentNode.replaceChild(newClose, closeBtn);
+            newClose.addEventListener('click', () => {
+                toast.classList.add("hidden");
+                toast.classList.remove('show');
+            });
+        }
+
+        // Auto hide after 3 seconds
+        setTimeout(() => {
+            toast.classList.add("hidden");
+            toast.classList.remove('show');
+        }, 3000);
+    }
+
     function showLoading(message = 'Loading...') {
         const overlay = document.getElementById("loading-overlay");
         const msgEl = document.getElementById("loading-message");
@@ -107,7 +134,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             const { data: { user }, error } = await client.auth.getUser();
             if (error || !user) {
-                showPopup("User not logged in", "error");
+                showToast("User not logged in", "error");
                 window.location.href = 'signup.html';
                 return null;
             }
@@ -117,7 +144,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             return user;
         } catch (err) {
             console.error("getCurrentUser error:", err);
-            showPopup("Failed to get current user.", "error");
+            showToast("Failed to get current user.", "error");
             return null;
         }
     }
@@ -132,7 +159,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (updateError) {
                 console.error("Error updating request:", updateError.message || updateError);
-                return showPopup("Failed to accept request.", "error");
+                return showToast("Failed to accept request.", "error");
             }
 
             const { error: insertError } = await client
@@ -141,15 +168,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (insertError) {
                 console.error("Error inserting into friends:", insertError.message || insertError);
-                return showPopup("Failed to add friend.", "error");
+                return showToast("Failed to add friend.", "error");
             }
 
-            showPopup("Friend request accepted!", "success");
+            showToast("Friend request accepted!", "success");
             fetchFriendRequests();
             fetchFriends();
         } catch (err) {
             console.error("Unexpected error:", err);
-            showPopup("An error occurred while accepting request.", "error");
+            showToast("An error occurred while accepting request.", "error");
         }
     }
 
@@ -162,14 +189,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (error) {
                 console.error("Error rejecting request:", error.message || error);
-                return showPopup("Failed to reject request.", "error");
+                return showToast("Failed to reject request.", "error");
             }
 
-            showPopup("Friend request rejected!", "info");
+            showToast("Friend request rejected!", "info");
             fetchFriendRequests();
         } catch (err) {
             console.error("Unexpected error rejecting request:", err);
-            showPopup("Failed to reject friend request.", "error");
+            showToast("Failed to reject friend request.", "error");
         }
     }
 
@@ -312,7 +339,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             renderFriendRequests();
         } catch (err) {
             console.error("Error fetching requests:", err);
-            showPopup("Failed to fetch friend requests.", "error");
+            showToast("Failed to fetch friend requests.", "error");
         } finally {
             hideLoading();
         }
@@ -569,7 +596,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             enableFriendSearch();
         } catch (err) {
             console.error("Error fetching friends:", err);
-            showPopup("Failed to load friends.", "error");
+            showToast("Failed to load friends.", "error");
         } finally {
             hideLoading();
         }
@@ -610,13 +637,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             }]);
             if (error) {
                 console.error("Error sending message:", error);
-                showPopup("Message failed to send. Please try again.", "error");
+                showToast("Message failed to send. Please try again.", "error");
             } else {
                 updateLastMessage(friendId, content, new Date().toISOString());
             }
         } catch (err) {
             console.error("sendMessage error:", err);
-            showPopup("Message failed to send. Please try again.", "error");
+            showToast("Message failed to send. Please try again.", "error");
         }
     }
 
@@ -719,7 +746,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Send friend request
     async function sendFriendRequest(username) {
-        if (!username) return showPopup("Enter a username.", "error");
+        if (!username) return showToast("Enter a username.", "error");
         try {
             const { data: user, error: userError } = await client
                 .from("user_profiles")
@@ -728,12 +755,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .maybeSingle();
 
             if (userError || !user) {
-                return showPopup("User not found.", "error");
+                return showToast("User not found.", "error");
             }
 
             const receiverId = user.user_id;
             if (receiverId === currentUserId) {
-                return showPopup("You cannot send a request to yourself.", "warning");
+                return showToast("You cannot send a request to yourself.", "warning");
             }
 
             const { data: existing, error: existingError } = await client
@@ -744,13 +771,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (existingError) {
                 console.error("Error checking existing request:", existingError);
-                return showPopup("Something went wrong. Try again.", "error");
+                return showToast("Something went wrong. Try again.", "error");
             }
 
             if (existing) {
-                if (existing.status === "pending") return showPopup("You have already sent a request.", "info");
-                if (existing.status === "accepted") return showPopup("You are already friends.", "info");
-                if (existing.status === "rejected") return showPopup("This user rejected your request before.", "warning");
+                if (existing.status === "pending") return showToast("You have already sent a request.", "info");
+                if (existing.status === "accepted") return showToast("You are already friends.", "info");
+                if (existing.status === "rejected") return showToast("This user rejected your request before.", "warning");
             }
 
             const { error: requestError } = await client
@@ -759,13 +786,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (requestError) {
                 console.error("Error sending friend request:", requestError);
-                return showPopup("Failed to send friend request.", "error");
+                return showToast("Failed to send friend request.", "error");
             }
 
-            showPopup("Friend request sent successfully!", "success");
+            showToast("Friend request sent successfully!", "success");
         } catch (err) {
             console.error("Unexpected error in sendFriendRequest:", err);
-            showPopup("Unexpected error. Please try again.", "error");
+            showToast("Unexpected error. Please try again.", "error");
         }
     }
 
@@ -1132,7 +1159,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         } catch (err) {
             console.error("Error opening chat:", err);
-            showPopup("Failed to open chat.", "error");
+            showToast("Failed to open chat.", "error");
         } finally {
             hideLoading();
         }
@@ -1565,7 +1592,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (nameCharCountEl) nameCharCountEl.textContent = newUsernameInput.value.length;
         } catch (err) {
             console.error("Error loading profile:", err);
-            showPopup("Failed to load profile details.", "error");
+            showToast("Failed to load profile details.", "error");
         }
     });
 
@@ -1626,7 +1653,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 Saved!
             `;
 
-            showPopup("Profile updated successfully!", "success");
+            showToast("Profile updated successfully!", "success");
 
             setTimeout(() => {
                 saveProfileBtn.disabled = false;
@@ -1638,7 +1665,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             fetchFriends();
         } catch (err) {
             console.error("Error updating profile:", err);
-            showPopup(`Failed to update profile: ${err.message || err}`, "error");
+            showToast(`Failed to update profile: ${err.message || err}`, "error");
 
             saveProfileBtn.innerHTML = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1664,11 +1691,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 try {
                     await setUserOnlineStatus(false);
                     await client.auth.signOut();
-                    showPopup("Logged out!", "info");
+                    showToast("Logged out!", "info");
                     window.location.href = "signup.html";
                 } catch (err) {
                     console.error("Logout error:", err);
-                    showPopup("Logout failed.", "error");
+                    showToast("Logout failed.", "error");
                 } finally {
                     hideLoading();
                 }
@@ -1694,7 +1721,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     saveUsernameBtn?.addEventListener("click", async () => {
         const newUsername = newUsernameInput?.value.trim();
         if (!newUsername) {
-            showPopup("Username cannot be empty!", "error");
+            showToast("Username cannot be empty!", "error");
             return;
         }
 
@@ -1720,7 +1747,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 Saved!
             `;
 
-            showPopup("Username updated!", "success");
+            showToast("Username updated!", "success");
             profileUsername.textContent = newUsername;
 
             setTimeout(() => {
@@ -1732,7 +1759,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             fetchFriends();
         } catch (err) {
             console.error("Error updating username:", err);
-            showPopup(`Failed to update username: ${err.message || err}`, "error");
+            showToast(`Failed to update username: ${err.message || err}`, "error");
 
             saveUsernameBtn.innerHTML = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1759,16 +1786,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!popup || !messageEl) return;
 
         const buttonsContainer = document.createElement('div');
-        buttonsContainer.className = 'popup-buttons';
+        buttonsContainer.className = 'modal-popup-buttons';
         buttonsContainer.innerHTML = `
-            <button id="popup-confirm" class="btn-confirm">
+            <button id="popup-confirm" class="modal-btn-confirm">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
                     <path d="M20 6L9 17l-5 5"></path>
                 </svg>
                 Yes
             </button>
-            <button id="popup-cancel" class="btn-cancel">
+            <button id="popup-cancel" class="modal-btn-cancel">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
                     <line x1="15" y1="9" x2="9" y2="15"></line>
@@ -1778,7 +1805,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             </button>
         `;
 
-        const existingButtons = popup.querySelector('.popup-buttons');
+        const existingButtons = popup.querySelector('.modal-popup-buttons');
         if (existingButtons) {
             existingButtons.remove();
         }
