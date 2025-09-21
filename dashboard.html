@@ -105,87 +105,81 @@
     <!-- Profile POPUP -->
 
     <div id="profile-popup" class="profile-popup hidden">
-        <div class="profile-backdrop"></div>
-        <div class="profile-content">
+        <div class="profile-modal">
             <div class="profile-header">
-                <h2>My Profile</h2>
-                <span id="close-profile" class="close-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                <div class="profile-title">
+                    <h2>Profile Settings</h2>
+                    <p>Manage your account information</p>
+                </div>
+                <button id="close-profile" class="icon-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
-                </span>
+                </button>
             </div>
 
-            <div class="profile-body">
-                <div class="profile-avatar-section">
-                    <div class="avatar-container">
+            <div class="profile-content">
+                <div class="profile-avatar-wrapper">
+                    <div class="profile-avatar">
                         <img id="profile-preview" src="./assets/icon/user.png" alt="Profile" />
-                        <div class="avatar-overlay">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <path
-                                    d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z">
-                                </path>
-                                <circle cx="12" cy="13" r="4"></circle>
-                            </svg>
+                        <div class="avatar-edit">
+                            <input type="file" id="profile-upload" accept="image/*" />
+                            <label for="profile-upload" class="edit-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <path d="M12 20h9"></path>
+                                    <path
+                                        d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 9.5-9.5a2.121 2.121 0 0 1 0-3z">
+                                    </path>
+                                </svg>
+                            </label>
                         </div>
                     </div>
-                    <input type="file" id="profile-upload" accept="image/*" />
-                    <button class="upload-btn">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                        Change Photo
-                    </button>
+                    <div class="profile-name">
+                        <h3 id="profile-username">Loading...</h3>
+                        <button id="change-username-btn" class="text-btn">Edit username</button>
+                    </div>
                 </div>
 
-                <div class="profile-info-section">
-                    <div class="info-row">
-                        <h3 id="profile-username">Loading...</h3>
-                        <button id="change-username-btn" class="edit-btn">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5a2.121 2.121 0 0 1 0-3z">
-                                </path>
-                            </svg>
-                        </button>
+                <div class="profile-section">
+                    <div class="section-header">
+                        <h4>About Me</h4>
+                        <span class="optional">Optional</span>
                     </div>
-
-                    <div class="bio-section">
-                        <label for="bio">Bio</label>
-                        <textarea id="bio" placeholder="Tell something about yourself..."></textarea>
-                        <div class="char-count">
-                            <span id="bio-count">0</span>/150
+                    <div class="bio-container">
+                        <textarea id="bio" placeholder="Write a short bio about yourself..."></textarea>
+                        <div class="bio-footer">
+                            <span class="char-count"><span id="bio-count">0</span>/150</span>
+                            <button class="clear-btn" id="clear-bio">Clear</button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="profile-footer">
-                <button id="save-profile" class="primary-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                        <polyline points="7 3 7 8 15 8"></polyline>
-                    </svg>
+            <div class="profile-actions">
+                <button id="save-profile" class="btn primary">
+                    <span class="btn-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                            <polyline points="7 3 7 8 15 8"></polyline>
+                        </svg>
+                    </span>
                     Save Changes
                 </button>
-                <button id="logout" class="danger-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                        <polyline points="16 17 21 21 21 17"></polyline>
-                        <line x1="21" y1="21" x2="16" y2="21"></line>
-                    </svg>
+                <button id="logout" class="btn secondary">
+                    <span class="btn-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 21 21 17"></polyline>
+                            <line x1="21" y1="21" x2="16" y2="21"></line>
+                        </svg>
+                    </span>
                     Logout
                 </button>
             </div>
@@ -193,32 +187,35 @@
     </div>
 
     <div id="username-popup" class="username-popup hidden">
-        <div class="profile-backdrop"></div>
-        <div class="profile-content">
+        <div class="profile-modal">
             <div class="profile-header">
-                <h2>Change Username</h2>
-                <span id="close-username" class="close-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                <div class="profile-title">
+                    <h2>Change Username</h2>
+                    <p>Update your display name</p>
+                </div>
+                <button id="close-username" class="icon-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
-                </span>
+                </button>
             </div>
 
-            <div class="profile-body">
+            <div class="profile-content">
                 <div class="form-group">
-                    <label for="new-username">New Username</label>
-                    <input type="text" id="new-username" placeholder="Enter new username" maxlength="20" />
-                    <div class="char-count">
-                        <span id="username-count">0</span>/20
+                    <label for="new-username">Username</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="new-username" placeholder="Enter new username" maxlength="20" />
+                        <span class="input-count"><span id="username-count">0</span>/20</span>
                     </div>
+                    <p class="input-help">This is how other users will see you</p>
                 </div>
             </div>
 
-            <div class="profile-footer">
-                <button id="cancel-username" class="secondary-btn">Cancel</button>
-                <button id="save-username" class="primary-btn">Save</button>
+            <div class="profile-actions">
+                <button id="cancel-username" class="btn ghost">Cancel</button>
+                <button id="save-username" class="btn primary">Save Username</button>
             </div>
         </div>
     </div>
