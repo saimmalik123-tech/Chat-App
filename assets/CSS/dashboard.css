@@ -760,10 +760,21 @@ emoji-picker {
   cursor: pointer;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   transition: background-color 0.2s ease;
+  flex-direction: column;
+  padding: 4px;
+  text-align: center;
+  font-size: 8px;
+  line-height: 1;
 }
 
 .upload-btn:hover {
   background-color: var(--primary-dark);
+}
+
+.upload-btn svg {
+  width: 16px;
+  height: 16px;
+  margin-bottom: 2px;
 }
 
 .profile-info-section {
