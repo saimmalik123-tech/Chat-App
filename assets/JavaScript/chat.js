@@ -99,6 +99,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let currentOpenChatId = null; // Track currently open chat
     let notificationData = {}; // Store notification data for redirect
     let deletionTimeouts = {}; // Track deletion timeouts for messages
+    let processingMessageIds = new Set(); // Track messages being processed to avoid double handling
 
     // ------------- Get current user -------------
     async function getCurrentUser() {
@@ -322,6 +323,30 @@ document.addEventListener("DOMContentLoaded", async () => {
         } else {
             badge.textContent = "";
             badge.style.display = "none";
+        }
+    }
+
+    // ------------- Update unseen count for a friend from database -------------
+    async function updateUnseenCountForFriend(friendId) {
+        try {
+            const { count, error } = await client
+                .from("messages")
+                .select("*", { count: "exact", head: true })
+                .eq("sender_id", friendId)
+                .eq("receiver_id", currentUserId)
+                .eq("seen", false)
+                .is('deleted_at', null); // Exclude deleted messages
+
+            if (error) {
+                console.error("Error updating unseen count:", error);
+                return;
+            }
+
+            const unseenCount = count || 0;
+            unseenCounts[friendId] = unseenCount;
+            updateUnseenBadge(friendId, unseenCount);
+        } catch (err) {
+            console.error("updateUnseenCountForFriend error:", err);
         }
     }
 
@@ -796,6 +821,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                     (newMsg.sender_id === friendId && newMsg.receiver_id === currentUserId);
                 if (!isRelevant) return;
 
+                // Add to processing set to prevent double handling
+                if (processingMessageIds.has(newMsg.id)) {
+                    return;
+                }
+                processingMessageIds.add(newMsg.id);
+
                 upsertMessageAndRender(oldMessages, newMsg);
 
                 // Update the last message in the chat list
@@ -829,8 +860,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                         }
                     } else {
                         // Only increment unseen count if chat is not open
-                        unseenCounts[newMsg.sender_id] = (unseenCounts[newMsg.sender_id] || 0) + 1;
-                        updateUnseenBadge(newMsg.sender_id, unseenCounts[newMsg.sender_id]);
+                        // Use the new function to get accurate count from database
+                        await updateUnseenCountForFriend(friendId);
 
                         // Show notification
                         try {
@@ -857,6 +888,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                         } catch (err) { /* ignore */ }
                     }
                 }
+
+                // Remove from processing set after handling
+                setTimeout(() => {
+                    processingMessageIds.delete(newMsg.id);
+                }, 1000);
             }
         );
 
@@ -1161,8 +1197,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         // Only update if this chat is not currently open
                         if (currentOpenChatId !== senderId) {
-                            unseenCounts[senderId] = (unseenCounts[senderId] || 0) + 1;
-                            updateUnseenBadge(senderId, unseenCounts[senderId]);
+                            // Use the new function to get accurate count from database
+                            updateUnseenCountForFriend(senderId);
                             updateLastMessage(senderId, newMsg.content, newMsg.created_at);
 
                             // Show notification
@@ -1219,11 +1255,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         // Only update if this chat is not currently open
                         if (currentOpenChatId !== updatedMsg.sender_id) {
-                            // Decrement unseen count but don't go below zero
-                            if (unseenCounts[updatedMsg.sender_id] > 0) {
-                                unseenCounts[updatedMsg.sender_id]--;
-                                updateUnseenBadge(updatedMsg.sender_id, unseenCounts[updatedMsg.sender_id]);
-                            }
+                            // Use the new function to get accurate count from database
+                            updateUnseenCountForFriend(updatedMsg.sender_id);
                         }
                         return;
                     }
@@ -1234,11 +1267,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         // Only update if this chat is not currently open
                         if (currentOpenChatId !== senderId) {
-                            // Decrement unseen count but don't go below zero
-                            if (unseenCounts[senderId] > 0) {
-                                unseenCounts[senderId]--;
-                                updateUnseenBadge(senderId, unseenCounts[senderId]);
-                            }
+                            // Use the new function to get accurate count from database
+                            updateUnseenCountForFriend(senderId);
                         }
                     }
                 }
