@@ -102,15 +102,13 @@
         </div>
     </div>
 
-    <!-- Profile POPUP -->
-
-    <div id="user-settings-modal" class="settings-modal hidden">
-        <div class="modal-overlay"></div>
-        <div class="modal-container">
-            <div class="modal-header">
-                <h3 class="modal-title">Account Settings</h3>
-                <button id="close-settings" class="modal-close">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+    <!-- Profile Popup -->
+    <div id="profile-popup" class="popup hidden">
+        <div class="popup-container">
+            <div class="popup-header">
+                <h3>My Profile</h3>
+                <button id="close-profile" class="close-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -118,69 +116,93 @@
                 </button>
             </div>
 
-            <div class="modal-body">
-                <div class="user-avatar-section">
-                    <div class="avatar-container">
-                        <img id="user-avatar" src="./assets/icon/user.png" alt="User Avatar" />
-                        <label for="avatar-upload" class="avatar-upload-btn">
+            <div class="popup-content">
+                <div class="profile-image-section">
+                    <div class="profile-preview-container">
+                        <img id="profile-preview" src="./assets/icon/download.jpeg" alt="Profile"
+                            class="profile-preview">
+                        <label for="profile-upload" class="upload-btn">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                 stroke-linejoin="round">
-                                <path
-                                    d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z">
-                                </path>
-                                <circle cx="12" cy="13" r="4"></circle>
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
                             </svg>
+                            Change Photo
                         </label>
-                        <input type="file" id="avatar-upload" accept="image/*" />
-                    </div>
-                    <div class="user-info">
-                        <h4 id="display-name" class="username">Loading...</h4>
-                        <button id="edit-name-btn" class="edit-name-btn">Edit Name</button>
+                        <input type="file" id="profile-upload" accept="image/*" class="hidden">
                     </div>
                 </div>
 
-                <div class="user-bio-section">
-                    <div class="section-label">
-                        <span>About You</span>
-                        <span class="optional-tag">Optional</span>
+                <div class="profile-info-section">
+                    <div class="profile-username">
+                        <h3 id="profile-username">Username</h3>
+                        <button id="change-username-btn" class="change-username-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                            Change Username
+                        </button>
                     </div>
-                    <div class="bio-wrapper">
-                        <textarea id="user-bio" class="bio-textarea"
-                            placeholder="Tell others about yourself..."></textarea>
-                        <div class="bio-controls">
-                            <span class="char-counter"><span id="bio-char-count">0</span>/150</span>
-                            <button id="clear-bio" class="clear-bio-btn">Clear</button>
+
+                    <div class="profile-bio">
+                        <label for="bio">Bio</label>
+                        <div class="bio-container">
+                            <textarea id="bio" placeholder="Tell something about yourself..."
+                                maxlength="150"></textarea>
+                            <div class="bio-actions">
+                                <span id="bio-char-count" class="char-count">0</span>
+                                <button id="clear-bio" class="clear-bio-btn">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path
+                                            d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2">
+                                        </path>
+                                    </svg>
+                                    Clear
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="modal-footer">
-                <button id="save-settings" class="save-btn">
-                    <span class="btn-text">Save Changes</span>
-                    <div class="btn-loader hidden">
-                        <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <path d="M12 6v6l4 2"></path>
-                        </svg>
-                    </div>
+            <div class="popup-footer">
+                <button id="save-profile" class="save-profile-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path>
+                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                        <polyline points="7 3 7 8 15 8"></polyline>
+                    </svg>
+                    Save Profile
                 </button>
-                <button id="logout-user" class="logout-btn">
-                    <span class="btn-text">Logout</span>
+                <button id="logout" class="logout-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                    Logout
                 </button>
             </div>
         </div>
     </div>
 
-    <div id="name-editor-modal" class="name-editor-modal hidden">
-        <div class="modal-overlay"></div>
-        <div class="modal-container">
-            <div class="modal-header">
-                <h3 class="modal-title">Change Display Name</h3>
-                <button id="close-name-editor" class="modal-close">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+    <!-- Username Change Popup -->
+    <div id="username-popup" class="popup hidden">
+        <div class="popup-container">
+            <div class="popup-header">
+                <h3>Change Username</h3>
+                <button id="close-username" class="close-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -188,23 +210,65 @@
                 </button>
             </div>
 
-            <div class="modal-body">
+            <div class="popup-content">
                 <div class="form-group">
-                    <label for="new-display-name" class="form-label">Display Name</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="new-display-name" class="text-input"
-                            placeholder="Enter your display name" maxlength="20" />
-                        <span class="input-counter"><span id="name-char-count">0</span>/20</span>
+                    <label for="new-username">New Username</label>
+                    <div class="input-container">
+                        <input type="text" id="new-username" placeholder="Enter new username" maxlength="20">
+                        <span id="name-char-count" class="char-count">0</span>
                     </div>
-                    <p class="input-help">This name will be visible to other users</p>
                 </div>
             </div>
 
-            <div class="modal-footer">
-                <button id="cancel-name-change" class="cancel-btn">Cancel</button>
-                <button id="confirm-name-change" class="confirm-btn">Save Name</button>
+            <div class="popup-footer">
+                <button id="cancel-username" class="cancel-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="15" y1="9" x2="9" y2="15"></line>
+                        <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                    Cancel
+                </button>
+                <button id="save-username" class="save-username-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                        <path d="M20 6L9 17l-5 5"></path>
+                    </svg>
+                    Save Username
+                </button>
             </div>
         </div>
+    </div>
+
+    <!-- Notification Popup -->
+    <div id="popup" class="popup hidden">
+        <div class="popup-container">
+            <div class="popup-header">
+                <h3 id="popup-title">Notification</h3>
+                <button id="popup-close" class="close-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="popup-content">
+                <p id="popup-message">Message content</p>
+            </div>
+
+            <div class="popup-footer">
+                <button id="popup-ok" class="btn-ok">OK</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <p id="loading-message">Loading...</p>
     </div>
 
     <script src="https://unpkg.com/@supabase/supabase-js"></script>

@@ -615,226 +615,214 @@ emoji-picker {
   background: #43a047;
 }
 
-/* Settings Modal */
-.settings-modal,
-.name-editor-modal {
+/* Profile Popup Styles */
+.popup {
   position: fixed;
-  inset: 0;
-  z-index: 3000;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
   display: flex;
-  align-items: center;
   justify-content: center;
-  opacity: 1;
+  align-items: center;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
   transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
-.settings-modal.hidden,
-.name-editor-modal.hidden {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
+.popup.show {
+  opacity: 1;
+  visibility: visible;
 }
 
-.modal-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+.popup.hidden {
+  display: none;
 }
 
-.modal-container {
-  background: var(--bg);
-  border-radius: 16px;
-  width: 100%;
+.popup-container {
+  background-color: var(--bg-primary);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 90%;
   max-width: 500px;
-  box-shadow: var(--shadow-1);
-  position: relative;
-  z-index: 1;
-  animation: modalSlideIn 0.3s ease forwards;
+  max-height: 90vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--input-border);
+  transform: scale(0.9);
+  transition: transform 0.3s ease;
 }
 
-.modal-header {
-  padding: 24px;
-  border-bottom: 1px solid var(--input-border);
+.popup.show .popup-container {
+  transform: scale(1);
+}
+
+.popup-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.modal-close {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: transparent;
-  border: none;
-  display: flex;
   align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  color: var(--text-secondary);
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.modal-close:hover {
-  background: var(--input-border);
+.popup-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
   color: var(--text-primary);
 }
 
-.modal-body {
-  padding: 24px;
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.close-btn:hover {
+  background-color: var(--bg-hover);
+}
+
+.popup-content {
+  padding: 20px;
   overflow-y: auto;
   flex: 1;
 }
 
-.user-avatar-section {
+.popup-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color);
   display: flex;
-  align-items: center;
-  gap: 24px;
-  margin-bottom: 32px;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
-.avatar-container {
+/* Profile Popup Specific Styles */
+.profile-image-section {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.profile-preview-container {
   position: relative;
+  width: 120px;
+  height: 120px;
 }
 
-.avatar-container img {
-  width: 100px;
-  height: 100px;
+.profile-preview {
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   object-fit: cover;
-  border: 4px solid var(--bg);
-  box-shadow: var(--shadow-1);
+  border: 4px solid var(--border-color);
 }
 
-.avatar-upload-btn {
+.upload-btn {
   position: absolute;
   bottom: 0;
   right: 0;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 50%;
   width: 36px;
   height: 36px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--button-text);
-  border: none;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   cursor: pointer;
-  box-shadow: var(--shadow-1);
-  transition: transform 0.2s ease, background-color 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: background-color 0.2s ease;
 }
 
-.avatar-upload-btn:hover {
-  transform: scale(1.05);
-  background: var(--text-primary);
+.upload-btn:hover {
+  background-color: var(--primary-dark);
 }
 
-#avatar-upload {
-  display: none;
+.profile-info-section {
+  margin-bottom: 20px;
 }
 
-.user-info {
-  flex: 1;
+.profile-username {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
 }
 
-.username {
-  margin: 0 0 8px;
+.profile-username h3 {
+  margin: 0;
   font-size: 1.3rem;
-  font-weight: 600;
   color: var(--text-primary);
 }
 
-.edit-name-btn {
+.change-username-btn {
   background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 0.9rem;
-  font-weight: 500;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
   cursor: pointer;
-  padding: 0;
-  transition: color 0.2s ease, text-decoration 0.2s ease;
-}
-
-.edit-name-btn:hover {
-  color: var(--text-primary);
-  text-decoration: underline;
-}
-
-.user-bio-section {
-  margin-bottom: 16px;
-}
-
-.section-label {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 6px;
+  transition: all 0.2s ease;
 }
 
-.section-label span:first-child {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.change-username-btn:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
-.optional-tag {
-  font-size: 0.75rem;
-  padding: 2px 8px;
-  border-radius: 12px;
-  background: var(--input-bg);
-  color: var(--text-secondary);
-  border: 1px solid var(--input-border);
+.profile-bio {
+  margin-bottom: 20px;
 }
 
-.bio-wrapper {
+.profile-bio label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.bio-container {
   position: relative;
 }
 
-.bio-textarea {
+#bio {
   width: 100%;
-  min-height: 120px;
-  padding: 16px;
-  border-radius: 12px;
-  border: 1px solid var(--input-border);
-  background: var(--input-bg);
-  resize: none;
-  font-family: inherit;
-  font-size: 1rem;
+  min-height: 80px;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
   color: var(--text-primary);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, height 0.2s ease;
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+  transition: border-color 0.2s ease;
 }
 
-.bio-textarea:focus {
+#bio:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(90, 141, 154, 0.2);
+  border-color: var(--primary-color);
 }
 
-.bio-textarea::placeholder {
-  color: var(--text-secondary);
-}
-
-.bio-controls {
+.bio-actions {
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
   margin-top: 8px;
 }
 
-.char-counter {
+.char-count {
   font-size: 0.8rem;
   color: var(--text-secondary);
 }
@@ -843,193 +831,299 @@ emoji-picker {
   background: none;
   border: none;
   color: var(--text-secondary);
-  font-size: 0.85rem;
-  font-weight: 500;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.2s ease;
 }
 
 .clear-bio-btn:hover {
-  background: var(--input-border);
-  color: var(--text-primary);
+  color: var(--accent);
 }
 
-.modal-footer {
-  padding: 16px 24px;
-  border-top: 1px solid var(--input-border);
-  display: flex;
-  gap: 12px;
-}
-
-.save-btn,
-.logout-btn,
-.cancel-btn,
-.confirm-btn {
-  flex: 1;
-  padding: 14px 20px;
-  border-radius: 10px;
-  border: none;
-  font-size: 1rem;
-  font-weight: 600;
+.save-profile-btn,
+.logout-btn {
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-weight: 500;
   cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 8px;
   transition: all 0.2s ease;
+  border: none;
 }
 
-.save-btn,
-.confirm-btn {
-  background: var(--accent);
-  color: var(--button-text);
+.save-profile-btn {
+  background-color: var(--primary-color);
+  color: white;
 }
 
-.save-btn:hover,
-.confirm-btn:hover {
-  opacity: 0.9;
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-1);
+.save-profile-btn:hover {
+  background-color: var(--primary-dark);
 }
 
 .logout-btn {
-  background: #ef4444;
-  color: var(--button-text);
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
 }
 
 .logout-btn:hover {
-  background: #dc2626;
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-1);
+  background-color: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Username Change Popup Styles */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.input-container {
+  position: relative;
+}
+
+#new-username {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 1rem;
+  transition: border-color 0.2s ease;
+}
+
+#new-username:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.cancel-btn,
+.save-username-btn {
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  border: none;
 }
 
 .cancel-btn {
-  background: var(--input-bg);
-  color: var(--text-primary);
-  border: 1px solid var(--input-border);
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
 }
 
 .cancel-btn:hover {
-  background: var(--input-border);
-  transform: translateY(-2px);
+  background-color: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
-.btn-text {
-  transition: opacity 0.2s ease;
+.save-username-btn {
+  background-color: var(--primary-color);
+  color: white;
 }
 
+.save-username-btn:hover {
+  background-color: var(--primary-dark);
+}
+
+/* Notification Popup Styles */
+#popup-message {
+  margin: 0;
+  padding: 10px 0;
+  color: var(--text-primary);
+}
+
+.btn-ok {
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  transition: background-color 0.2s ease;
+}
+
+.btn-ok:hover {
+  background-color: var(--primary-dark);
+}
+
+.popup.error .popup-header {
+  background-color: rgba(220, 53, 69, 0.1);
+  border-bottom-color: rgba(220, 53, 69, 0.3);
+}
+
+.popup.error .popup-header h3 {
+  color: var(--danger);
+}
+
+.popup.success .popup-header {
+  background-color: rgba(25, 135, 84, 0.1);
+  border-bottom-color: rgba(25, 135, 84, 0.3);
+}
+
+.popup.success .popup-header h3 {
+  color: var(--success);
+}
+
+.popup.info .popup-header {
+  background-color: rgba(13, 110, 253, 0.1);
+  border-bottom-color: rgba(13, 110, 253, 0.3);
+}
+
+.popup.info .popup-header h3 {
+  color: var(--info);
+}
+
+.popup.confirm .popup-footer {
+  justify-content: center;
+  gap: 16px;
+}
+
+.btn-confirm,
+.btn-cancel {
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.btn-confirm {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-confirm:hover {
+  background-color: var(--primary-dark);
+}
+
+.btn-cancel {
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-cancel:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.loading-overlay.hidden {
+  display: none;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: var(--primary-color);
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-overlay p {
+  color: white;
+  font-size: 1.1rem;
+}
+
+/* Button Loader */
 .btn-loader {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.btn-loader.hidden {
-  display: none;
-}
-
-.spinner {
+.btn-loader .spinner {
   animation: spin 1s linear infinite;
 }
 
-.form-group {
-  margin-bottom: 24px;
-}
-
-.form-label {
-  display: block;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 10px;
-}
-
-.input-wrapper {
-  position: relative;
-}
-
-.text-input {
-  width: 100%;
-  padding: 14px 16px;
-  border-radius: 10px;
-  border: 1px solid var(--input-border);
-  background: var(--input-bg);
-  font-family: inherit;
-  font-size: 1rem;
-  color: var(--text-primary);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.text-input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(90, 141, 154, 0.2);
-}
-
-.text-input::placeholder {
-  color: var(--text-secondary);
-}
-
-.input-counter {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  pointer-events: none;
-}
-
-.input-help {
-  margin: 8px 0 0;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
-@keyframes modalSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Responsive adjustments */
-@media (max-width: 640px) {
-  .modal-container {
-    max-width: 95%;
-    border-radius: 12px;
+/* Responsive Styles */
+@media (max-width: 600px) {
+  .popup-container {
+    width: 95%;
+    max-height: 95vh;
   }
 
-  .modal-header,
-  .modal-body,
-  .modal-footer {
-    padding: 20px;
+  .popup-header {
+    padding: 12px 16px;
   }
 
-  .user-avatar-section {
+  .popup-content {
+    padding: 16px;
+  }
+
+  .popup-footer {
+    padding: 12px 16px;
     flex-direction: column;
-    text-align: center;
-    gap: 16px;
+    gap: 10px;
   }
 
-  .modal-footer {
+  .save-profile-btn,
+  .logout-btn,
+  .cancel-btn,
+  .save-username-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .profile-username {
     flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .change-username-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
+
 /* Back button */
 .backBtn {
   background: var(--accent);

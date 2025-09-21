@@ -207,8 +207,21 @@ document.addEventListener("DOMContentLoaded", async () => {
                     <img src="${req.avatar}" alt="User" class="msg-avatar" style="width:30px;height:30px;border-radius:50%;object-fit:cover;">
                     <div class="message-text">${req.text}</div>
                     <div class="message-actions">
-                        <button class="accept-btn">Accept</button>
-                        <button class="reject-btn">Reject</button>
+                        <button class="accept-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                                <path d="M20 6L9 17l-5 5"></path>
+                            </svg>
+                            Accept
+                        </button>
+                        <button class="reject-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="15" y1="9" x2="9" y2="15"></line>
+                                <line x1="9" y1="9" x2="15" y2="15"></line>
+                            </svg>
+                            Reject
+                        </button>
                     </div>
                 `;
                 const acceptBtn = li.querySelector(".accept-btn");
@@ -1367,6 +1380,228 @@ document.addEventListener("DOMContentLoaded", async () => {
     const saveUsernameBtn = document.getElementById("save-username");
     const newUsernameInput = document.getElementById("new-username");
 
+    // Add icons to buttons
+    if (closeProfile) {
+        closeProfile.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        `;
+    }
+
+    if (saveProfileBtn) {
+        saveProfileBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+            Save Profile
+        `;
+    }
+
+    if (changeUsernameBtn) {
+        changeUsernameBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+            Change Username
+        `;
+    }
+
+    if (closeUsername) {
+        closeUsername.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        `;
+    }
+
+    if (cancelUsername) {
+        cancelUsername.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="15" y1="9" x2="9" y2="15"></line>
+                <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+            Cancel
+        `;
+    }
+
+    if (saveUsernameBtn) {
+        saveUsernameBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+                <path d="M20 6L9 17l-5 5"></path>
+            </svg>
+            Save Username
+        `;
+    }
+
+    if (logoutBtn) {
+        logoutBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            Logout
+        `;
+    }
+
+    // Bio enhancements
+    const maxBioLength = 150;
+    const bioCharCount = document.getElementById("bio-char-count");
+    const clearBioBtn = document.getElementById("clear-bio");
+
+    // If the elements don't exist, create them
+    if (bioInput && !bioCharCount) {
+        const charCount = document.createElement('span');
+        charCount.id = 'bio-char-count';
+        charCount.className = 'char-count';
+        bioInput.parentNode.appendChild(charCount);
+    }
+
+    if (bioInput && !clearBioBtn) {
+        const clearBtn = document.createElement('button');
+        clearBtn.id = 'clear-bio';
+        clearBtn.className = 'clear-bio-btn';
+        clearBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
+            </svg>
+            Clear
+        `;
+        bioInput.parentNode.appendChild(clearBtn);
+    }
+
+    // Now get the elements again in case they were created
+    const bioCharCountEl = document.getElementById("bio-char-count");
+    const clearBioBtnEl = document.getElementById("clear-bio");
+
+    if (bioInput && bioCharCountEl) {
+        // Set initial count
+        bioCharCountEl.textContent = bioInput.value.length;
+
+        // Update on input
+        bioInput.addEventListener('input', () => {
+            const currentLength = bioInput.value.length;
+            bioCharCountEl.textContent = currentLength;
+
+            // Change color when approaching limit
+            if (currentLength > maxBioLength * 0.9) {
+                bioCharCountEl.style.color = 'var(--accent)';
+            } else {
+                bioCharCountEl.style.color = 'var(--text-secondary)';
+            }
+
+            // Auto-resize
+            bioInput.style.height = 'auto';
+            bioInput.style.height = Math.min(bioInput.scrollHeight, 200) + 'px';
+        });
+
+        // Clear button
+        if (clearBioBtnEl) {
+            clearBioBtnEl.addEventListener('click', () => {
+                bioInput.value = '';
+                bioCharCountEl.textContent = '0';
+                bioInput.style.height = 'auto';
+                bioInput.focus();
+            });
+        }
+
+        // Enforce character limit
+        bioInput.addEventListener('keydown', (e) => {
+            const allowedKeys = [
+                'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
+                'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'
+            ];
+
+            if (!allowedKeys.includes(e.key) &&
+                bioInput.value.length >= maxBioLength &&
+                !e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+            }
+        });
+
+        bioInput.addEventListener('paste', (e) => {
+            const paste = (e.clipboardData || window.clipboardData).getData('text');
+            if (bioInput.value.length + paste.length > maxBioLength) {
+                e.preventDefault();
+            }
+        });
+    }
+
+    // Username enhancements
+    const maxNameLength = 20;
+    const nameCharCount = document.getElementById("name-char-count");
+
+    if (newUsernameInput && !nameCharCount) {
+        const charCount = document.createElement('span');
+        charCount.id = 'name-char-count';
+        charCount.className = 'char-count';
+        newUsernameInput.parentNode.appendChild(charCount);
+    }
+
+    const nameCharCountEl = document.getElementById("name-char-count");
+
+    if (newUsernameInput && nameCharCountEl) {
+        // Set initial count
+        nameCharCountEl.textContent = newUsernameInput.value.length;
+
+        // Update on input
+        newUsernameInput.addEventListener('input', () => {
+            const currentLength = newUsernameInput.value.length;
+            nameCharCountEl.textContent = currentLength;
+
+            // Change color when approaching limit
+            if (currentLength > maxNameLength * 0.9) {
+                nameCharCountEl.style.color = 'var(--accent)';
+            } else {
+                nameCharCountEl.style.color = 'var(--text-secondary)';
+            }
+        });
+
+        // Enforce character limit
+        newUsernameInput.addEventListener('keydown', (e) => {
+            const allowedKeys = [
+                'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
+                'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'
+            ];
+
+            if (!allowedKeys.includes(e.key) &&
+                newUsernameInput.value.length >= maxNameLength &&
+                !e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+            }
+        });
+
+        newUsernameInput.addEventListener('paste', (e) => {
+            const paste = (e.clipboardData || window.clipboardData).getData('text');
+            if (newUsernameInput.value.length + paste.length > maxNameLength) {
+                e.preventDefault();
+            }
+        });
+    }
+
+    // Create loader function
+    function createLoader() {
+        const loader = document.createElement('div');
+        loader.className = 'btn-loader';
+        loader.innerHTML = `
+            <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 6v6l4 2"></path>
+            </svg>
+            <span>Saving...</span>
+        `;
+        return loader;
+    }
+
     profilePic?.addEventListener("click", async () => {
         if (!profilePopup) return;
         profilePopup.classList.remove("hidden");
@@ -1385,6 +1620,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             bioInput.value = profile?.bio || "";
             profileUsername.textContent = profile?.user_name || "Unknown User";
             newUsernameInput.value = profile?.user_name || ""; // Pre-fill username for editing
+
+            // Update character counts
+            if (bioCharCountEl) bioCharCountEl.textContent = bioInput.value.length;
+            if (nameCharCountEl) nameCharCountEl.textContent = newUsernameInput.value.length;
         } catch (err) {
             console.error("Error loading profile:", err);
             showPopup("Failed to load profile details.", "error");
@@ -1407,7 +1646,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     saveProfileBtn?.addEventListener("click", async () => {
-        showLoading("Saving profile...");
+        // Store original button content
+        const originalContent = saveProfileBtn.innerHTML;
+
+        // Disable button and show loader
+        saveProfileBtn.disabled = true;
+        saveProfileBtn.innerHTML = '';
+        saveProfileBtn.appendChild(createLoader());
+
         try {
             let imageUrl = profilePreview?.src || DEFAULT_PROFILE_IMG;
             const bio = bioInput?.value.trim() || "";
@@ -1435,31 +1681,70 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (error) throw error;
 
+            // Show success feedback
+            saveProfileBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                    <path d="M20 6L9 17l-5 5"></path>
+                </svg>
+                Saved!
+            `;
+
             showPopup("Profile updated successfully!", "success");
-            profilePopup?.classList.add("hidden");
+
+            // Reset button after success
+            setTimeout(() => {
+                saveProfileBtn.disabled = false;
+                saveProfileBtn.innerHTML = originalContent;
+                profilePopup?.classList.add("hidden");
+            }, 1500);
+
             fetchCurrentUserAvatar();
             fetchFriends(); // refresh friend avatars
         } catch (err) {
             console.error("Error updating profile:", err);
             showPopup(`Failed to update profile: ${err.message || err}`, "error");
-        } finally {
-            hideLoading();
+
+            // Show error feedback
+            saveProfileBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                Error
+            `;
+
+            // Reset button after error
+            setTimeout(() => {
+                saveProfileBtn.disabled = false;
+                saveProfileBtn.innerHTML = originalContent;
+            }, 2000);
         }
     });
 
     logoutBtn?.addEventListener("click", async () => {
-        showLoading("Logging out...");
-        try {
-            await setUserOnlineStatus(false);
-            await client.auth.signOut();
-            showPopup("Logged out!", "info");
-            window.location.href = "signup.html";
-        } catch (err) {
-            console.error("Logout error:", err);
-            showPopup("Logout failed.", "error");
-        } finally {
-            hideLoading();
-        }
+        // Show confirmation popup instead of alert
+        showConfirmPopup(
+            "Are you sure you want to logout?",
+            async () => {
+                showLoading("Logging out...");
+                try {
+                    await setUserOnlineStatus(false);
+                    await client.auth.signOut();
+                    showPopup("Logged out!", "info");
+                    window.location.href = "signup.html";
+                } catch (err) {
+                    console.error("Logout error:", err);
+                    showPopup("Logout failed.", "error");
+                } finally {
+                    hideLoading();
+                }
+            },
+            () => {
+                // Do nothing on cancel
+            }
+        );
     });
 
     changeUsernameBtn?.addEventListener("click", () => {
@@ -1481,7 +1766,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        showLoading("Updating username...");
+        // Store original button content
+        const originalContent = saveUsernameBtn.innerHTML;
+
+        // Disable button and show loader
+        saveUsernameBtn.disabled = true;
+        saveUsernameBtn.innerHTML = '';
+        saveUsernameBtn.appendChild(createLoader());
+
         try {
             const { error } = await client
                 .from("user_profiles")
@@ -1490,17 +1782,114 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (error) throw error;
 
+            // Show success feedback
+            saveUsernameBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                    <path d="M20 6L9 17l-5 5"></path>
+                </svg>
+                Saved!
+            `;
+
             showPopup("Username updated!", "success");
             profileUsername.textContent = newUsername;
-            usernamePopup?.classList.add("hidden");
+
+            // Reset button after success
+            setTimeout(() => {
+                saveUsernameBtn.disabled = false;
+                saveUsernameBtn.innerHTML = originalContent;
+                usernamePopup?.classList.add("hidden");
+            }, 1500);
+
             fetchFriends();
         } catch (err) {
             console.error("Error updating username:", err);
             showPopup(`Failed to update username: ${err.message || err}`, "error");
-        } finally {
-            hideLoading();
+
+            // Show error feedback
+            saveUsernameBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                Error
+            `;
+
+            // Reset button after error
+            setTimeout(() => {
+                saveUsernameBtn.disabled = false;
+                saveUsernameBtn.innerHTML = originalContent;
+            }, 2000);
         }
     });
+
+    // ------------- Confirmation popup function -------------
+    function showConfirmPopup(message, onConfirm, onCancel) {
+        const popup = document.getElementById("popup");
+        const messageEl = document.getElementById("popup-message");
+        const closeBtn = document.getElementById("popup-close");
+
+        if (!popup || !messageEl) return;
+
+        // Add confirm and cancel buttons
+        const buttonsContainer = document.createElement('div');
+        buttonsContainer.className = 'popup-buttons';
+        buttonsContainer.innerHTML = `
+            <button id="popup-confirm" class="btn-confirm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                    <path d="M20 6L9 17l-5 5"></path>
+                </svg>
+                Yes
+            </button>
+            <button id="popup-cancel" class="btn-cancel">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                No
+            </button>
+        `;
+
+        // Clear any existing buttons
+        const existingButtons = popup.querySelector('.popup-buttons');
+        if (existingButtons) {
+            existingButtons.remove();
+        }
+
+        messageEl.textContent = message;
+        popup.appendChild(buttonsContainer);
+        popup.classList.remove("hidden", "error", "success", "info");
+        popup.classList.add("show", "confirm");
+
+        const confirmBtn = document.getElementById('popup-confirm');
+        const cancelBtn = document.getElementById('popup-cancel');
+
+        const handleClose = () => {
+            popup.classList.add("hidden");
+            popup.classList.remove('show');
+            buttonsContainer.remove();
+        };
+
+        const newClose = closeBtn.cloneNode(true);
+        closeBtn.parentNode.replaceChild(newClose, closeBtn);
+        newClose.addEventListener('click', () => {
+            handleClose();
+            if (onCancel) onCancel();
+        });
+
+        confirmBtn.addEventListener('click', () => {
+            handleClose();
+            if (onConfirm) onConfirm();
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            handleClose();
+            if (onCancel) onCancel();
+        });
+    }
 
     // ------------- Initialize database schema if needed -------------
     async function initializeDatabaseSchema() {
