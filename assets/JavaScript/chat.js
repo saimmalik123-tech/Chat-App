@@ -1137,7 +1137,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ------------- Handle notification redirects -------------
     function handleNotificationRedirect() {
         if (notificationData.type === 'message' && notificationData.senderId) {
-            // Get friend details
             client
                 .from("user_profiles")
                 .select("user_name, profile_image_url")
