@@ -1,7 +1,7 @@
 import { client } from "../../supabase.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
-    // ---------------- Utility UI helpers ----------------
+    // UI helpers
     function showPopup(message, type = "info") {
         const popup = document.getElementById("popup");
         const messageEl = document.getElementById("popup-message");
@@ -44,7 +44,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         overlay.style.display = "none";
     }
 
-    // ---------------- Notifications ----------------
+    // Notification permissions
     async function requestNotificationPermission() {
         if (!("Notification" in window)) {
             console.warn("Browser does not support notifications.");
@@ -61,11 +61,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.warn("Notification permission error", err);
         }
     }
-    await requestNotificationPermission(); // Request permission early
+    await requestNotificationPermission();
 
-    // ---------------- Current user avatar & identity ----------------
+    // Default profile image
     const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
 
+    // Fetch current user avatar
     async function fetchCurrentUserAvatar(profileImageSelector = '.profile-pic') {
         const profileImage = document.querySelector(profileImageSelector);
         if (!profileImage) return;
@@ -91,17 +92,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     fetchCurrentUserAvatar();
 
-    // ------------- state -------------
+    // App state
     let currentUserId = null;
     let friendRequests = [];
     let statusChannelRef = null;
-    let unseenCounts = {}; // map friendId -> count
-    let currentOpenChatId = null; // Track currently open chat
-    let notificationData = {}; // Store notification data for redirect
-    let deletionTimeouts = {}; // Track deletion timeouts for messages
-    let processingMessageIds = new Set(); // Track messages being processed to avoid double handling
+    let unseenCounts = {};
+    let currentOpenChatId = null;
+    let notificationData = {};
+    let deletionTimeouts = {};
+    let processingMessageIds = new Set();
 
-    // ------------- Get current user -------------
+    // Get current user
     async function getCurrentUser() {
         try {
             const { data: { user }, error } = await client.auth.getUser();
@@ -121,7 +122,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Friend Requests (accept/reject) -------------
+    // Friend request actions
     async function acceptRequest(requestId, senderId) {
         try {
             const { error: updateError } = await client
@@ -144,8 +145,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             showPopup("Friend request accepted!", "success");
-            fetchFriendRequests(); // Refresh requests
-            fetchFriends(); // Refresh friends list
+            fetchFriendRequests();
+            fetchFriends();
         } catch (err) {
             console.error("Unexpected error:", err);
             showPopup("An error occurred while accepting request.", "error");
@@ -165,14 +166,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             showPopup("Friend request rejected!", "info");
-            fetchFriendRequests(); // Refresh requests
+            fetchFriendRequests();
         } catch (err) {
             console.error("Unexpected error rejecting request:", err);
             showPopup("Failed to reject friend request.", "error");
         }
     }
 
-    // ------------- Online status -------------
+    // User online status
     async function setUserOnlineStatus(isOnline) {
         if (!currentUserId) return;
         try {
@@ -184,11 +185,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     window.addEventListener('beforeunload', () => {
         setUserOnlineStatus(false);
-        // Clear all deletion timeouts when page unloads
         Object.values(deletionTimeouts).forEach(timeoutId => clearTimeout(timeoutId));
     });
 
-    // ------------- Friend Request popup rendering -------------
+    // Render friend requests
     function renderFriendRequests() {
         const messageList = document.getElementById("message-list");
         const unreadBadge = document.getElementById("unread-count");
@@ -239,7 +239,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         unreadBadge.textContent = (friendRequests && friendRequests.length) ? friendRequests.length : "0";
     }
 
-    // toggle message popup
+    // Toggle message popup
     document.getElementById("message")?.addEventListener("click", () => {
         const popup = document.getElementById("message-popup");
         if (popup) popup.style.display = popup.style.display === "block" ? "none" : "block";
@@ -253,7 +253,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // ------------- Fetch friend requests -------------
+    // Fetch friend requests
     async function fetchFriendRequests() {
         if (!currentUserId) return;
 
@@ -318,7 +318,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Unseen badge update -------------
+    // Update unseen message badge
     function updateUnseenBadge(friendId, count) {
         const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
         if (!chatLi) return;
@@ -339,7 +339,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Update unseen count for a friend from database -------------
+    // Update unseen count for a friend
     async function updateUnseenCountForFriend(friendId) {
         try {
             const { count, error } = await client
@@ -348,7 +348,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .eq("sender_id", friendId)
                 .eq("receiver_id", currentUserId)
                 .eq("seen", false)
-                .is('deleted_at', null); // Exclude deleted messages
+                .is('deleted_at', null);
 
             if (error) {
                 console.error("Error updating unseen count:", error);
@@ -363,17 +363,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Schedule message deletion -------------
+    // Schedule message deletion
     function scheduleMessageDeletion(messageId, friendId, delay = 30000) {
-        // Clear any existing timeout for this message
         if (deletionTimeouts[messageId]) {
             clearTimeout(deletionTimeouts[messageId]);
         }
 
-        // Set new timeout
         deletionTimeouts[messageId] = setTimeout(async () => {
             try {
-                // Soft delete the message
                 const { error } = await client
                     .from("messages")
                     .update({ deleted_at: new Date().toISOString() })
@@ -383,7 +380,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     console.error("Error deleting message:", error);
                 } else {
                     console.log(`Message ${messageId} deleted after timeout`);
-                    // Update the last message in the chat list
                     updateLastMessageInChatList(friendId);
                 }
             } catch (err) {
@@ -391,15 +387,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             } finally {
                 delete deletionTimeouts[messageId];
             }
-        }, delay); // Default 30 seconds
+        }, delay);
     }
 
-    // ------------- Delete seen messages for a chat -------------
+    // Delete seen messages for a chat
     async function deleteSeenMessagesForChat(friendId) {
         if (!currentUserId) return;
 
         try {
-            // Get all seen messages for this chat that haven't been deleted yet
             const { data: seenMessages, error: fetchError } = await client
                 .from("messages")
                 .select("id")
@@ -417,7 +412,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            // Clear any pending timeouts for these messages
             seenMessages.forEach(msg => {
                 if (deletionTimeouts[msg.id]) {
                     clearTimeout(deletionTimeouts[msg.id]);
@@ -425,7 +419,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             });
 
-            // Soft delete all seen messages
             const messageIds = seenMessages.map(msg => msg.id);
             const { error: updateError } = await client
                 .from("messages")
@@ -436,7 +429,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.error("Error deleting seen messages for chat:", updateError);
             } else {
                 console.log(`Deleted ${messageIds.length} seen messages for chat with ${friendId}`);
-                // Update the last message in the chat list
                 updateLastMessageInChatList(friendId);
             }
         } catch (err) {
@@ -444,15 +436,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Update last message in chat list -------------
+    // Update last message in chat list
     async function updateLastMessageInChatList(friendId) {
         try {
-            // Get the latest non-deleted message for this chat
             const { data: lastMsgData } = await client
                 .from("messages")
                 .select("content, created_at, sender_id, receiver_id")
                 .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
-                .is('deleted_at', null) // Exclude deleted messages
+                .is('deleted_at', null)
                 .order("created_at", { ascending: false })
                 .limit(1)
                 .maybeSingle();
@@ -460,7 +451,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             const lastMessageText = lastMsgData?.content || "No messages yet";
             const lastMessageTime = lastMsgData ? new Date(lastMsgData.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
 
-            // Update the chat list item
             const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
             if (chatLi) {
                 const lastMessageEl = chatLi.querySelector(".last-message");
@@ -474,7 +464,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Fetch friends / chat list -------------
+    // Fetch friends list
     async function fetchFriends() {
         showLoading("Fetching friends...");
         if (!currentUserId) {
@@ -514,7 +504,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     .from("messages")
                     .select("content, created_at, sender_id, receiver_id")
                     .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
-                    .is('deleted_at', null) // Exclude deleted messages
+                    .is('deleted_at', null)
                     .order("created_at", { ascending: false })
                     .limit(1)
                     .maybeSingle();
@@ -530,7 +520,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         .eq("sender_id", friendId)
                         .eq("receiver_id", currentUserId)
                         .eq("seen", false)
-                        .is('deleted_at', null); // Exclude deleted messages
+                        .is('deleted_at', null);
 
                     if (!unseenError) unseenCount = count || 0;
                 } catch (err) {
@@ -585,7 +575,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Friend search (debounced) -------------
+    // Friend search functionality
     function enableFriendSearch() {
         const searchInput = document.getElementById("search-friends");
         const chatList = document.querySelector(".chat-list");
@@ -609,7 +599,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // ------------- Send message -------------
+    // Send message
     async function sendMessage(friendId, content) {
         if (!content || !content.trim()) return;
         try {
@@ -630,7 +620,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Mark messages as seen and schedule deletion -------------
+    // Mark messages as seen
     async function markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar) {
         if (!currentUserId) return;
         try {
@@ -640,7 +630,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .eq("receiver_id", currentUserId)
                 .eq("sender_id", friendId)
                 .eq("seen", false)
-                .is('deleted_at', null); // Exclude already deleted messages
+                .is('deleted_at', null);
 
             if (fetchError) {
                 console.error("Error fetching unseen messages:", fetchError);
@@ -664,12 +654,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 unseenCounts[friendId] = 0;
                 updateUnseenBadge(friendId, 0);
 
-                // Update the UI to show messages as seen
                 unseenMessages.forEach(msg => {
                     const idx = oldMessages.findIndex(m => m.id === msg.id);
                     if (idx !== -1) oldMessages[idx].seen = true;
-
-                    // Schedule deletion for this message after 30 seconds
                     scheduleMessageDeletion(msg.id, friendId);
                 });
                 renderChatMessages(chatBox, oldMessages, friendAvatar);
@@ -679,14 +666,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Fetch messages (excluding deleted ones) -------------
+    // Fetch messages
     async function fetchMessages(friendId) {
         try {
             const { data, error } = await client
                 .from("messages")
                 .select("*")
                 .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
-                .is('deleted_at', null) // Exclude deleted messages
+                .is('deleted_at', null)
                 .order("created_at", { ascending: true });
 
             if (error) {
@@ -700,6 +687,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Render chat messages
     function renderChatMessages(chatBox, msgs, friendAvatar) {
         if (!chatBox) return;
         chatBox.innerHTML = "";
@@ -729,7 +717,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    // ------------- Send friend request -------------
+    // Send friend request
     async function sendFriendRequest(username) {
         if (!username) return showPopup("Enter a username.", "error");
         try {
@@ -781,7 +769,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Realtime: subscribeToMessages -------------
+    // Update message seen status
     function updateMessageSeenStatus(chatBox, messageId) {
         const chatMessage = chatBox.querySelector(`.message[data-message-id="${messageId}"] .seen-status`);
         if (chatMessage) {
@@ -789,6 +777,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Subscribe to messages
     async function subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator) {
         function upsertMessageAndRender(oldMessagesArr, msgObj) {
             const idx = oldMessagesArr.findIndex(m => m.id === msgObj.id);
@@ -834,20 +823,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                     (newMsg.sender_id === friendId && newMsg.receiver_id === currentUserId);
                 if (!isRelevant) return;
 
-                // Add to processing set to prevent double handling
                 if (processingMessageIds.has(newMsg.id)) {
                     return;
                 }
                 processingMessageIds.add(newMsg.id);
 
                 upsertMessageAndRender(oldMessages, newMsg);
-
-                // Update the last message in the chat list
                 updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
-                // Only handle unseen count if this is a received message
                 if (newMsg.receiver_id === currentUserId) {
-                    // If this chat is currently open, mark as seen immediately
                     if (currentOpenChatId === friendId) {
                         try {
                             await client
@@ -855,28 +839,21 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 .update({ seen: true })
                                 .eq("id", newMsg.id);
 
-                            // Update local message state
                             const idx = oldMessages.findIndex(m => m.id === newMsg.id);
                             if (idx !== -1) {
                                 oldMessages[idx].seen = true;
                             }
                             renderChatMessages(chatBox, oldMessages, friendAvatar);
 
-                            // Update unseen count in real-time
                             unseenCounts[newMsg.sender_id] = 0;
                             updateUnseenBadge(newMsg.sender_id, 0);
-
-                            // Schedule deletion for this message after 30 seconds
                             scheduleMessageDeletion(newMsg.id, friendId);
                         } catch (err) {
                             console.error("Error marking message as seen:", err);
                         }
                     } else {
-                        // Only increment unseen count if chat is not open
-                        // Use the new function to get accurate count from database
                         await updateUnseenCountForFriend(friendId);
 
-                        // Show notification
                         try {
                             const senderName = await getUsername(newMsg.sender_id);
                             if (Notification.permission === "granted") {
@@ -887,13 +864,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                                 notif.addEventListener('click', () => {
                                     window.focus();
-                                    // Store notification data for redirect
                                     notificationData = {
                                         type: 'message',
                                         senderId: newMsg.sender_id,
                                         senderName
                                     };
-                                    // Redirect to dashboard
                                     window.location.href = '#dashboard';
                                     notif.close();
                                 });
@@ -902,14 +877,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                     }
                 }
 
-                // Remove from processing set after handling
                 setTimeout(() => {
                     processingMessageIds.delete(newMsg.id);
                 }, 1000);
             }
         );
 
-        // Listen for message updates (including deletions)
+        // Listen for message updates
         msgChannel.on(
             "postgres_changes",
             { event: "UPDATE", schema: "public", table: "messages" },
@@ -920,9 +894,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     (updated.sender_id === friendId && updated.receiver_id === currentUserId);
                 if (!isRelevant) return;
 
-                // Handle message deletion
                 if (updated.deleted_at) {
-                    // Only remove from UI if current user is the receiver
                     if (updated.receiver_id === currentUserId) {
                         const idx = oldMessages.findIndex(m => m.id === updated.id);
                         if (idx !== -1) {
@@ -930,12 +902,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                             renderChatMessages(chatBox, oldMessages, friendAvatar);
                         }
                     }
-                    // Update the last message in the chat list
                     updateLastMessageInChatList(friendId);
                     return;
                 }
 
-                // Handle seen status updates
                 const idx = oldMessages.findIndex(m => m.id === updated.id);
                 if (idx !== -1) {
                     oldMessages[idx] = { ...oldMessages[idx], ...updated };
@@ -995,9 +965,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         return { msgChannel, typingChannel, statusChannelRef };
     }
 
-    // ------------- Open chat window -------------
+    // Open chat window
     async function openChat(friendId, friendName, friendAvatar, fromNotification = false) {
-        // Set the currently open chat
         currentOpenChatId = friendId;
 
         const chatContainer = document.querySelector("div.chat-area");
@@ -1018,7 +987,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (chatHeaderName) chatHeaderName.textContent = friendName || "Unknown";
         if (chatHeaderImg) chatHeaderImg.src = friendAvatar || DEFAULT_PROFILE_IMG;
 
-        // For mobile view, adjust UI
         if (window.innerWidth <= 768 || fromNotification) {
             if (sidebar) sidebar.style.display = "none";
             if (messageCon) messageCon.style.display = "none";
@@ -1133,10 +1101,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const backClone = backBtn.cloneNode(true);
                 backBtn.parentNode.replaceChild(backClone, backBtn);
                 backClone.addEventListener("click", async () => {
-                    // Reset the currently open chat
                     currentOpenChatId = null;
-
-                    // Delete all seen messages for this chat immediately when leaving
                     await deleteSeenMessagesForChat(friendId);
 
                     document.getElementById('message').classList.remove('hidden');
@@ -1157,7 +1122,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     } catch (err) {
                         console.warn("Error removing channels:", err);
                     }
-                    fetchFriends(); // Re-fetch friends to update last messages/unseen counts
+                    fetchFriends();
                 });
             }
         } catch (err) {
@@ -1168,7 +1133,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Buttons listeners -------------
+    // Button listeners
     document.querySelector(".submit-friend")?.addEventListener("click", () => {
         const username = document.querySelector(".friend-input")?.value.trim();
         sendFriendRequest(username);
@@ -1193,7 +1158,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Subscribe to global messages for unseen + last message updates -------------
+    // Subscribe to global messages
     async function subscribeToGlobalMessages() {
         if (!window._globalMessageChannel) {
             window._globalMessageChannel = client.channel("global-messages");
@@ -1208,13 +1173,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (newMsg.receiver_id === currentUserId) {
                         const senderId = newMsg.sender_id;
 
-                        // Only update if this chat is not currently open
                         if (currentOpenChatId !== senderId) {
-                            // Use the new function to get accurate count from database
                             updateUnseenCountForFriend(senderId);
                             updateLastMessage(senderId, newMsg.content, newMsg.created_at);
 
-                            // Show notification
                             (async () => {
                                 try {
                                     if (Notification.permission === "granted") {
@@ -1232,13 +1194,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                                         notif.addEventListener('click', () => {
                                             window.focus();
-                                            // Store notification data for redirect
                                             notificationData = {
                                                 type: 'message',
                                                 senderId,
                                                 senderName
                                             };
-                                            // Redirect to dashboard
                                             window.location.href = '#dashboard';
                                             notif.close();
                                         });
@@ -1252,7 +1212,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             );
 
-            // Add UPDATE event handler for seen status and deletions
             window._globalMessageChannel.on(
                 "postgres_changes",
                 { event: "UPDATE", schema: "public", table: "messages" },
@@ -1260,27 +1219,20 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const updatedMsg = payload.new;
                     if (!updatedMsg || !currentUserId) return;
 
-                    // Handle message deletion
                     if (updatedMsg.deleted_at) {
-                        // Update the last message in the chat list
                         updateLastMessageInChatList(updatedMsg.sender_id);
                         updateLastMessageInChatList(updatedMsg.receiver_id);
 
-                        // Only update if this chat is not currently open
                         if (currentOpenChatId !== updatedMsg.sender_id) {
-                            // Use the new function to get accurate count from database
                             updateUnseenCountForFriend(updatedMsg.sender_id);
                         }
                         return;
                     }
 
-                    // Handle seen status updates
                     if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
                         const senderId = updatedMsg.sender_id;
 
-                        // Only update if this chat is not currently open
                         if (currentOpenChatId !== senderId) {
-                            // Use the new function to get accurate count from database
                             updateUnseenCountForFriend(senderId);
                         }
                     }
@@ -1296,7 +1248,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Subscribe to friend requests updates -------------
+    // Subscribe to friend requests
     async function subscribeToFriendRequests() {
         if (!window._friendRequestChannel) {
             window._friendRequestChannel = client.channel("friend-requests");
@@ -1308,9 +1260,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const newRequest = payload.new;
                     if (!newRequest || !currentUserId) return;
 
-                    // Only handle requests sent to current user
                     if (newRequest.receiver_id === currentUserId && newRequest.status === "pending") {
-                        // Refresh friend requests
                         fetchFriendRequests();
                     }
                 }
@@ -1323,10 +1273,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const updatedRequest = payload.new;
                     if (!updatedRequest || !currentUserId) return;
 
-                    // Only handle requests involving current user
                     if ((updatedRequest.receiver_id === currentUserId || updatedRequest.sender_id === currentUserId) &&
                         (updatedRequest.status === "accepted" || updatedRequest.status === "rejected")) {
-                        // Refresh friend requests and friends list
                         fetchFriendRequests();
                         fetchFriends();
                     }
@@ -1342,10 +1290,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Handle notification redirects -------------
+    // Handle notification redirects
     function handleNotificationRedirect() {
         if (notificationData.type === 'message' && notificationData.senderId) {
-            // Get friend details
             client
                 .from("user_profiles")
                 .select("user_name, profile_image_url")
@@ -1358,11 +1305,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 });
         }
 
-        // Reset notification data
         notificationData = {};
     }
 
-    // ------------- PROFILE UI -------------
+    // Profile UI
     const profilePic = document.querySelector(".profile-pic");
     const profilePopup = document.getElementById("profile-popup");
     const closeProfile = document.getElementById("close-profile");
@@ -1457,7 +1403,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     const bioCharCount = document.getElementById("bio-char-count");
     const clearBioBtn = document.getElementById("clear-bio");
 
-    // If the elements don't exist, create them
     if (bioInput && !bioCharCount) {
         const charCount = document.createElement('span');
         charCount.id = 'bio-char-count';
@@ -1479,32 +1424,26 @@ document.addEventListener("DOMContentLoaded", async () => {
         bioInput.parentNode.appendChild(clearBtn);
     }
 
-    // Now get the elements again in case they were created
     const bioCharCountEl = document.getElementById("bio-char-count");
     const clearBioBtnEl = document.getElementById("clear-bio");
 
     if (bioInput && bioCharCountEl) {
-        // Set initial count
         bioCharCountEl.textContent = bioInput.value.length;
 
-        // Update on input
         bioInput.addEventListener('input', () => {
             const currentLength = bioInput.value.length;
             bioCharCountEl.textContent = currentLength;
 
-            // Change color when approaching limit
             if (currentLength > maxBioLength * 0.9) {
                 bioCharCountEl.style.color = 'var(--accent)';
             } else {
                 bioCharCountEl.style.color = 'var(--text-secondary)';
             }
 
-            // Auto-resize
             bioInput.style.height = 'auto';
             bioInput.style.height = Math.min(bioInput.scrollHeight, 200) + 'px';
         });
 
-        // Clear button
         if (clearBioBtnEl) {
             clearBioBtnEl.addEventListener('click', () => {
                 bioInput.value = '';
@@ -1514,7 +1453,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         }
 
-        // Enforce character limit
         bioInput.addEventListener('keydown', (e) => {
             const allowedKeys = [
                 'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
@@ -1550,15 +1488,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     const nameCharCountEl = document.getElementById("name-char-count");
 
     if (newUsernameInput && nameCharCountEl) {
-        // Set initial count
         nameCharCountEl.textContent = newUsernameInput.value.length;
 
-        // Update on input
         newUsernameInput.addEventListener('input', () => {
             const currentLength = newUsernameInput.value.length;
             nameCharCountEl.textContent = currentLength;
 
-            // Change color when approaching limit
             if (currentLength > maxNameLength * 0.9) {
                 nameCharCountEl.style.color = 'var(--accent)';
             } else {
@@ -1566,7 +1501,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
 
-        // Enforce character limit
         newUsernameInput.addEventListener('keydown', (e) => {
             const allowedKeys = [
                 'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
@@ -1602,6 +1536,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         return loader;
     }
 
+    // Profile popup functionality
     profilePic?.addEventListener("click", async () => {
         if (!profilePopup) return;
         profilePopup.classList.remove("hidden");
@@ -1619,9 +1554,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
             bioInput.value = profile?.bio || "";
             profileUsername.textContent = profile?.user_name || "Unknown User";
-            newUsernameInput.value = profile?.user_name || ""; // Pre-fill username for editing
+            newUsernameInput.value = profile?.user_name || "";
 
-            // Update character counts
             if (bioCharCountEl) bioCharCountEl.textContent = bioInput.value.length;
             if (nameCharCountEl) nameCharCountEl.textContent = newUsernameInput.value.length;
         } catch (err) {
@@ -1646,10 +1580,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     saveProfileBtn?.addEventListener("click", async () => {
-        // Store original button content
         const originalContent = saveProfileBtn.innerHTML;
 
-        // Disable button and show loader
         saveProfileBtn.disabled = true;
         saveProfileBtn.innerHTML = '';
         saveProfileBtn.appendChild(createLoader());
@@ -1681,7 +1613,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (error) throw error;
 
-            // Show success feedback
             saveProfileBtn.innerHTML = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
@@ -1692,7 +1623,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             showPopup("Profile updated successfully!", "success");
 
-            // Reset button after success
             setTimeout(() => {
                 saveProfileBtn.disabled = false;
                 saveProfileBtn.innerHTML = originalContent;
@@ -1700,12 +1630,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             }, 1500);
 
             fetchCurrentUserAvatar();
-            fetchFriends(); // refresh friend avatars
+            fetchFriends();
         } catch (err) {
             console.error("Error updating profile:", err);
             showPopup(`Failed to update profile: ${err.message || err}`, "error");
 
-            // Show error feedback
             saveProfileBtn.innerHTML = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -1715,7 +1644,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 Error
             `;
 
-            // Reset button after error
             setTimeout(() => {
                 saveProfileBtn.disabled = false;
                 saveProfileBtn.innerHTML = originalContent;
@@ -1724,7 +1652,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     logoutBtn?.addEventListener("click", async () => {
-        // Show confirmation popup instead of alert
         showConfirmPopup(
             "Are you sure you want to logout?",
             async () => {
@@ -1766,10 +1693,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        // Store original button content
         const originalContent = saveUsernameBtn.innerHTML;
 
-        // Disable button and show loader
         saveUsernameBtn.disabled = true;
         saveUsernameBtn.innerHTML = '';
         saveUsernameBtn.appendChild(createLoader());
@@ -1782,7 +1707,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (error) throw error;
 
-            // Show success feedback
             saveUsernameBtn.innerHTML = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
@@ -1794,7 +1718,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             showPopup("Username updated!", "success");
             profileUsername.textContent = newUsername;
 
-            // Reset button after success
             setTimeout(() => {
                 saveUsernameBtn.disabled = false;
                 saveUsernameBtn.innerHTML = originalContent;
@@ -1806,7 +1729,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.error("Error updating username:", err);
             showPopup(`Failed to update username: ${err.message || err}`, "error");
 
-            // Show error feedback
             saveUsernameBtn.innerHTML = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -1816,7 +1738,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 Error
             `;
 
-            // Reset button after error
             setTimeout(() => {
                 saveUsernameBtn.disabled = false;
                 saveUsernameBtn.innerHTML = originalContent;
@@ -1824,7 +1745,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // ------------- Confirmation popup function -------------
+    // Confirmation popup function
     function showConfirmPopup(message, onConfirm, onCancel) {
         const popup = document.getElementById("popup");
         const messageEl = document.getElementById("popup-message");
@@ -1832,7 +1753,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (!popup || !messageEl) return;
 
-        // Add confirm and cancel buttons
         const buttonsContainer = document.createElement('div');
         buttonsContainer.className = 'popup-buttons';
         buttonsContainer.innerHTML = `
@@ -1853,7 +1773,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             </button>
         `;
 
-        // Clear any existing buttons
         const existingButtons = popup.querySelector('.popup-buttons');
         if (existingButtons) {
             existingButtons.remove();
@@ -1891,10 +1810,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // ------------- Initialize database schema if needed -------------
+    // Initialize database schema
     async function initializeDatabaseSchema() {
         try {
-            // Check if deleted_at column exists in messages table
             const { data: columns, error: columnsError } = await client
                 .from("information_schema.columns")
                 .select("column_name")
@@ -1906,7 +1824,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            // If deleted_at column doesn't exist, add it
             if (!columns || columns.length === 0) {
                 console.log("Adding deleted_at column to messages table...");
                 const { error: alterError } = await client.rpc('exec_sql', {
@@ -1924,12 +1841,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- boot -------------
+    // Initialize app
     const me = await getCurrentUser();
     if (me) {
-        // Initialize database schema if needed
         await initializeDatabaseSchema();
-
         await fetchFriends();
         await fetchFriendRequests();
         await subscribeToGlobalMessages();

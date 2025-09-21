@@ -10,6 +10,16 @@
   --input-bg: #ffffff;
   --input-border: #d2dee4;
   --shadow-1: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --border-color: #d2dee4;
+  --bg-hover: #f0f4f8;
+  --bg-secondary: #f8fafc;
+  --primary-color: #5a8d9a;
+  --primary-dark: #4a7d8a;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --info: #2563eb;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-blur: blur(10px);
 }
 
 body.dark {
@@ -25,6 +35,9 @@ body.dark {
   --footer-bg: #1a1a1a;
   --glass-bg: rgba(26, 26, 26, 0.7);
   --glass-blur: blur(10px);
+  --border-color: #424242;
+  --bg-hover: #2a2a2a;
+  --bg-secondary: #2a2a2a;
 }
 
 *,
@@ -228,15 +241,18 @@ nav h2 a {
   height: 60px;
   flex-shrink: 0;
 }
+
 .chat-header img {
   width: 40px;
   height: 40px;
   border-radius: 50%;
 }
+
 .chat-header h4 {
   margin: 0;
   font-size: 1rem;
 }
+
 .chat-header p {
   margin: 0;
   font-size: 0.85rem;
@@ -642,7 +658,7 @@ emoji-picker {
 }
 
 .popup-container {
-  background-color: var(--bg-primary);
+  background-color: var(--bg);
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   width: 90%;
@@ -1083,47 +1099,6 @@ emoji-picker {
   animation: spin 1s linear infinite;
 }
 
-/* Responsive Styles */
-@media (max-width: 600px) {
-  .popup-container {
-    width: 95%;
-    max-height: 95vh;
-  }
-
-  .popup-header {
-    padding: 12px 16px;
-  }
-
-  .popup-content {
-    padding: 16px;
-  }
-
-  .popup-footer {
-    padding: 12px 16px;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .save-profile-btn,
-  .logout-btn,
-  .cancel-btn,
-  .save-username-btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .profile-username {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
-
-  .change-username-btn {
-    width: 100%;
-    justify-content: center;
-  }
-}
-
 /* Back button */
 .backBtn {
   background: var(--accent);
@@ -1391,5 +1366,46 @@ emoji-picker {
     left: auto;
     right: 16px;
     bottom: 80px;
+  }
+}
+
+/* Responsive Styles */
+@media (max-width: 600px) {
+  .popup-container {
+    width: 95%;
+    max-height: 95vh;
+  }
+
+  .popup-header {
+    padding: 12px 16px;
+  }
+
+  .popup-content {
+    padding: 16px;
+  }
+
+  .popup-footer {
+    padding: 12px 16px;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .save-profile-btn,
+  .logout-btn,
+  .cancel-btn,
+  .save-username-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .profile-username {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .change-username-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
