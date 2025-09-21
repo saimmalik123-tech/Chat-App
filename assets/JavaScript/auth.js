@@ -25,7 +25,9 @@ function showPopup(message, type = "info") {
 
 // Function to check if all given input fields are filled
 function areInputsFilled(inputs) {
-    return inputs.every(input => input.value.trim() !== '');
+    // Convert NodeList to array if needed
+    const inputsArray = Array.isArray(inputs) ? inputs : Array.from(inputs);
+    return inputsArray.every(input => input.value.trim() !== '');
 }
 
 // Function to handle the button's disabled state based on input
