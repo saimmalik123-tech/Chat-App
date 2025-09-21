@@ -98,7 +98,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     let unseenCounts = {}; // map friendId -> count
     let currentOpenChatId = null; // Track currently open chat
     let notificationData = {}; // Store notification data for redirect
-    let deletionTimeouts = {}; // Track deletion timeouts for messages
 
     // ------------- Get current user -------------
     async function getCurrentUser() {
@@ -181,11 +180,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.error("Error updating online status:", err);
         }
     }
-    window.addEventListener('beforeunload', () => {
-        setUserOnlineStatus(false);
-        // Clear all deletion timeouts when page unloads
-        Object.values(deletionTimeouts).forEach(timeoutId => clearTimeout(timeoutId));
-    });
+    window.addEventListener('beforeunload', () => setUserOnlineStatus(false));
 
     // ------------- Friend Request popup rendering -------------
     function renderFriendRequests() {
@@ -325,80 +320,44 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Schedule message deletion -------------
-    function scheduleMessageDeletion(messageId, friendId, delay = 30000) {
-        // Clear any existing timeout for this message
-        if (deletionTimeouts[messageId]) {
-            clearTimeout(deletionTimeouts[messageId]);
-        }
-
-        // Set new timeout
-        deletionTimeouts[messageId] = setTimeout(async () => {
-            try {
-                // Soft delete the message
-                const { error } = await client
-                    .from("messages")
-                    .update({ deleted_at: new Date().toISOString() })
-                    .eq("id", messageId);
-
-                if (error) {
-                    console.error("Error deleting message:", error);
-                } else {
-                    console.log(`Message ${messageId} deleted after timeout`);
-                }
-            } catch (err) {
-                console.error("Error in scheduled message deletion:", err);
-            } finally {
-                delete deletionTimeouts[messageId];
-            }
-        }, delay); // Default 30 seconds
-    }
-
-    // ------------- Delete seen messages for a chat -------------
-    async function deleteSeenMessagesForChat(friendId) {
+    // ------------- Delete seen messages (ephemeral messaging) -------------
+    async function deleteSeenMessages(friendId) {
         if (!currentUserId) return;
 
         try {
-            // Get all seen messages for this chat that haven't been deleted yet
+            // Get all messages that have been seen by the current user
             const { data: seenMessages, error: fetchError } = await client
                 .from("messages")
                 .select("id")
                 .eq("receiver_id", currentUserId)
                 .eq("sender_id", friendId)
-                .eq("seen", true)
-                .is('deleted_at', null);
+                .eq("seen", true);
 
             if (fetchError) {
-                console.error("Error fetching seen messages for deletion:", fetchError);
+                console.error("Error fetching seen messages:", fetchError);
                 return;
             }
 
             if (!seenMessages || seenMessages.length === 0) {
-                return;
+                return; // No seen messages to delete
             }
 
-            // Clear any pending timeouts for these messages
-            seenMessages.forEach(msg => {
-                if (deletionTimeouts[msg.id]) {
-                    clearTimeout(deletionTimeouts[msg.id]);
-                    delete deletionTimeouts[msg.id];
-                }
-            });
-
-            // Soft delete all seen messages
+            // Extract IDs of seen messages
             const messageIds = seenMessages.map(msg => msg.id);
+
+            // Soft delete the seen messages by setting deleted_at timestamp
             const { error: updateError } = await client
                 .from("messages")
                 .update({ deleted_at: new Date().toISOString() })
                 .in('id', messageIds);
 
             if (updateError) {
-                console.error("Error deleting seen messages for chat:", updateError);
+                console.error("Error soft-deleting seen messages:", updateError);
             } else {
-                console.log(`Deleted ${messageIds.length} seen messages for chat with ${friendId}`);
+                console.log(`Soft-deleted ${messageIds.length} seen messages from ${friendId}`);
             }
         } catch (err) {
-            console.error("deleteSeenMessagesForChat error:", err);
+            console.error("deleteSeenMessages error:", err);
         }
     }
 
@@ -558,7 +517,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ------------- Mark messages as seen and schedule deletion -------------
+    // ------------- Mark messages as seen and delete them (ephemeral) -------------
     async function markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar) {
         if (!currentUserId) return;
         try {
@@ -596,10 +555,18 @@ document.addEventListener("DOMContentLoaded", async () => {
                 unseenMessages.forEach(msg => {
                     const idx = oldMessages.findIndex(m => m.id === msg.id);
                     if (idx !== -1) oldMessages[idx].seen = true;
-
-                    // Schedule deletion for this message after 30 seconds
-                    scheduleMessageDeletion(msg.id, friendId);
                 });
+                renderChatMessages(chatBox, oldMessages, friendAvatar);
+
+                // Delete the seen messages immediately after marking them as seen
+                await deleteSeenMessages(friendId);
+
+                // Remove the deleted messages from the UI
+                const remainingMessages = oldMessages.filter(msg =>
+                    !unseenMessages.some(unseen => unseen.id === msg.id)
+                );
+                oldMessages.length = 0;
+                oldMessages.push(...remainingMessages);
                 renderChatMessages(chatBox, oldMessages, friendAvatar);
             }
         } catch (err) {
@@ -785,8 +752,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                             unseenCounts[newMsg.sender_id] = 0;
                             updateUnseenBadge(newMsg.sender_id, 0);
 
-                            // Schedule deletion for this message after 30 seconds
-                            scheduleMessageDeletion(newMsg.id, friendId);
+                            // Delete the seen message immediately
+                            await deleteSeenMessages(friendId);
+
+                            // Remove the deleted message from the UI
+                            const remainingMessages = oldMessages.filter(msg => msg.id !== newMsg.id);
+                            oldMessages.length = 0;
+                            oldMessages.push(...remainingMessages);
+                            renderChatMessages(chatBox, oldMessages, friendAvatar);
                         } catch (err) {
                             console.error("Error marking message as seen:", err);
                         }
@@ -1047,9 +1020,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 backClone.addEventListener("click", async () => {
                     // Reset the currently open chat
                     currentOpenChatId = null;
-
-                    // Delete all seen messages for this chat immediately when leaving
-                    await deleteSeenMessagesForChat(friendId);
 
                     document.getElementById('message').classList.remove('hidden');
                     if (window.innerWidth <= 768) {
@@ -1437,7 +1407,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         await subscribeToGlobalMessages();
         await subscribeToFriendRequests();
 
-        // Check if we need to handle a notification redirect
         if (Object.keys(notificationData).length > 0) {
             handleNotificationRedirect();
         }
