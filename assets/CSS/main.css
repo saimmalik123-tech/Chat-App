@@ -1,3 +1,5 @@
+/* main.css - Updated with consistent variables */
+
 * {
   padding: 0;
   margin: 0;
@@ -13,10 +15,23 @@
   --bubble-received: #e2e8f0;
   --input-bg: #f8fafc;
   --input-border: #cbd5e1;
-  --accent: #2563eb;
+  --accent: #3b82f6;
   --button-text: #ffffff;
   --footer-bg: #f1f5f9;
   --footer-text: #475569;
+  --primary-color: #3b82f6;
+  --primary-dark: #2563eb;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --info: #2563eb;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-blur: blur(10px);
+  --border-color: #cbd5e1;
+  --bg-hover: #f0f4f8;
+  --bg-secondary: #f8fafc;
+  --shadow-1: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --animation-duration: 0.5s;
+  --animation-ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 body.dark {
@@ -32,8 +47,11 @@ body.dark {
   --footer-bg: #1a1a1a;
   --glass-bg: rgba(26, 26, 26, 0.7);
   --glass-blur: blur(10px);
+  --border-color: #424242;
+  --bg-hover: #2a2a2a;
+  --bg-secondary: #2a2a2a;
+  --shadow-1: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
-
 
 body {
   background-color: var(--bg);
@@ -148,17 +166,17 @@ main.verify-email button {
   border: none;
   border-radius: 5px;
   cursor: pointer;
-  background-color: #4f46e5;
+  background-color: var(--primary-color);
   color: #fff;
   transition: background-color 0.3s;
 }
 
 main.verify-email button:hover {
-  background-color: #4338ca;
+  background-color: var(--primary-dark);
 }
 
 main.verify-email a {
-  color: #4f46e5;
+  color: var(--primary-color);
   text-decoration: none;
 }
 
@@ -189,7 +207,7 @@ button {
 }
 
 button:hover {
-  background-color: #1d4ed8;
+  background-color: var(--primary-dark);
   transform: translateY(-3px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
 }
@@ -201,7 +219,7 @@ button:hover {
 }
 
 #a:hover {
-  color: #1d4ed8;
+  color: var(--primary-dark);
   text-decoration: underline;
 }
 
@@ -220,7 +238,7 @@ footer {
   animation: fadeIn 1s ease-in;
 }
 
-/* 🔥 Loading Overlay + Spinner */
+/* Loading Overlay + Spinner */
 #loading-overlay {
   position: fixed;
   top: 0;
@@ -239,11 +257,12 @@ footer {
 }
 
 .loading-box {
-  background: #fff;
+  background: var(--input-bg);
   padding: 20px 30px;
   border-radius: 12px;
   text-align: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-1);
+  color: var(--text-primary);
 }
 
 #loading-overlay.hidden {
@@ -254,8 +273,8 @@ footer {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #ddd;
-  border-top: 4px solid #2563eb;
+  border: 4px solid var(--input-border);
+  border-top: 4px solid var(--accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 12px;

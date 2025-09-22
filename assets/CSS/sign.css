@@ -8,90 +8,26 @@
   font-family: "Poppins", sans-serif;
 }
 
-:root {
-  --bg: #f0f4f8;
-  --accent: #5a8d9a;
-  --footer-bg: #e1eaf2;
-  --text-primary: #333d47;
-  --text-secondary: #7e8fa1;
-  --button-text: #ffffff;
-  --bubble-sent: #646566;
-  --bubble-received: #c2c5c6;
-  --input-bg: #ffffff;
-  --input-border: #d2dee4;
-  --shadow-1: 0 4px 12px rgba(0, 0, 0, 0.08); /* Adjusted for better visual */
-  --border-color: #d2dee4;
-  --bg-hover: #f0f4f8;
-  --bg-secondary: #f8fafc;
-  --primary-color: #5a8d9a;
-  --primary-dark: #4a7d8a;
-  --danger: #dc2626;
-  --success: #16a34a;
-  --info: #2563eb;
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-blur: blur(10px);
-  --animation-duration: 0.5s;
-  --animation-ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
-body.dark {
-  --bg: #121212;
-  --text-primary: #e0e0e0;
-  --text-secondary: #888888;
-  --bubble-sent: linear-gradient(135deg, #2b2b2b, #3b3b3b);
-  --bubble-received: #292929;
-  --input-bg: #212121;
-  --input-border: #424242;
-  --accent: #2c3e50;
-  --button-text: #e0e0e0;
-  --footer-bg: #1a1a1a;
-  --glass-bg: rgba(26, 26, 26, 0.7);
-  --glass-blur: blur(10px);
-  --border-color: #424242;
-  --bg-hover: #2a2a2a;
-  --bg-secondary: #2a2a2a;
-  --shadow-1: 0 4px 12px rgba(0, 0, 0, 0.4);
-}
-
-/* Base Layout */
+/* Override some styles for auth pages */
 body {
-  background-color: var(--bg);
-  color: var(--text-primary);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  transition: background-color var(--animation-duration) ease,
-    color var(--animation-duration) ease;
-  animation: fadeIn var(--animation-duration) var(--animation-ease);
 }
 
-/* Header */
+/* Header - Override main.css styles for auth pages */
 header nav {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
+  background-color: var(--bg);
+  border-bottom: 1px solid var(--input-border);
 }
 
 nav h2 a {
-  text-decoration: none;
   color: var(--text-primary);
-  font-size: 1.5rem;
-  font-weight: 700;
 }
 
 #themeToggle {
-  background: none;
-  border: none;
-  font-size: 1.4rem;
-  cursor: pointer;
   color: var(--text-primary);
-  transition: transform 0.3s ease;
-}
-
-#themeToggle:hover {
-  transform: rotate(30deg);
 }
 
 /* Main Container */
@@ -140,7 +76,7 @@ main {
 .auth-box input:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(90, 141, 154, 0.2);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
 /* Buttons */
@@ -251,32 +187,10 @@ body.dark .google-btn:hover {
   background: var(--bg-hover);
 }
 
-/* Footer */
-footer {
-  height: 60px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: var(--footer-bg);
-  font-style: italic;
-  color: var(--footer-text);
-  font-size: 0.9rem;
-  transition: background-color var(--animation-duration) ease,
-    color var(--animation-duration) ease;
-}
-
-/* Loading Overlay */
+/* Loading Overlay - Override for auth pages */
 #loading-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
   background-color: rgba(0, 0, 0, 0.7);
-  display: none; /* Controlled by JS */
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
+  display: none;
 }
 
 #loading-overlay.show {
@@ -289,26 +203,7 @@ footer {
   animation: zoomIn 0.5s ease-out;
 }
 
-.spinner {
-  width: 60px;
-  height: 60px;
-  border: 5px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border-top-color: #fff;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 15px;
-}
-
 /* Animations */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes slideInUp {
   from {
     transform: translateY(20px);
@@ -317,12 +212,6 @@ footer {
   to {
     transform: translateY(0);
     opacity: 1;
-  }
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
   }
 }
 
