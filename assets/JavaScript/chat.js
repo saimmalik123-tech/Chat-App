@@ -69,6 +69,87 @@ document.addEventListener("DOMContentLoaded", async () => {
         overlay.style.display = "none";
     }
 
+    // NEW: Top-right popup function
+    function showTopRightPopup(message, type = "info") {
+        // Check if popup container exists, create if not
+        let popupContainer = document.getElementById("top-right-popup-container");
+        if (!popupContainer) {
+            popupContainer = document.createElement("div");
+            popupContainer.id = "top-right-popup-container";
+            popupContainer.style.position = "fixed";
+            popupContainer.style.top = "20px";
+            popupContainer.style.right = "20px";
+            popupContainer.style.zIndex = "9999";
+            document.body.appendChild(popupContainer);
+        }
+
+        // Create popup element
+        const popup = document.createElement("div");
+        popup.className = `top-right-popup ${type}`;
+        popup.innerHTML = `
+            <div class="popup-content">
+                <span class="popup-message">${message}</span>
+                <button class="popup-close">&times;</button>
+            </div>
+        `;
+
+        // Add styles
+        popup.style.backgroundColor = type === "success" ? "#4CAF50" :
+            type === "error" ? "#f44336" :
+                type === "warning" ? "#ff9800" : "#2196F3";
+        popup.style.color = "white";
+        popup.style.padding = "12px 20px";
+        popup.style.borderRadius = "4px";
+        popup.style.boxShadow = "0 2px 10px rgba(0,0,0,0.2)";
+        popup.style.marginBottom = "10px";
+        popup.style.minWidth = "250px";
+        popup.style.display = "flex";
+        popup.style.justifyContent = "space-between";
+        popup.style.alignItems = "center";
+        popup.style.animation = "slideIn 0.3s ease-out";
+
+        // Add animation keyframes if not already added
+        if (!document.getElementById("popup-styles")) {
+            const style = document.createElement("style");
+            style.id = "popup-styles";
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+                .popup-close {
+                    background: none;
+                    border: none;
+                    color: white;
+                    font-size: 18px;
+                    cursor: pointer;
+                    margin-left: 10px;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // Add close functionality
+        popup.querySelector(".popup-close").addEventListener("click", () => {
+            popup.style.animation = "slideOut 0.3s ease-out forwards";
+            setTimeout(() => popup.remove(), 300);
+        });
+
+        // Auto remove after 5 seconds
+        setTimeout(() => {
+            if (popup.parentNode) {
+                popup.style.animation = "slideOut 0.3s ease-out forwards";
+                setTimeout(() => popup.remove(), 300);
+            }
+        }, 5000);
+
+        popupContainer.appendChild(popup);
+    }
+
     // Notification permissions
     async function requestNotificationPermission() {
         if (!("Notification" in window)) {
@@ -98,14 +179,20 @@ document.addEventListener("DOMContentLoaded", async () => {
             const { data: { user }, error } = await client.auth.getUser();
             if (error || !user) return;
 
+            // FIXED: Use maybeSingle() instead of single() to avoid 409 Conflict
             const { data: profile, error: profileError } = await client
                 .from("user_profiles")
                 .select("profile_image_url")
                 .eq("user_id", user.id)
                 .maybeSingle();
 
+            if (profileError) {
+                console.error("Error fetching profile:", profileError);
+                return;
+            }
+
             let avatarUrl = DEFAULT_PROFILE_IMG;
-            if (!profileError && profile?.profile_image_url) {
+            if (profile?.profile_image_url) {
                 avatarUrl = profile.profile_image_url;
             }
             profileImage.src = avatarUrl;
@@ -165,6 +252,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             showToast("Friend request accepted!", "success");
+            // NEW: Show top-right popup
+            showTopRightPopup("Friend request accepted!", "success");
             fetchFriendRequests();
             fetchFriends();
             openSpecificChat(senderId);
@@ -187,6 +276,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             showToast("Friend request rejected!", "info");
+            // NEW: Show top-right popup
+            showTopRightPopup("Friend request rejected", "info");
             fetchFriendRequests();
         } catch (err) {
             console.error("Unexpected error rejecting request:", err);
@@ -321,6 +412,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 notif.close();
                             });
                         }
+                        // NEW: Show top-right popup for friend request
+                        showTopRightPopup(`${senderName} sent you a friend request`, "info");
                     } catch (err) {
                         console.warn("Error sending friend request notification:", err);
                     }
@@ -773,9 +866,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             if (existing) {
-                if (existing.status === "pending") return showToast("You have already sent a request.", "info");
-                if (existing.status === "accepted") return showToast("You are already friends.", "info");
-                if (existing.status === "rejected") return showToast("This user rejected your request before.", "warning");
+                if (existing.status === "pending") {
+                    showTopRightPopup(`You already have a pending request to ${username}`, "warning");
+                    return showToast("You have already sent a request.", "info");
+                }
+                if (existing.status === "accepted") {
+                    showTopRightPopup(`You are already friends with ${username}`, "info");
+                    return showToast("You are already friends.", "info");
+                }
+                if (existing.status === "rejected") {
+                    showTopRightPopup(`This user rejected your request before`, "warning");
+                    return showToast("This user rejected your request before.", "warning");
+                }
             }
 
             const { error: requestError } = await client
@@ -788,6 +890,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             showToast("Friend request sent successfully!", "success");
+            // NEW: Show top-right popup
+            showTopRightPopup(`Friend request sent to ${username}!`, "success");
         } catch (err) {
             console.error("Unexpected error in sendFriendRequest:", err);
             showToast("Unexpected error. Please try again.", "error");
@@ -878,6 +982,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         try {
                             const senderName = await getUsername(newMsg.sender_id);
+                            // NEW: Show top-right popup for new message
+                            showTopRightPopup(`New message from ${senderName}`, "info");
+
                             if (Notification.permission === "granted") {
                                 const notif = new Notification(`${senderName}`, {
                                     body: newMsg.content,
@@ -1184,7 +1291,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             window._globalMessageChannel.on(
                 "postgres_changes",
                 { event: "INSERT", schema: "public", table: "messages" },
-                payload => {
+                async payload => {
                     const newMsg = payload.new;
                     if (!newMsg || !currentUserId) return;
 
@@ -1195,31 +1302,32 @@ document.addEventListener("DOMContentLoaded", async () => {
                             updateUnseenCountForFriend(senderId);
                             updateLastMessage(senderId, newMsg.content, newMsg.created_at);
 
-                            (async () => {
-                                try {
-                                    if (Notification.permission === "granted") {
-                                        const { data: senderProfile, error } = await client
-                                            .from("user_profiles")
-                                            .select("user_name")
-                                            .eq("user_id", senderId)
-                                            .maybeSingle();
+                            try {
+                                const { data: senderProfile, error } = await client
+                                    .from("user_profiles")
+                                    .select("user_name")
+                                    .eq("user_id", senderId)
+                                    .maybeSingle();
 
-                                        const senderName = senderProfile?.user_name || "New Message";
-                                        const notif = new Notification(senderName, {
-                                            body: newMsg.content,
-                                            data: { type: 'message', senderId, senderName }
-                                        });
+                                const senderName = senderProfile?.user_name || "New Message";
+                                // NEW: Show top-right popup for new message
+                                showTopRightPopup(`New message from ${senderName}`, "info");
 
-                                        notif.addEventListener('click', () => {
-                                            window.focus();
-                                            openSpecificChat(senderId);
-                                            notif.close();
-                                        });
-                                    }
-                                } catch (err) {
-                                    console.warn("Error sending message notification:", err);
+                                if (Notification.permission === "granted") {
+                                    const notif = new Notification(senderName, {
+                                        body: newMsg.content,
+                                        data: { type: 'message', senderId, senderName }
+                                    });
+
+                                    notif.addEventListener('click', () => {
+                                        window.focus();
+                                        openSpecificChat(senderId);
+                                        notif.close();
+                                    });
                                 }
-                            })();
+                            } catch (err) {
+                                console.warn("Error sending message notification:", err);
+                            }
                         }
                     }
                 }
@@ -1627,6 +1735,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             `;
 
             showToast("Profile updated successfully!", "success");
+            // NEW: Show top-right popup
+            showTopRightPopup("Profile updated successfully!", "success");
 
             setTimeout(() => {
                 saveProfileBtn.disabled = false;
@@ -1720,6 +1830,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             `;
 
             showToast("Username updated!", "success");
+            // NEW: Show top-right popup
+            showTopRightPopup("Username updated successfully!", "success");
             profileUsername.textContent = newUsername;
 
             setTimeout(() => {
