@@ -2048,16 +2048,112 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function fetchRecentChats() {
         try {
-            const { data: recentChats, error } = await client.rpc('get_recent_chats', {
-                current_user_id: currentUserId
+            // First, let's get the list of friends
+            const { data: friends, error: friendsError } = await client
+                .from("friends")
+                .select("*")
+                .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
+
+            if (friendsError) throw friendsError;
+
+            if (!friends || friends.length === 0) {
+                renderRecentChats([]);
+                return;
+            }
+
+            // Extract friend IDs
+            const friendIds = friends.map(f =>
+                f.user1_id === currentUserId ? f.user2_id : f.user1_id
+            );
+
+            // Get profiles for these friends
+            const { data: profiles, error: profilesError } = await client
+                .from("user_profiles")
+                .select("user_id, user_name, profile_image_url, is_online")
+                .in("user_id", friendIds);
+
+            if (profilesError) throw profilesError;
+
+            // Get the most recent message for each friend
+            const recentChatsPromises = friendIds.map(async (friendId) => {
+                const { data: lastMessage } = await client
+                    .from("messages")
+                    .select("content, created_at")
+                    .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                    .is('deleted_at', null)
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                const profile = profiles?.find(p => p.user_id === friendId);
+
+                return {
+                    user_id: friendId,
+                    user_name: profile?.user_name || "Unknown",
+                    avatar_url: profile?.profile_image_url || DEFAULT_PROFILE_IMG,
+                    is_online: profile?.is_online || false,
+                    last_message: lastMessage?.content || "No messages yet",
+                    last_message_time: lastMessage?.created_at || null
+                };
             });
 
-            if (error) throw error;
+            const recentChats = await Promise.all(recentChatsPromises);
 
-            renderRecentChats(recentChats || []);
+            // Sort by most recent message time
+            recentChats.sort((a, b) => {
+                if (!a.last_message_time) return 1;
+                if (!b.last_message_time) return -1;
+                return new Date(b.last_message_time) - new Date(a.last_message_time);
+            });
+
+            renderRecentChats(recentChats);
         } catch (err) {
             console.error("Error fetching recent chats:", err);
+            // If there's an error, render empty recent chats
+            renderRecentChats([]);
         }
+    }
+
+    function renderRecentChats(chats) {
+        const recentChatsContainer = document.getElementById('recent-chats');
+        if (!recentChatsContainer) return;
+
+        recentChatsContainer.innerHTML = '';
+
+        if (chats.length === 0) {
+            recentChatsContainer.innerHTML = '<p class="no-recent-chats">No recent chats</p>';
+            return;
+        }
+
+        chats.forEach(chat => {
+            const chatElement = document.createElement('div');
+            chatElement.className = 'recent-chat';
+
+            const timeStr = chat.last_message_time
+                ? new Date(chat.last_message_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                : '';
+
+            chatElement.innerHTML = `
+            <div class="recent-chat-avatar">
+                <img src="${chat.avatar_url || DEFAULT_PROFILE_IMG}" alt="${chat.user_name}">
+                ${chat.is_online ? '<span class="online-dot"></span>' : ''}
+            </div>
+            <div class="recent-chat-info">
+                <div class="recent-chat-name">${chat.user_name}</div>
+                <div class="recent-chat-message">${chat.last_message}</div>
+            </div>
+            <div class="recent-chat-time">${timeStr}</div>
+        `;
+
+            chatElement.addEventListener('click', () => {
+                openSpecificChat(chat.user_id, {
+                    user_name: chat.user_name,
+                    profile_image_url: chat.avatar_url
+                });
+            });
+
+            recentChatsContainer.appendChild(chatElement);
+        });
     }
 
     function renderRecentChats(chats) {

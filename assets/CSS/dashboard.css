@@ -1190,6 +1190,65 @@ emoji-picker {
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
 }
 
+/* Add this CSS to your stylesheet */
+.recent-chat {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.recent-chat:hover {
+  background-color: var(--hover-color);
+}
+
+.recent-chat-avatar {
+  position: relative;
+  margin-right: 12px;
+}
+
+.recent-chat-avatar img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.recent-chat-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.recent-chat-name {
+  font-weight: 600;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-chat-message {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-chat-time {
+  font-size: 0.75em;
+  color: var(--text-secondary);
+  margin-left: 8px;
+}
+
+.no-recent-chats {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+}
+
 .friend-input {
   width: 100%;
   padding: 10px;
