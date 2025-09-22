@@ -1,4 +1,4 @@
-import { client } from "./supabase";
+import { client } from "../../supabase.js";
 
 function showPopup(message, type = "info") {
     const popup = document.getElementById("popup");
