@@ -1,7 +1,6 @@
 import { client } from "../../supabase.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
-    // UI helpers
     function showPopup(message, type = "info") {
         const popup = document.getElementById("notification-popup");
         const messageEl = document.getElementById("popup-message");
@@ -1675,7 +1674,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             },
             () => {
-                // Do nothing on cancel
             }
         );
     });

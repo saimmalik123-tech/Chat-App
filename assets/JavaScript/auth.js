@@ -25,7 +25,6 @@ function showPopup(message, type = "info") {
 
 // Function to check if all given input fields are filled
 function areInputsFilled(inputs) {
-    // Convert NodeList to array if needed
     const inputsArray = Array.isArray(inputs) ? inputs : Array.from(inputs);
     return inputsArray.every(input => input.value.trim() !== '');
 }
