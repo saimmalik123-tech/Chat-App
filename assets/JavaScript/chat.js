@@ -1,4 +1,4 @@
-import { client } from "../../supabase.js";
+import { client } from "./supabase.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
     // UI helpers

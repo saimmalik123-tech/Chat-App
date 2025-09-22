@@ -1,4 +1,4 @@
-import { client } from "../../supabase.js";
+import { client } from "./supabase";
 
 const loaderContainer = document.querySelector('.loader-container');
 const popupElement = document.getElementById('popup');

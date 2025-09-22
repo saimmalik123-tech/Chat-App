@@ -1,4 +1,4 @@
-import { client } from "../../supabase.js";
+import { client } from "./supabase";
 
 function showPopup(message, type = "info") {
     const popup = document.getElementById("popup");
@@ -198,7 +198,6 @@ avatarInput?.addEventListener("change", e => {
         reader.onload = event => avatarPreview.src = event.target.result;
         reader.readAsDataURL(avatarFile);
     }
-    // Also check the state of other inputs here to enable/disable the button
     handleButtonState(profileSetupInputs, setUpBtn);
 });
 
