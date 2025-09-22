@@ -6,10 +6,10 @@ const popupMessageElement = document.getElementById('popup-message');
 const popupCloseButton = document.querySelector('.popup-close');
 
 function showLoader() {
-    if (loaderContainer) loaderContainer.style.display = 'flex';
+    loaderContainer && (loaderContainer.style.display = 'flex');
 }
 function hideLoader() {
-    if (loaderContainer) loaderContainer.style.display = 'none';
+    loaderContainer && (loaderContainer.style.display = 'none');
 }
 function showPopup(message) {
     if (popupMessageElement && popupElement) {
@@ -18,11 +18,9 @@ function showPopup(message) {
     }
 }
 function hidePopup() {
-    if (popupElement) popupElement.classList.add('hidden');
+    popupElement && popupElement.classList.add('hidden');
 }
-if (popupCloseButton) {
-    popupCloseButton.addEventListener('click', hidePopup);
-}
+popupCloseButton?.addEventListener('click', hidePopup);
 
 async function handleGoogleAuth() {
     showLoader();
@@ -31,17 +29,15 @@ async function handleGoogleAuth() {
         const { data: { user }, error } = await client.auth.getUser();
 
         if (error || !user) {
-            showPopup("No active session. Please login.");
-            window.location.href = "login.html";
+            showPopup("No active session. Redirecting to login...");
+            setTimeout(() => (window.location.href = "login.html"), 1500);
             return;
         }
-
-        const userId = user.id;
 
         const { data: profile, error: profileError } = await client
             .from("user_profiles")
             .select("id")
-            .eq("id", userId)
+            .eq("id", user.id)
             .maybeSingle();
 
         if (profileError) {
@@ -49,11 +45,10 @@ async function handleGoogleAuth() {
             return;
         }
 
-        // ✅ 3. Redirect logic
         if (profile) {
             window.location.href = "dashboard.html";
         } else {
-            window.location.href = "setupProfile.html"; 
+            window.location.href = "setupProfile.html";
         }
 
     } catch (err) {
