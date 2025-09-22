@@ -69,8 +69,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         overlay.style.display = "none";
     }
 
+    // Track active popups to prevent duplicates
+    const activePopups = new Set();
+
     // NEW: Top-right popup function
-    function showTopRightPopup(message, type = "info") {
+    function showTopRightPopup(message, type = "info", image = null) {
+        // Create a unique key for this popup to prevent duplicates
+        const popupKey = `${message}-${type}-${image || ''}`;
+
+        // Check if this popup is already active
+        if (activePopups.has(popupKey)) {
+            return;
+        }
+
+        activePopups.add(popupKey);
+
         // Check if popup container exists, create if not
         let popupContainer = document.getElementById("top-right-popup-container");
         if (!popupContainer) {
@@ -86,8 +99,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Create popup element
         const popup = document.createElement("div");
         popup.className = `top-right-popup ${type}`;
+
+        // Add image if provided
+        const imageHtml = image ? `<img src="${image}" class="popup-avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover;margin-right:10px;">` : '';
+
         popup.innerHTML = `
-            <div class="popup-content">
+            <div class="popup-content" style="display:flex;align-items:center;">
+                ${imageHtml}
                 <span class="popup-message">${message}</span>
                 <button class="popup-close">&times;</button>
             </div>
@@ -136,14 +154,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Add close functionality
         popup.querySelector(".popup-close").addEventListener("click", () => {
             popup.style.animation = "slideOut 0.3s ease-out forwards";
-            setTimeout(() => popup.remove(), 300);
+            setTimeout(() => {
+                popup.remove();
+                activePopups.delete(popupKey);
+            }, 300);
         });
 
         // Auto remove after 5 seconds
         setTimeout(() => {
             if (popup.parentNode) {
                 popup.style.animation = "slideOut 0.3s ease-out forwards";
-                setTimeout(() => popup.remove(), 300);
+                setTimeout(() => {
+                    popup.remove();
+                    activePopups.delete(popupKey);
+                }, 300);
             }
         }, 5000);
 
@@ -403,6 +427,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (Notification.permission === "granted") {
                             const notif = new Notification("Friend Request 👥", {
                                 body: `${senderName} sent you a request`,
+                                icon: avatarUrl,
                                 data: { type: 'friend_request', senderId: req.sender_id }
                             });
 
@@ -412,8 +437,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 notif.close();
                             });
                         }
-                        // NEW: Show top-right popup for friend request
-                        showTopRightPopup(`${senderName} sent you a friend request`, "info");
+                        // NEW: Show top-right popup for friend request with image
+                        showTopRightPopup(`${senderName} sent you a friend request`, "info", avatarUrl);
                     } catch (err) {
                         console.warn("Error sending friend request notification:", err);
                     }
@@ -922,17 +947,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             try {
                 const { data, error } = await client
                     .from("user_profiles")
-                    .select("user_name")
+                    .select("user_name, profile_image_url")
                     .eq("user_id", userId)
                     .maybeSingle();
 
                 if (error) throw error;
                 const username = data?.user_name || "Someone";
-                userCache[userId] = username;
-                return username;
+                const avatarUrl = data?.profile_image_url || DEFAULT_PROFILE_IMG;
+                userCache[userId] = { username, avatarUrl };
+                return { username, avatarUrl };
             } catch (err) {
                 console.error("Error fetching username:", err);
-                return "Someone";
+                return { username: "Someone", avatarUrl: DEFAULT_PROFILE_IMG };
             }
         }
 
@@ -981,14 +1007,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                         await updateUnseenCountForFriend(friendId);
 
                         try {
-                            const senderName = await getUsername(newMsg.sender_id);
-                            // NEW: Show top-right popup for new message
-                            showTopRightPopup(`New message from ${senderName}`, "info");
+                            const { username, avatarUrl } = await getUsername(newMsg.sender_id);
+                            // NEW: Show top-right popup for new message with image
+                            showTopRightPopup(`New message from ${username}`, "info", avatarUrl);
 
                             if (Notification.permission === "granted") {
-                                const notif = new Notification(`${senderName}`, {
+                                const notif = new Notification(`${username}`, {
                                     body: newMsg.content,
-                                    data: { type: 'message', senderId: newMsg.sender_id, senderName }
+                                    icon: avatarUrl,
+                                    data: { type: 'message', senderId: newMsg.sender_id, senderName: username }
                                 });
 
                                 notif.addEventListener('click', () => {
@@ -1305,17 +1332,20 @@ document.addEventListener("DOMContentLoaded", async () => {
                             try {
                                 const { data: senderProfile, error } = await client
                                     .from("user_profiles")
-                                    .select("user_name")
+                                    .select("user_name, profile_image_url")
                                     .eq("user_id", senderId)
                                     .maybeSingle();
 
                                 const senderName = senderProfile?.user_name || "New Message";
-                                // NEW: Show top-right popup for new message
-                                showTopRightPopup(`New message from ${senderName}`, "info");
+                                const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
+
+                                // NEW: Show top-right popup for new message with image
+                                showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
 
                                 if (Notification.permission === "granted") {
                                     const notif = new Notification(senderName, {
                                         body: newMsg.content,
+                                        icon: senderAvatar,
                                         data: { type: 'message', senderId, senderName }
                                     });
 
@@ -1381,6 +1411,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (!newRequest || !currentUserId) return;
 
                     if (newRequest.receiver_id === currentUserId && newRequest.status === "pending") {
+                        // FIXED: Real-time update for friend requests
                         fetchFriendRequests();
                     }
                 }
@@ -1395,8 +1426,24 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     if ((updatedRequest.receiver_id === currentUserId || updatedRequest.sender_id === currentUserId) &&
                         (updatedRequest.status === "accepted" || updatedRequest.status === "rejected")) {
+                        // FIXED: Real-time update for friend request status changes
                         fetchFriendRequests();
                         fetchFriends();
+
+                        // NEW: Show popup for accepted/rejected requests
+                        if (updatedRequest.receiver_id === currentUserId) {
+                            if (updatedRequest.status === "accepted") {
+                                showTopRightPopup("Your friend request was accepted!", "success");
+                            } else if (updatedRequest.status === "rejected") {
+                                showTopRightPopup("Your friend request was rejected", "warning");
+                            }
+                        } else if (updatedRequest.sender_id === currentUserId) {
+                            if (updatedRequest.status === "accepted") {
+                                showTopRightPopup("You accepted a friend request!", "success");
+                            } else if (updatedRequest.status === "rejected") {
+                                showTopRightPopup("You rejected a friend request", "info");
+                            }
+                        }
                     }
                 }
             );
@@ -1775,6 +1822,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     await setUserOnlineStatus(false);
                     await client.auth.signOut();
                     showToast("Logged out!", "info");
+                    // NEW: Show top-right popup
+                    showTopRightPopup("Logged out successfully!", "info");
                     window.location.href = "signup.html";
                 } catch (err) {
                     console.error("Logout error:", err);
@@ -2134,45 +2183,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                 : '';
 
             chatElement.innerHTML = `
-            <div class="recent-chat-avatar">
-                <img src="${chat.avatar_url || DEFAULT_PROFILE_IMG}" alt="${chat.user_name}">
-                ${chat.is_online ? '<span class="online-dot"></span>' : ''}
-            </div>
-            <div class="recent-chat-info">
-                <div class="recent-chat-name">${chat.user_name}</div>
-                <div class="recent-chat-message">${chat.last_message}</div>
-            </div>
-            <div class="recent-chat-time">${timeStr}</div>
-        `;
-
-            chatElement.addEventListener('click', () => {
-                openSpecificChat(chat.user_id, {
-                    user_name: chat.user_name,
-                    profile_image_url: chat.avatar_url
-                });
-            });
-
-            recentChatsContainer.appendChild(chatElement);
-        });
-    }
-
-    function renderRecentChats(chats) {
-        const recentChatsContainer = document.getElementById('recent-chats');
-        if (!recentChatsContainer) return;
-
-        recentChatsContainer.innerHTML = '';
-
-        if (chats.length === 0) {
-            recentChatsContainer.innerHTML = '<p class="no-recent-chats">No recent chats</p>';
-            return;
-        }
-
-        chats.forEach(chat => {
-            const chatElement = document.createElement('div');
-            chatElement.className = 'recent-chat';
-            chatElement.innerHTML = `
-                <img src="${chat.avatar_url || DEFAULT_PROFILE_IMG}" alt="${chat.user_name}">
-                <span>${chat.user_name}</span>
+                <div class="recent-chat-avatar">
+                    <img src="${chat.avatar_url || DEFAULT_PROFILE_IMG}" alt="${chat.user_name}">
+                    ${chat.is_online ? '<span class="online-dot"></span>' : ''}
+                </div>
+                <div class="recent-chat-info">
+                    <div class="recent-chat-name">${chat.user_name}</div>
+                    <div class="recent-chat-message">${chat.last_message}</div>
+                </div>
+                <div class="recent-chat-time">${timeStr}</div>
             `;
 
             chatElement.addEventListener('click', () => {
