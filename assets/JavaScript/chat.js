@@ -891,12 +891,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                                 notif.addEventListener('click', () => {
                                     window.focus();
-                                    notificationData = {
-                                        type: 'message',
-                                        senderId: newMsg.sender_id,
-                                        senderName
-                                    };
-                                    window.location.href = '#dashboard';
+                                    // Only redirect if not currently in an active chat
+                                    if (!currentOpenChatId) {
+                                        notificationData = {
+                                            type: 'message',
+                                            senderId: newMsg.sender_id,
+                                            senderName
+                                        };
+                                        window.location.href = '#dashboard';
+                                    }
                                     notif.close();
                                 });
                             }
@@ -1226,12 +1229,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                                         notif.addEventListener('click', () => {
                                             window.focus();
-                                            notificationData = {
-                                                type: 'message',
-                                                senderId,
-                                                senderName
-                                            };
-                                            window.location.href = '#dashboard';
+                                            // Only redirect if not currently in an active chat
+                                            if (!currentOpenChatId) {
+                                                notificationData = {
+                                                    type: 'message',
+                                                    senderId,
+                                                    senderName
+                                                };
+                                                window.location.href = '#dashboard';
+                                            }
                                             notif.close();
                                         });
                                     }
@@ -1324,7 +1330,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Handle notification redirects
     function handleNotificationRedirect() {
-        if (notificationData.type === 'message' && notificationData.senderId) {
+        // Only open chat if not currently in an active conversation
+        if (!currentOpenChatId && notificationData.type === 'message' && notificationData.senderId) {
             client
                 .from("user_profiles")
                 .select("user_name, profile_image_url")

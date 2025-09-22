@@ -213,7 +213,7 @@ nav h2 a {
   height: 20px;
   border-radius: 50%;
   background: var(--accent);
-  color: var(--button-text);
+  color: var(--button-text) !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
