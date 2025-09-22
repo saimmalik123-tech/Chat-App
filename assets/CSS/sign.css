@@ -43,7 +43,7 @@ main {
   height: 600px;
   border-radius: 20px;
   overflow: hidden;
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-2);
   animation: slideInUp 0.8s var(--animation-ease) forwards;
   transform: translateY(20px);
   opacity: 0;
@@ -124,6 +124,18 @@ main {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-form-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, var(--accent), var(--primary-dark));
 }
 
 .auth-box {
@@ -166,13 +178,14 @@ main {
   font-size: 1rem;
   width: 100%;
   transition: border-color var(--animation-duration) ease,
-    box-shadow var(--animation-duration) ease;
+    box-shadow var(--animation-duration) ease, transform 0.2s ease;
 }
 
 .auth-box input:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 0 0 3px rgba(90, 141, 154, 0.2);
+  transform: translateY(-2px);
 }
 
 .auth-box input:focus + i {
@@ -181,37 +194,79 @@ main {
 
 /* Buttons */
 .auth-box button {
-  background-color: var(--accent);
-  border: 1px solid var(--input-border);
+  background: linear-gradient(135deg, var(--accent), var(--primary-dark));
+  border: none;
   font-size: 1rem;
   padding: 15px;
   border-radius: 10px;
   color: var(--button-text);
   cursor: pointer;
   font-weight: 600;
-  transition: background-color var(--animation-duration) ease,
-    transform 0.2s ease, box-shadow var(--animation-duration) ease;
+  transition: all var(--animation-duration) ease;
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 10px;
   height: 55px;
   overflow: hidden;
+  position: relative;
   animation: fadeInRight 1s ease-out 0.6s both;
 }
 
+.auth-box button::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: left 0.5s ease;
+}
+
+.auth-box button:hover::before {
+  left: 100%;
+}
+
 .auth-box button:hover {
-  background-color: var(--primary-dark);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.auth-box button:active {
+  transform: translateY(-1px);
+}
+
+/* Button Loader */
+.auth-box button .loader {
+  display: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 0.8s linear infinite;
+  margin: 0;
+}
+
+.auth-box button.loading .loader {
+  display: inline-block;
+}
+
+.auth-box button.loading .btn-text {
+  display: none;
 }
 
 .auth-box button:disabled {
-  background-color: var(--input-border);
+  background: var(--input-border);
   cursor: not-allowed;
   color: var(--text-secondary);
   transform: none;
   box-shadow: none;
+}
+
+.auth-box button:disabled::before {
+  display: none;
 }
 
 .auth-box p {
@@ -225,6 +280,7 @@ main {
   color: var(--primary-color);
   text-decoration: none;
   transition: color var(--animation-duration) ease;
+  font-weight: 500;
 }
 
 .auth-box p a:hover {
@@ -253,9 +309,9 @@ main {
 
 /* Google Button */
 .google-btn {
-  background: #fff;
-  border: 1px solid #d1d5db;
-  color: #111;
+  background: var(--bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-primary);
   font-size: 0.95rem;
   padding: 12px;
   border-radius: 10px;
@@ -265,8 +321,7 @@ main {
   justify-content: center;
   align-items: center;
   gap: 10px;
-  transition: background-color var(--animation-duration) ease,
-    transform 0.2s ease, box-shadow var(--animation-duration) ease;
+  transition: all var(--animation-duration) ease;
   animation: fadeInRight 1s ease-out 0.8s both;
 }
 
@@ -278,13 +333,32 @@ main {
 .google-btn:hover {
   background: var(--bg-hover);
   transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Google Button Loader */
+.google-btn .loader {
+  display: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(0, 0, 0, 0.3);
+  border-radius: 50%;
+  border-top-color: #ea4335;
+  animation: spin 0.8s linear infinite;
+  margin: 0;
+}
+
+.google-btn.loading .loader {
+  display: inline-block;
+}
+
+.google-btn.loading .btn-text {
+  display: none;
 }
 
 body.dark .google-btn {
   background: var(--input-bg);
   border-color: var(--input-border);
-  color: var(--text-primary);
 }
 
 body.dark .google-btn:hover {
@@ -382,33 +456,33 @@ body.dark .google-btn:hover {
   }
 }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Responsive Styles */
 @media (max-width: 768px) {
   .auth-container {
     flex-direction: column;
     max-width: 400px;
     height: auto;
+    border-radius: 20px;
+    box-shadow: var(--shadow-1);
   }
 
   .auth-visual {
-    padding: 30px 20px;
-    min-height: 250px;
-  }
-
-  .auth-visual h1 {
-    font-size: 2rem;
-  }
-
-  .auth-visual p {
-    font-size: 1rem;
-  }
-
-  .auth-visual-icon {
-    font-size: 3rem;
+    display: none; /* Hide the visual section on screens <= 768px */
   }
 
   .auth-form-section {
     padding: 30px 20px;
+    border-radius: 20px;
+  }
+
+  .auth-form-section::before {
+    height: 4px;
   }
 }
 
@@ -423,29 +497,14 @@ body.dark .google-btn:hover {
     font-size: 1.1rem;
   }
 
-  .auth-visual {
-    padding: 20px 15px;
-    min-height: 200px;
-  }
-
-  .auth-visual h1 {
-    font-size: 1.8rem;
-  }
-
-  .auth-visual p {
-    font-size: 0.9rem;
-  }
-
-  .auth-visual-icon {
-    font-size: 2.5rem;
-  }
-
-  .auth-visual-features {
-    gap: 10px;
+  .auth-container {
+    max-width: 95%;
+    border-radius: 16px;
   }
 
   .auth-form-section {
     padding: 20px 15px;
+    border-radius: 16px;
   }
 
   .auth-box {
@@ -463,12 +522,17 @@ body.dark .google-btn:hover {
     padding: 12px;
   }
 
+  .auth-box button {
+    height: 50px;
+  }
+
   footer {
     font-size: 0.8rem;
     text-align: center;
     padding: 10px;
   }
 }
+
 .loader {
   width: 50px;
   aspect-ratio: 1;
@@ -481,12 +545,13 @@ body.dark .google-btn:hover {
   grid-area: 1/1;
   border: 8px solid;
   border-radius: 50%;
-  border-color: red red #0000 #0000;
+  border-color: var(--primary-color) var(--primary-color) transparent
+    transparent;
   mix-blend-mode: darken;
   animation: l14 1s infinite linear;
 }
 .loader::after {
-  border-color: #0000 #0000 blue blue;
+  border-color: transparent transparent var(--primary-dark) var(--primary-dark);
   animation-direction: reverse;
 }
 @keyframes l14 {
