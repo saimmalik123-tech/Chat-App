@@ -382,6 +382,50 @@ body.dark .google-btn:hover {
   animation: zoomIn 0.5s ease-out;
 }
 
+/* NEW LOADING ANIMATION */
+/* Container for the loader */
+.loader {
+  width: 50px;
+  aspect-ratio: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  z-index: 1000;
+}
+
+/* Common styles for pseudo-elements */
+.loader::before,
+.loader::after {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 8px solid transparent;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+/* Outer circle: animated rotating ring with color gradient */
+.loader::before {
+  border-top-color: var(--primary-color, #3498db);
+  border-right-color: var(--primary-color, #3498db);
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+  animation: spin 1.5s linear infinite;
+  z-index: 1;
+}
+
+/* Inner circle: contrasting color for visual interest */
+.loader::after {
+  border-top-color: var(--primary-dark, #2c3e50);
+  border-right-color: var(--primary-dark, #2c3e50);
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+  animation: spin-reverse 2s linear infinite;
+  z-index: 0;
+}
+
 /* Animations */
 @keyframes slideInUp {
   from {
@@ -458,8 +502,20 @@ body.dark .google-btn:hover {
 }
 
 @keyframes spin {
-  to {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-reverse {
+  0% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(0deg);
   }
 }
 
@@ -474,7 +530,7 @@ body.dark .google-btn:hover {
   }
 
   .auth-visual {
-    display: none; /* Hide the visual section on screens <= 768px */
+    display: none;
   }
 
   .auth-form-section {
@@ -531,33 +587,5 @@ body.dark .google-btn:hover {
     font-size: 0.8rem;
     text-align: center;
     padding: 10px;
-  }
-}
-
-.loader {
-  width: 50px;
-  aspect-ratio: 1;
-  display: grid;
-  animation: l14 4s infinite;
-  z-index: 1000;
-}
-.loader::before,
-.loader::after {
-  content: "";
-  grid-area: 1/1;
-  border: 8px solid;
-  border-radius: 50%;
-  border-color: var(--primary-color) var(--primary-color) transparent
-    transparent;
-  mix-blend-mode: darken;
-  animation: l14 1s infinite linear;
-}
-.loader::after {
-  border-color: transparent transparent var(--primary-dark) var(--primary-dark);
-  animation-direction: reverse;
-}
-@keyframes l14 {
-  100% {
-    transform: rotate(1turn);
   }
 }

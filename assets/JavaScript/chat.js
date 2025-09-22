@@ -43,7 +43,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         }
 
-        // Auto hide after 3 seconds
         setTimeout(() => {
             toast.classList.add("hidden");
             toast.classList.remove('show');
@@ -90,10 +89,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     await requestNotificationPermission();
 
-    // Default profile image
     const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
 
-    // Fetch current user avatar
     async function fetchCurrentUserAvatar(profileImageSelector = '.profile-pic') {
         const profileImage = document.querySelector(profileImageSelector);
         if (!profileImage) return;
@@ -119,7 +116,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     fetchCurrentUserAvatar();
 
-    // App state
     let currentUserId = null;
     let friendRequests = [];
     let statusChannelRef = null;
@@ -129,7 +125,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     let deletionTimeouts = {};
     let processingMessageIds = new Set();
 
-    // Get current user
     async function getCurrentUser() {
         try {
             const { data: { user }, error } = await client.auth.getUser();
@@ -149,7 +144,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Friend request actions
     async function acceptRequest(requestId, senderId) {
         try {
             const { error: updateError } = await client
@@ -174,6 +168,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             showToast("Friend request accepted!", "success");
             fetchFriendRequests();
             fetchFriends();
+            openSpecificChat(senderId);
         } catch (err) {
             console.error("Unexpected error:", err);
             showToast("An error occurred while accepting request.", "error");
@@ -200,7 +195,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // User online status
     async function setUserOnlineStatus(isOnline) {
         if (!currentUserId) return;
         try {
@@ -215,7 +209,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         Object.values(deletionTimeouts).forEach(timeoutId => clearTimeout(timeoutId));
     });
 
-    // Render friend requests
     function renderFriendRequests() {
         const messageList = document.getElementById("message-list");
         const unreadBadge = document.getElementById("unread-count");
@@ -266,7 +259,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         unreadBadge.textContent = (friendRequests && friendRequests.length) ? friendRequests.length : "0";
     }
 
-    // Toggle message popup
     document.getElementById("message-notification")?.addEventListener("click", () => {
         const popup = document.getElementById("message-popup");
         if (popup) popup.style.display = popup.style.display === "block" ? "none" : "block";
@@ -280,7 +272,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // Fetch friend requests
     async function fetchFriendRequests() {
         if (!currentUserId) return;
 
@@ -318,7 +309,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         avatar: avatarUrl
                     });
 
-                    // Send notification for new friend request
                     try {
                         if (Notification.permission === "granted") {
                             const notif = new Notification("Friend Request 👥", {
@@ -328,6 +318,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                             notif.addEventListener('click', () => {
                                 window.focus();
+                                openSpecificChat(req.sender_id);
                                 notif.close();
                             });
                         }
@@ -345,7 +336,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Update unseen message badge
     function updateUnseenBadge(friendId, count) {
         const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
         if (!chatLi) return;
@@ -366,7 +356,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Update unseen count for a friend
     async function updateUnseenCountForFriend(friendId) {
         try {
             const { count, error } = await client
@@ -390,7 +379,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Schedule message deletion
     function scheduleMessageDeletion(messageId, friendId, delay = 30000) {
         if (deletionTimeouts[messageId]) {
             clearTimeout(deletionTimeouts[messageId]);
@@ -417,7 +405,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }, delay);
     }
 
-    // Delete seen messages for a chat
     async function deleteSeenMessagesForChat(friendId) {
         if (!currentUserId) return;
 
@@ -463,7 +450,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Update last message in chat list
     async function updateLastMessageInChatList(friendId) {
         try {
             const { data: lastMsgData } = await client
@@ -491,7 +477,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Fetch friends list
     async function fetchFriends() {
         showLoading("Fetching friends...");
         if (!currentUserId) {
@@ -581,7 +566,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 `;
 
                 li.addEventListener("click", () => {
-                    openChat(friendId, friendName, avatarUrl);
+                    openSpecificChat(friendId, {
+                        user_name: friendName,
+                        profile_image_url: avatarUrl
+                    });
+
                     const chatArea = document.querySelector('.chat-area-main');
                     if (window.innerWidth <= 768) {
                         document.getElementById('message-notification')?.classList.add("hidden");
@@ -602,7 +591,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Friend search functionality
     function enableFriendSearch() {
         const searchInput = document.getElementById("search-friends");
         const chatList = document.querySelector(".chat-list");
@@ -612,7 +600,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         searchInput.dataset.hasListener = "true";
 
         let timer = null;
-        searchInput.addEventListener("input", () => {
+        searchInput.addEventListener("input", (e) => {
             clearTimeout(timer);
             timer = setTimeout(() => {
                 const query = searchInput.value.toLowerCase().trim();
@@ -622,11 +610,26 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const name = nameEl ? nameEl.textContent.toLowerCase() : "";
                     chat.style.display = name.includes(query) ? "flex" : "none";
                 });
+
+                if (e.key === 'Enter') {
+                    const visibleChats = Array.from(chats).filter(chat =>
+                        chat.style.display !== 'none'
+                    );
+
+                    if (visibleChats.length === 1) {
+                        const friendId = visibleChats[0].getAttribute('data-friend-id');
+                        const friendName = visibleChats[0].querySelector('h4').textContent;
+                        const friendAvatar = visibleChats[0].querySelector('img').src;
+                        openSpecificChat(friendId, {
+                            user_name: friendName,
+                            profile_image_url: friendAvatar
+                        });
+                    }
+                }
             }, 120);
         });
     }
 
-    // Send message
     async function sendMessage(friendId, content) {
         if (!content || !content.trim()) return;
         try {
@@ -647,7 +650,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Mark messages as seen
     async function markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar) {
         if (!currentUserId) return;
         try {
@@ -693,7 +695,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Fetch messages
     async function fetchMessages(friendId) {
         try {
             const { data, error } = await client
@@ -714,7 +715,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Render chat messages
     function renderChatMessages(chatBox, msgs, friendAvatar) {
         if (!chatBox) return;
         chatBox.innerHTML = "";
@@ -744,7 +744,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    // Send friend request
     async function sendFriendRequest(username) {
         if (!username) return showToast("Enter a username.", "error");
         try {
@@ -796,7 +795,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Update message seen status
     function updateMessageSeenStatus(chatBox, messageId) {
         const chatMessage = chatBox.querySelector(`.message[data-message-id="${messageId}"] .seen-status`);
         if (chatMessage) {
@@ -804,7 +802,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Subscribe to messages
     async function subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator) {
         function upsertMessageAndRender(oldMessagesArr, msgObj) {
             const idx = oldMessagesArr.findIndex(m => m.id === msgObj.id);
@@ -839,7 +836,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         const channelTopic = `chat:${[currentUserId, friendId].sort().join(":")}`;
         const msgChannel = client.channel(channelTopic);
 
-        // Listen for new messages
         msgChannel.on(
             "postgres_changes",
             { event: "INSERT", schema: "public", table: "messages" },
@@ -891,15 +887,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                                 notif.addEventListener('click', () => {
                                     window.focus();
-                                    // Only redirect if not currently in an active chat
-                                    if (!currentOpenChatId) {
-                                        notificationData = {
-                                            type: 'message',
-                                            senderId: newMsg.sender_id,
-                                            senderName
-                                        };
-                                        window.location.href = '#dashboard';
-                                    }
+                                    openSpecificChat(newMsg.sender_id);
                                     notif.close();
                                 });
                             }
@@ -913,7 +901,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         );
 
-        // Listen for message updates
         msgChannel.on(
             "postgres_changes",
             { event: "UPDATE", schema: "public", table: "messages" },
@@ -1000,7 +987,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         return { msgChannel, typingChannel, statusChannelRef };
     }
 
-    // Open chat window
     async function openChat(friendId, friendName, friendAvatar, fromNotification = false) {
         currentOpenChatId = friendId;
 
@@ -1168,7 +1154,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Button listeners
     document.querySelector(".submit-friend")?.addEventListener("click", () => {
         const username = document.querySelector(".friend-input")?.value.trim();
         sendFriendRequest(username);
@@ -1193,7 +1178,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Subscribe to global messages
     async function subscribeToGlobalMessages() {
         if (!window._globalMessageChannel) {
             window._globalMessageChannel = client.channel("global-messages");
@@ -1229,15 +1213,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                                         notif.addEventListener('click', () => {
                                             window.focus();
-                                            // Only redirect if not currently in an active chat
-                                            if (!currentOpenChatId) {
-                                                notificationData = {
-                                                    type: 'message',
-                                                    senderId,
-                                                    senderName
-                                                };
-                                                window.location.href = '#dashboard';
-                                            }
+                                            openSpecificChat(senderId);
                                             notif.close();
                                         });
                                     }
@@ -1286,7 +1262,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Subscribe to friend requests
     async function subscribeToFriendRequests() {
         if (!window._friendRequestChannel) {
             window._friendRequestChannel = client.channel("friend-requests");
@@ -1328,9 +1303,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Handle notification redirects
     function handleNotificationRedirect() {
-        // Only open chat if not currently in an active conversation
         if (!currentOpenChatId && notificationData.type === 'message' && notificationData.senderId) {
             client
                 .from("user_profiles")
@@ -1347,7 +1320,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         notificationData = {};
     }
 
-    // Profile UI
     const profilePic = document.querySelector(".profile-pic");
     const profilePopup = document.getElementById("profile-popup");
     const closeProfile = document.getElementById("close-profile");
@@ -1365,7 +1337,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     const saveUsernameBtn = document.getElementById("save-username");
     const newUsernameInput = document.getElementById("new-username");
 
-    // Add icons to buttons
     if (closeProfile) {
         closeProfile.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1437,7 +1408,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         `;
     }
 
-    // Bio enhancements
     const maxBioLength = 150;
     const bioCharCount = document.getElementById("bio-char-count");
     const clearBioBtn = document.getElementById("clear-bio");
@@ -1513,7 +1483,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Username enhancements
     const maxNameLength = 20;
     const nameCharCount = document.getElementById("name-char-count");
 
@@ -1561,7 +1530,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Create loader function
     function createLoader() {
         const loader = document.createElement('div');
         loader.className = 'btn-loader';
@@ -1575,7 +1543,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         return loader;
     }
 
-    // Profile popup functionality
     profilePic?.addEventListener("click", async () => {
         if (!profilePopup) return;
         profilePopup.classList.remove("hidden");
@@ -1784,7 +1751,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // Confirmation popup function
     function showConfirmPopup(message, onConfirm, onCancel) {
         const popup = document.getElementById("notification-popup");
         const messageEl = document.getElementById("popup-message");
@@ -1849,11 +1815,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Initialize database schema
     async function initializeDatabaseSchema() {
         try {
-            // Try a simpler approach - just attempt to use the deleted_at column
-            // If it doesn't exist, we'll catch the error and handle it gracefully
             const { data, error } = await client
                 .from("messages")
                 .select("id")
@@ -1863,7 +1826,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (error && error.message.includes("column \"deleted_at\" does not exist")) {
                 console.log("deleted_at column does not exist, adding it...");
 
-                // Use a simpler approach - try to add the column directly
                 try {
                     const { error: alterError } = await client.rpc('exec_sql', {
                         sql: "ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;"
@@ -1883,7 +1845,141 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Initialize app
+    // Open specific chat functionality
+    async function getUserProfile(userId) {
+        try {
+            const { data, error } = await client
+                .from("user_profiles")
+                .select("user_name, profile_image_url")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            if (error) {
+                console.error("Error fetching user profile:", error);
+                return null;
+            }
+
+            return data;
+        } catch (err) {
+            console.error("Unexpected error in getUserProfile:", err);
+            return null;
+        }
+    }
+
+    async function openSpecificChat(userId, profile = null) {
+        if (!currentUserId) {
+            const user = await getCurrentUser();
+            if (!user) {
+                showToast("You must be logged in to open a chat", "error");
+                return;
+            }
+        }
+
+        if (currentOpenChatId === userId) {
+            return;
+        }
+
+        let userProfile = profile;
+        if (!userProfile) {
+            userProfile = await getUserProfile(userId);
+            if (!userProfile) {
+                showToast("User not found", "error");
+                return;
+            }
+        }
+
+        openChat(userId, userProfile.user_name, userProfile.profile_image_url);
+    }
+
+    function generateChatLink(friendId) {
+        const baseUrl = window.location.origin + window.location.pathname;
+        return `${baseUrl}?chat=${friendId}`;
+    }
+
+    function openChatFromUrl() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const friendId = urlParams.get('chat');
+
+        if (friendId && currentUserId) {
+            client.from("user_profiles")
+                .select("user_name, profile_image_url")
+                .eq("user_id", friendId)
+                .maybeSingle()
+                .then(({ data, error }) => {
+                    if (!error && data) {
+                        openSpecificChat(friendId, data);
+                    }
+                });
+        }
+    }
+
+    window.openChatWithUser = async function (userId) {
+        if (!currentUserId) return;
+
+        try {
+            const { data: profile, error } = await client
+                .from("user_profiles")
+                .select("user_name, profile_image_url")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            if (error) throw error;
+
+            if (profile) {
+                openSpecificChat(userId, profile);
+            } else {
+                showToast("User not found", "error");
+            }
+        } catch (err) {
+            console.error("Error opening chat:", err);
+            showToast("Failed to open chat", "error");
+        }
+    };
+
+    async function fetchRecentChats() {
+        try {
+            const { data: recentChats, error } = await client.rpc('get_recent_chats', {
+                current_user_id: currentUserId
+            });
+
+            if (error) throw error;
+
+            renderRecentChats(recentChats || []);
+        } catch (err) {
+            console.error("Error fetching recent chats:", err);
+        }
+    }
+
+    function renderRecentChats(chats) {
+        const recentChatsContainer = document.getElementById('recent-chats');
+        if (!recentChatsContainer) return;
+
+        recentChatsContainer.innerHTML = '';
+
+        if (chats.length === 0) {
+            recentChatsContainer.innerHTML = '<p class="no-recent-chats">No recent chats</p>';
+            return;
+        }
+
+        chats.forEach(chat => {
+            const chatElement = document.createElement('div');
+            chatElement.className = 'recent-chat';
+            chatElement.innerHTML = `
+                <img src="${chat.avatar_url || DEFAULT_PROFILE_IMG}" alt="${chat.user_name}">
+                <span>${chat.user_name}</span>
+            `;
+
+            chatElement.addEventListener('click', () => {
+                openSpecificChat(chat.user_id, {
+                    user_name: chat.user_name,
+                    profile_image_url: chat.avatar_url
+                });
+            });
+
+            recentChatsContainer.appendChild(chatElement);
+        });
+    }
+
     const me = await getCurrentUser();
     if (me) {
         await initializeDatabaseSchema();
@@ -1891,9 +1987,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         await fetchFriendRequests();
         await subscribeToGlobalMessages();
         await subscribeToFriendRequests();
+        await fetchRecentChats();
 
         if (Object.keys(notificationData).length > 0) {
             handleNotificationRedirect();
         }
+
+        openChatFromUrl();
     }
 });
