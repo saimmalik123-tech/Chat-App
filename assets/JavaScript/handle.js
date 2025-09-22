@@ -6,30 +6,20 @@ const popupMessageElement = document.getElementById('popup-message');
 const popupCloseButton = document.querySelector('.popup-close');
 
 function showLoader() {
-    if (loaderContainer) {
-        loaderContainer.style.display = 'flex';
-    }
+    if (loaderContainer) loaderContainer.style.display = 'flex';
 }
-
 function hideLoader() {
-    if (loaderContainer) {
-        loaderContainer.style.display = 'none';
-    }
+    if (loaderContainer) loaderContainer.style.display = 'none';
 }
-
 function showPopup(message) {
     if (popupMessageElement && popupElement) {
         popupMessageElement.textContent = message;
         popupElement.classList.remove('hidden');
     }
 }
-
 function hidePopup() {
-    if (popupElement) {
-        popupElement.classList.add('hidden');
-    }
+    if (popupElement) popupElement.classList.add('hidden');
 }
-
 if (popupCloseButton) {
     popupCloseButton.addEventListener('click', hidePopup);
 }
@@ -41,43 +31,33 @@ async function handleGoogleAuth() {
         const { data: { user }, error } = await client.auth.getUser();
 
         if (error || !user) {
-            showPopup("Google login failed.");
+            showPopup("No active session. Please login.");
             window.location.href = "login.html";
             return;
         }
 
-        const email = user.email;
-        const name = user.user_metadata?.full_name || "Unknown";
+        const userId = user.id;
 
-        const { data: existingUser, error: checkError } = await client
-            .from("private_users")
+        const { data: profile, error: profileError } = await client
+            .from("user_profiles")
             .select("id")
-            .eq("email", email)
+            .eq("id", userId)
             .maybeSingle();
 
-        if (checkError) {
-            showPopup("Error checking user: " + checkError.message);
+        if (profileError) {
+            showPopup("Error checking profile: " + profileError.message);
             return;
         }
 
-        if (existingUser) {
+        // ✅ 3. Redirect logic
+        if (profile) {
             window.location.href = "dashboard.html";
-            return;
+        } else {
+            window.location.href = "setupProfile.html"; 
         }
-
-        const { error: insertError } = await client
-            .from("private_users")
-            .insert([{ name, email }]);
-
-        if (insertError) {
-            showPopup("Error saving to table: " + insertError.message);
-            return;
-        }
-
-        window.location.href = "setupProfile.html";
 
     } catch (err) {
-        showPopup("An unexpected error occurred: " + err.message);
+        showPopup("Unexpected error: " + err.message);
     } finally {
         hideLoader();
     }
