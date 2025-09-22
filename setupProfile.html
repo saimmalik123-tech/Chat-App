@@ -8,6 +8,37 @@
     <link rel="stylesheet" href="./assets/CSS/main.css">
     <link rel="stylesheet" href="./assets/CSS/setupProfile.css">
     <link rel="shortcut icon" href="./assets/icon/fav-icon.png" type="image/x-icon">
+    <style>
+        .loader {
+            width: 50px;
+            aspect-ratio: 1;
+            display: grid;
+            animation: l14 4s infinite;
+            z-index: 1000;
+        }
+
+        .loader::before,
+        .loader::after {
+            content: "";
+            grid-area: 1/1;
+            border: 8px solid;
+            border-radius: 50%;
+            border-color: var(--primary-color) var(--primary-color) transparent transparent;
+            mix-blend-mode: darken;
+            animation: l14 1s infinite linear;
+        }
+
+        .loader::after {
+            border-color: transparent transparent var(--primary-dark) var(--primary-dark);
+            animation-direction: reverse;
+        }
+
+        @keyframes l14 {
+            100% {
+                transform: rotate(1turn);
+            }
+        }
+    </style>
 </head>
 
 <body>

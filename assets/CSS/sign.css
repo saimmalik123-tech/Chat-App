@@ -539,6 +539,7 @@ body.dark .google-btn:hover {
   aspect-ratio: 1;
   display: grid;
   animation: l14 4s infinite;
+  z-index: 1000;
 }
 .loader::before,
 .loader::after {
