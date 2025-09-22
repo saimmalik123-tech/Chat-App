@@ -1399,62 +1399,120 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    async function subscribeToFriendRequests() {
-        if (!window._friendRequestChannel) {
-            window._friendRequestChannel = client.channel("friend-requests");
+    async function sendFriendRequest(username) {
+        if (!username) return showToast("Enter a username.", "error");
 
-            window._friendRequestChannel.on(
-                "postgres_changes",
-                { event: "INSERT", schema: "public", table: "requests" },
-                payload => {
-                    const newRequest = payload.new;
-                    if (!newRequest || !currentUserId) return;
+        console.log("Sending friend request to:", username);
 
-                    if (newRequest.receiver_id === currentUserId && newRequest.status === "pending") {
-                        // FIXED: Real-time update for friend requests
-                        fetchFriendRequests();
+        try {
+            const { data: user, error: userError } = await client
+                .from("user_profiles")
+                .select("user_id")
+                .eq("user_name", username)
+                .maybeSingle();
+
+            if (userError || !user) {
+                console.error("User not found:", userError);
+                return showToast("User not found.", "error");
+            }
+
+            const receiverId = user.user_id;
+            console.log("Found user with ID:", receiverId);
+
+            if (receiverId === currentUserId) {
+                return showToast("You cannot send a request to yourself.", "warning");
+            }
+
+            const { data: existing, error: existingError } = await client
+                .from("requests")
+                .select("id, status")
+                .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${currentUserId})`)
+                .maybeSingle();
+
+            if (existingError) {
+                console.error("Error checking existing request:", existingError);
+                return showToast("Something went wrong. Try again.", "error");
+            }
+
+            if (existing) {
+                console.log("Existing request found:", existing);
+                if (existing.status === "pending") {
+                    showTopRightPopup(`You already have a pending request to ${username}`, "warning");
+                    return showToast("You have already sent a request.", "info");
+                }
+                if (existing.status === "accepted") {
+                    showTopRightPopup(`You are already friends with ${username}`, "info");
+                    return showToast("You are already friends.", "info");
+                }
+                if (existing.status === "rejected") {
+                    showTopRightPopup(`This user rejected your request before`, "warning");
+                    return showToast("This user rejected your request before.", "warning");
+                }
+            }
+
+            console.log("Creating new friend request...");
+            const { data: newRequest, error: requestError } = await client
+                .from("requests")
+                .insert([{
+                    sender_id: currentUserId,
+                    receiver_id: receiverId,
+                    status: "pending"
+                }])
+                .select()
+                .single();
+
+            if (requestError) {
+                console.error("Error sending friend request:", requestError);
+                return showToast("Failed to send friend request.", "error");
+            }
+
+            console.log("Friend request created successfully:", newRequest);
+            showToast("Friend request sent successfully!", "success");
+            showTopRightPopup(`Friend request sent to ${username}!`, "success");
+        } catch (err) {
+            console.error("Unexpected error in sendFriendRequest:", err);
+            showToast("Unexpected error. Please try again.", "error");
+        }
+    }
+
+    window._friendRequestChannel.on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "requests" },
+        payload => {
+            const updatedRequest = payload.new;
+            if (!updatedRequest || !currentUserId) return;
+
+            if ((updatedRequest.receiver_id === currentUserId || updatedRequest.sender_id === currentUserId) &&
+                (updatedRequest.status === "accepted" || updatedRequest.status === "rejected")) {
+                // FIXED: Real-time update for friend request status changes
+                fetchFriendRequests();
+                fetchFriends();
+
+                // NEW: Show popup for accepted/rejected requests
+                if (updatedRequest.receiver_id === currentUserId) {
+                    if (updatedRequest.status === "accepted") {
+                        showTopRightPopup("Your friend request was accepted!", "success");
+                    } else if (updatedRequest.status === "rejected") {
+                        showTopRightPopup("Your friend request was rejected", "warning");
+                    }
+                } else if (updatedRequest.sender_id === currentUserId) {
+                    if (updatedRequest.status === "accepted") {
+                        showTopRightPopup("You accepted a friend request!", "success");
+                    } else if (updatedRequest.status === "rejected") {
+                        showTopRightPopup("You rejected a friend request", "info");
                     }
                 }
-            );
-
-            window._friendRequestChannel.on(
-                "postgres_changes",
-                { event: "UPDATE", schema: "public", table: "requests" },
-                payload => {
-                    const updatedRequest = payload.new;
-                    if (!updatedRequest || !currentUserId) return;
-
-                    if ((updatedRequest.receiver_id === currentUserId || updatedRequest.sender_id === currentUserId) &&
-                        (updatedRequest.status === "accepted" || updatedRequest.status === "rejected")) {
-                        // FIXED: Real-time update for friend request status changes
-                        fetchFriendRequests();
-                        fetchFriends();
-
-                        // NEW: Show popup for accepted/rejected requests
-                        if (updatedRequest.receiver_id === currentUserId) {
-                            if (updatedRequest.status === "accepted") {
-                                showTopRightPopup("Your friend request was accepted!", "success");
-                            } else if (updatedRequest.status === "rejected") {
-                                showTopRightPopup("Your friend request was rejected", "warning");
-                            }
-                        } else if (updatedRequest.sender_id === currentUserId) {
-                            if (updatedRequest.status === "accepted") {
-                                showTopRightPopup("You accepted a friend request!", "success");
-                            } else if (updatedRequest.status === "rejected") {
-                                showTopRightPopup("You rejected a friend request", "info");
-                            }
-                        }
-                    }
-                }
-            );
-
-            try {
-                await window._friendRequestChannel.subscribe();
-                console.log("Subscribed to friend-requests channel.");
-            } catch (err) {
-                console.warn("subscribeToFriendRequests subscribe failed:", err);
             }
         }
+    );
+
+    try {
+        await window._friendRequestChannel.subscribe();
+        console.log("Subscribed to friend-requests channel.");
+    } catch (err) {
+        console.warn("subscribeToFriendRequests subscribe failed:", err);
+    }
+}
     }
 
     function handleNotificationRedirect() {
@@ -1475,33 +1533,33 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const profilePic = document.querySelector(".profile-pic");
-    const profilePopup = document.getElementById("profile-popup");
-    const closeProfile = document.getElementById("close-profile");
-    const profilePreview = document.getElementById("profile-preview");
-    const profileUpload = document.getElementById("profile-upload");
-    const bioInput = document.getElementById("bio");
-    const saveProfileBtn = document.getElementById("save-profile");
-    const logoutBtn = document.getElementById("logout");
-    const profileUsername = document.getElementById("profile-username");
+const profilePopup = document.getElementById("profile-popup");
+const closeProfile = document.getElementById("close-profile");
+const profilePreview = document.getElementById("profile-preview");
+const profileUpload = document.getElementById("profile-upload");
+const bioInput = document.getElementById("bio");
+const saveProfileBtn = document.getElementById("save-profile");
+const logoutBtn = document.getElementById("logout");
+const profileUsername = document.getElementById("profile-username");
 
-    const usernamePopup = document.getElementById("username-popup");
-    const changeUsernameBtn = document.getElementById("change-username-btn");
-    const closeUsername = document.getElementById("close-username");
-    const cancelUsername = document.getElementById("cancel-username");
-    const saveUsernameBtn = document.getElementById("save-username");
-    const newUsernameInput = document.getElementById("new-username");
+const usernamePopup = document.getElementById("username-popup");
+const changeUsernameBtn = document.getElementById("change-username-btn");
+const closeUsername = document.getElementById("close-username");
+const cancelUsername = document.getElementById("cancel-username");
+const saveUsernameBtn = document.getElementById("save-username");
+const newUsernameInput = document.getElementById("new-username");
 
-    if (closeProfile) {
-        closeProfile.innerHTML = `
+if (closeProfile) {
+    closeProfile.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
         `;
-    }
+}
 
-    if (saveProfileBtn) {
-        saveProfileBtn.innerHTML = `
+if (saveProfileBtn) {
+    saveProfileBtn.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path>
                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -1509,29 +1567,29 @@ document.addEventListener("DOMContentLoaded", async () => {
             </svg>
             Save Profile
         `;
-    }
+}
 
-    if (changeUsernameBtn) {
-        changeUsernameBtn.innerHTML = `
+if (changeUsernameBtn) {
+    changeUsernameBtn.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"></path>
                 <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"></path>
             </svg>
             Change Username
         `;
-    }
+}
 
-    if (closeUsername) {
-        closeUsername.innerHTML = `
+if (closeUsername) {
+    closeUsername.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
         `;
-    }
+}
 
-    if (cancelUsername) {
-        cancelUsername.innerHTML = `
+if (cancelUsername) {
+    cancelUsername.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="15" y1="9" x2="9" y2="15"></line>
@@ -1539,20 +1597,20 @@ document.addEventListener("DOMContentLoaded", async () => {
             </svg>
             Cancel
         `;
-    }
+}
 
-    if (saveUsernameBtn) {
-        saveUsernameBtn.innerHTML = `
+if (saveUsernameBtn) {
+    saveUsernameBtn.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12"></polyline>
                 <path d="M20 6L9 17l-5 5"></path>
             </svg>
             Save Username
         `;
-    }
+}
 
-    if (logoutBtn) {
-        logoutBtn.innerHTML = `
+if (logoutBtn) {
+    logoutBtn.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"></path>
                 <polyline points="16 17 21 12 16 7"></polyline>
@@ -1560,220 +1618,317 @@ document.addEventListener("DOMContentLoaded", async () => {
             </svg>
             Logout
         `;
-    }
+}
 
-    const maxBioLength = 150;
-    const bioCharCount = document.getElementById("bio-char-count");
-    const clearBioBtn = document.getElementById("clear-bio");
+const maxBioLength = 150;
+const bioCharCount = document.getElementById("bio-char-count");
+const clearBioBtn = document.getElementById("clear-bio");
 
-    if (bioInput && !bioCharCount) {
-        const charCount = document.createElement('span');
-        charCount.id = 'bio-char-count';
-        charCount.className = 'char-count';
-        bioInput.parentNode.appendChild(charCount);
-    }
+if (bioInput && !bioCharCount) {
+    const charCount = document.createElement('span');
+    charCount.id = 'bio-char-count';
+    charCount.className = 'char-count';
+    bioInput.parentNode.appendChild(charCount);
+}
 
-    if (bioInput && !clearBioBtn) {
-        const clearBtn = document.createElement('button');
-        clearBtn.id = 'clear-bio';
-        clearBtn.className = 'clear-bio-btn';
-        clearBtn.innerHTML = `
+if (bioInput && !clearBioBtn) {
+    const clearBtn = document.createElement('button');
+    clearBtn.id = 'clear-bio';
+    clearBtn.className = 'clear-bio-btn';
+    clearBtn.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
             </svg>
             Clear
         `;
-        bioInput.parentNode.appendChild(clearBtn);
-    }
+    bioInput.parentNode.appendChild(clearBtn);
+}
 
-    const bioCharCountEl = document.getElementById("bio-char-count");
-    const clearBioBtnEl = document.getElementById("clear-bio");
+const bioCharCountEl = document.getElementById("bio-char-count");
+const clearBioBtnEl = document.getElementById("clear-bio");
 
-    if (bioInput && bioCharCountEl) {
-        bioCharCountEl.textContent = bioInput.value.length;
+if (bioInput && bioCharCountEl) {
+    bioCharCountEl.textContent = bioInput.value.length;
 
-        bioInput.addEventListener('input', () => {
-            const currentLength = bioInput.value.length;
-            bioCharCountEl.textContent = currentLength;
+    bioInput.addEventListener('input', () => {
+        const currentLength = bioInput.value.length;
+        bioCharCountEl.textContent = currentLength;
 
-            if (currentLength > maxBioLength * 0.9) {
-                bioCharCountEl.style.color = 'var(--accent)';
-            } else {
-                bioCharCountEl.style.color = 'var(--text-secondary)';
-            }
-
-            bioInput.style.height = 'auto';
-            bioInput.style.height = Math.min(bioInput.scrollHeight, 200) + 'px';
-        });
-
-        if (clearBioBtnEl) {
-            clearBioBtnEl.addEventListener('click', () => {
-                bioInput.value = '';
-                bioCharCountEl.textContent = '0';
-                bioInput.style.height = 'auto';
-                bioInput.focus();
-            });
+        if (currentLength > maxBioLength * 0.9) {
+            bioCharCountEl.style.color = 'var(--accent)';
+        } else {
+            bioCharCountEl.style.color = 'var(--text-secondary)';
         }
 
-        bioInput.addEventListener('keydown', (e) => {
-            const allowedKeys = [
-                'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
-                'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'
-            ];
+        bioInput.style.height = 'auto';
+        bioInput.style.height = Math.min(bioInput.scrollHeight, 200) + 'px';
+    });
 
-            if (!allowedKeys.includes(e.key) &&
-                bioInput.value.length >= maxBioLength &&
-                !e.ctrlKey && !e.metaKey) {
-                e.preventDefault();
-            }
-        });
-
-        bioInput.addEventListener('paste', (e) => {
-            const paste = (e.clipboardData || window.clipboardData).getData('text');
-            if (bioInput.value.length + paste.length > maxBioLength) {
-                e.preventDefault();
-            }
+    if (clearBioBtnEl) {
+        clearBioBtnEl.addEventListener('click', () => {
+            bioInput.value = '';
+            bioCharCountEl.textContent = '0';
+            bioInput.style.height = 'auto';
+            bioInput.focus();
         });
     }
 
-    const maxNameLength = 20;
-    const nameCharCount = document.getElementById("name-char-count");
+    bioInput.addEventListener('keydown', (e) => {
+        const allowedKeys = [
+            'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
+            'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'
+        ];
 
-    if (newUsernameInput && !nameCharCount) {
-        const charCount = document.createElement('span');
-        charCount.id = 'name-char-count';
-        charCount.className = 'char-count';
-        newUsernameInput.parentNode.appendChild(charCount);
-    }
+        if (!allowedKeys.includes(e.key) &&
+            bioInput.value.length >= maxBioLength &&
+            !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+        }
+    });
 
-    const nameCharCountEl = document.getElementById("name-char-count");
+    bioInput.addEventListener('paste', (e) => {
+        const paste = (e.clipboardData || window.clipboardData).getData('text');
+        if (bioInput.value.length + paste.length > maxBioLength) {
+            e.preventDefault();
+        }
+    });
+}
 
-    if (newUsernameInput && nameCharCountEl) {
-        nameCharCountEl.textContent = newUsernameInput.value.length;
+const maxNameLength = 20;
+const nameCharCount = document.getElementById("name-char-count");
 
-        newUsernameInput.addEventListener('input', () => {
-            const currentLength = newUsernameInput.value.length;
-            nameCharCountEl.textContent = currentLength;
+if (newUsernameInput && !nameCharCount) {
+    const charCount = document.createElement('span');
+    charCount.id = 'name-char-count';
+    charCount.className = 'char-count';
+    newUsernameInput.parentNode.appendChild(charCount);
+}
 
-            if (currentLength > maxNameLength * 0.9) {
-                nameCharCountEl.style.color = 'var(--accent)';
-            } else {
-                nameCharCountEl.style.color = 'var(--text-secondary)';
-            }
-        });
+const nameCharCountEl = document.getElementById("name-char-count");
 
-        newUsernameInput.addEventListener('keydown', (e) => {
-            const allowedKeys = [
-                'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
-                'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'
-            ];
+if (newUsernameInput && nameCharCountEl) {
+    nameCharCountEl.textContent = newUsernameInput.value.length;
 
-            if (!allowedKeys.includes(e.key) &&
-                newUsernameInput.value.length >= maxNameLength &&
-                !e.ctrlKey && !e.metaKey) {
-                e.preventDefault();
-            }
-        });
+    newUsernameInput.addEventListener('input', () => {
+        const currentLength = newUsernameInput.value.length;
+        nameCharCountEl.textContent = currentLength;
 
-        newUsernameInput.addEventListener('paste', (e) => {
-            const paste = (e.clipboardData || window.clipboardData).getData('text');
-            if (newUsernameInput.value.length + paste.length > maxNameLength) {
-                e.preventDefault();
-            }
-        });
-    }
+        if (currentLength > maxNameLength * 0.9) {
+            nameCharCountEl.style.color = 'var(--accent)';
+        } else {
+            nameCharCountEl.style.color = 'var(--text-secondary)';
+        }
+    });
 
-    function createLoader() {
-        const loader = document.createElement('div');
-        loader.className = 'btn-loader';
-        loader.innerHTML = `
+    newUsernameInput.addEventListener('keydown', (e) => {
+        const allowedKeys = [
+            'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
+            'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'
+        ];
+
+        if (!allowedKeys.includes(e.key) &&
+            newUsernameInput.value.length >= maxNameLength &&
+            !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+        }
+    });
+
+    newUsernameInput.addEventListener('paste', (e) => {
+        const paste = (e.clipboardData || window.clipboardData).getData('text');
+        if (newUsernameInput.value.length + paste.length > maxNameLength) {
+            e.preventDefault();
+        }
+    });
+}
+
+function createLoader() {
+    const loader = document.createElement('div');
+    loader.className = 'btn-loader';
+    loader.innerHTML = `
             <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <path d="M12 6v6l4 2"></path>
             </svg>
             <span>Saving...</span>
         `;
-        return loader;
+    return loader;
+}
+
+profilePic?.addEventListener("click", async () => {
+    if (!profilePopup) return;
+    profilePopup.classList.remove("hidden");
+
+    try {
+        const { data: profile, error } = await client
+            .from("user_profiles")
+            .select("profile_image_url, bio, user_name")
+            .eq("user_id", currentUserId)
+            .limit(1)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
+        bioInput.value = profile?.bio || "";
+        profileUsername.textContent = profile?.user_name || "Unknown User";
+        newUsernameInput.value = profile?.user_name || "";
+
+        if (bioCharCountEl) bioCharCountEl.textContent = bioInput.value.length;
+        if (nameCharCountEl) nameCharCountEl.textContent = newUsernameInput.value.length;
+    } catch (err) {
+        console.error("Error loading profile:", err);
+        showToast("Failed to load profile details.", "error");
+    }
+});
+
+closeProfile?.addEventListener("click", () => {
+    profilePopup?.classList.add("hidden");
+});
+
+profileUpload?.addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            profilePreview.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+saveProfileBtn?.addEventListener("click", async () => {
+    const originalContent = saveProfileBtn.innerHTML;
+
+    saveProfileBtn.disabled = true;
+    saveProfileBtn.innerHTML = '';
+    saveProfileBtn.appendChild(createLoader());
+
+    try {
+        let imageUrl = profilePreview?.src || DEFAULT_PROFILE_IMG;
+        const bio = bioInput?.value.trim() || "";
+
+        const file = profileUpload?.files[0];
+        if (file) {
+            const fileName = `${currentUserId}_${Date.now()}_${file.name}`;
+            const { data, error: uploadError } = await client.storage
+                .from('avatars')
+                .upload(fileName, file, {
+                    cacheControl: '3600',
+                    upsert: false
+                });
+
+            if (uploadError) throw uploadError;
+
+            const { data: publicUrlData } = client.storage.from('avatars').getPublicUrl(data.path);
+            imageUrl = publicUrlData.publicUrl;
+        }
+
+        const { error } = await client
+            .from("user_profiles")
+            .update({ profile_image_url: imageUrl, bio })
+            .eq("user_id", currentUserId);
+
+        if (error) throw error;
+
+        saveProfileBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                    <path d="M20 6L9 17l-5 5"></path>
+                </svg>
+                Saved!
+            `;
+
+        showToast("Profile updated successfully!", "success");
+        // NEW: Show top-right popup
+        showTopRightPopup("Profile updated successfully!", "success");
+
+        setTimeout(() => {
+            saveProfileBtn.disabled = false;
+            saveProfileBtn.innerHTML = originalContent;
+            profilePopup?.classList.add("hidden");
+        }, 1500);
+
+        fetchCurrentUserAvatar();
+        fetchFriends();
+    } catch (err) {
+        console.error("Error updating profile:", err);
+        showToast(`Failed to update profile: ${err.message || err}`, "error");
+
+        saveProfileBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                Error
+            `;
+
+        setTimeout(() => {
+            saveProfileBtn.disabled = false;
+            saveProfileBtn.innerHTML = originalContent;
+        }, 2000);
+    }
+});
+
+logoutBtn?.addEventListener("click", async () => {
+    showConfirmPopup(
+        "Are you sure you want to logout?",
+        async () => {
+            showLoading("Logging out...");
+            try {
+                await setUserOnlineStatus(false);
+                await client.auth.signOut();
+                showToast("Logged out!", "info");
+                // NEW: Show top-right popup
+                showTopRightPopup("Logged out successfully!", "info");
+                window.location.href = "signup.html";
+            } catch (err) {
+                console.error("Logout error:", err);
+                showToast("Logout failed.", "error");
+            } finally {
+                hideLoading();
+            }
+        },
+        () => {
+        }
+    );
+});
+
+changeUsernameBtn?.addEventListener("click", () => {
+    profilePopup?.classList.add("hidden");
+    usernamePopup?.classList.remove("hidden");
+});
+
+closeUsername?.addEventListener("click", () => {
+    usernamePopup?.classList.add("hidden");
+});
+cancelUsername?.addEventListener("click", () => {
+    usernamePopup?.classList.add("hidden");
+});
+
+saveUsernameBtn?.addEventListener("click", async () => {
+    const newUsername = newUsernameInput?.value.trim();
+    if (!newUsername) {
+        showToast("Username cannot be empty!", "error");
+        return;
     }
 
-    profilePic?.addEventListener("click", async () => {
-        if (!profilePopup) return;
-        profilePopup.classList.remove("hidden");
+    const originalContent = saveUsernameBtn.innerHTML;
 
-        try {
-            const { data: profile, error } = await client
-                .from("user_profiles")
-                .select("profile_image_url, bio, user_name")
-                .eq("user_id", currentUserId)
-                .limit(1)
-                .maybeSingle();
+    saveUsernameBtn.disabled = true;
+    saveUsernameBtn.innerHTML = '';
+    saveUsernameBtn.appendChild(createLoader());
 
-            if (error) throw error;
+    try {
+        const { error } = await client
+            .from("user_profiles")
+            .update({ user_name: newUsername })
+            .eq("user_id", currentUserId);
 
-            profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
-            bioInput.value = profile?.bio || "";
-            profileUsername.textContent = profile?.user_name || "Unknown User";
-            newUsernameInput.value = profile?.user_name || "";
+        if (error) throw error;
 
-            if (bioCharCountEl) bioCharCountEl.textContent = bioInput.value.length;
-            if (nameCharCountEl) nameCharCountEl.textContent = newUsernameInput.value.length;
-        } catch (err) {
-            console.error("Error loading profile:", err);
-            showToast("Failed to load profile details.", "error");
-        }
-    });
-
-    closeProfile?.addEventListener("click", () => {
-        profilePopup?.classList.add("hidden");
-    });
-
-    profileUpload?.addEventListener("change", (e) => {
-        const file = e.target.files && e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                profilePreview.src = ev.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-    });
-
-    saveProfileBtn?.addEventListener("click", async () => {
-        const originalContent = saveProfileBtn.innerHTML;
-
-        saveProfileBtn.disabled = true;
-        saveProfileBtn.innerHTML = '';
-        saveProfileBtn.appendChild(createLoader());
-
-        try {
-            let imageUrl = profilePreview?.src || DEFAULT_PROFILE_IMG;
-            const bio = bioInput?.value.trim() || "";
-
-            const file = profileUpload?.files[0];
-            if (file) {
-                const fileName = `${currentUserId}_${Date.now()}_${file.name}`;
-                const { data, error: uploadError } = await client.storage
-                    .from('avatars')
-                    .upload(fileName, file, {
-                        cacheControl: '3600',
-                        upsert: false
-                    });
-
-                if (uploadError) throw uploadError;
-
-                const { data: publicUrlData } = client.storage.from('avatars').getPublicUrl(data.path);
-                imageUrl = publicUrlData.publicUrl;
-            }
-
-            const { error } = await client
-                .from("user_profiles")
-                .update({ profile_image_url: imageUrl, bio })
-                .eq("user_id", currentUserId);
-
-            if (error) throw error;
-
-            saveProfileBtn.innerHTML = `
+        saveUsernameBtn.innerHTML = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
                     <path d="M20 6L9 17l-5 5"></path>
@@ -1781,23 +1936,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                 Saved!
             `;
 
-            showToast("Profile updated successfully!", "success");
-            // NEW: Show top-right popup
-            showTopRightPopup("Profile updated successfully!", "success");
+        showToast("Username updated!", "success");
+        // NEW: Show top-right popup
+        showTopRightPopup("Username updated successfully!", "success");
+        profileUsername.textContent = newUsername;
 
-            setTimeout(() => {
-                saveProfileBtn.disabled = false;
-                saveProfileBtn.innerHTML = originalContent;
-                profilePopup?.classList.add("hidden");
-            }, 1500);
+        setTimeout(() => {
+            saveUsernameBtn.disabled = false;
+            saveUsernameBtn.innerHTML = originalContent;
+            usernamePopup?.classList.add("hidden");
+        }, 1500);
 
-            fetchCurrentUserAvatar();
-            fetchFriends();
-        } catch (err) {
-            console.error("Error updating profile:", err);
-            showToast(`Failed to update profile: ${err.message || err}`, "error");
+        fetchFriends();
+    } catch (err) {
+        console.error("Error updating username:", err);
+        showToast(`Failed to update username: ${err.message || err}`, "error");
 
-            saveProfileBtn.innerHTML = `
+        saveUsernameBtn.innerHTML = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
                     <line x1="15" y1="9" x2="9" y2="15"></line>
@@ -1806,120 +1961,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                 Error
             `;
 
-            setTimeout(() => {
-                saveProfileBtn.disabled = false;
-                saveProfileBtn.innerHTML = originalContent;
-            }, 2000);
-        }
-    });
+        setTimeout(() => {
+            saveUsernameBtn.disabled = false;
+            saveUsernameBtn.innerHTML = originalContent;
+        }, 2000);
+    }
+});
 
-    logoutBtn?.addEventListener("click", async () => {
-        showConfirmPopup(
-            "Are you sure you want to logout?",
-            async () => {
-                showLoading("Logging out...");
-                try {
-                    await setUserOnlineStatus(false);
-                    await client.auth.signOut();
-                    showToast("Logged out!", "info");
-                    // NEW: Show top-right popup
-                    showTopRightPopup("Logged out successfully!", "info");
-                    window.location.href = "signup.html";
-                } catch (err) {
-                    console.error("Logout error:", err);
-                    showToast("Logout failed.", "error");
-                } finally {
-                    hideLoading();
-                }
-            },
-            () => {
-            }
-        );
-    });
+function showConfirmPopup(message, onConfirm, onCancel) {
+    const popup = document.getElementById("notification-popup");
+    const messageEl = document.getElementById("popup-message");
+    const closeBtn = document.getElementById("popup-close");
 
-    changeUsernameBtn?.addEventListener("click", () => {
-        profilePopup?.classList.add("hidden");
-        usernamePopup?.classList.remove("hidden");
-    });
+    if (!popup || !messageEl) return;
 
-    closeUsername?.addEventListener("click", () => {
-        usernamePopup?.classList.add("hidden");
-    });
-    cancelUsername?.addEventListener("click", () => {
-        usernamePopup?.classList.add("hidden");
-    });
-
-    saveUsernameBtn?.addEventListener("click", async () => {
-        const newUsername = newUsernameInput?.value.trim();
-        if (!newUsername) {
-            showToast("Username cannot be empty!", "error");
-            return;
-        }
-
-        const originalContent = saveUsernameBtn.innerHTML;
-
-        saveUsernameBtn.disabled = true;
-        saveUsernameBtn.innerHTML = '';
-        saveUsernameBtn.appendChild(createLoader());
-
-        try {
-            const { error } = await client
-                .from("user_profiles")
-                .update({ user_name: newUsername })
-                .eq("user_id", currentUserId);
-
-            if (error) throw error;
-
-            saveUsernameBtn.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                    <path d="M20 6L9 17l-5 5"></path>
-                </svg>
-                Saved!
-            `;
-
-            showToast("Username updated!", "success");
-            // NEW: Show top-right popup
-            showTopRightPopup("Username updated successfully!", "success");
-            profileUsername.textContent = newUsername;
-
-            setTimeout(() => {
-                saveUsernameBtn.disabled = false;
-                saveUsernameBtn.innerHTML = originalContent;
-                usernamePopup?.classList.add("hidden");
-            }, 1500);
-
-            fetchFriends();
-        } catch (err) {
-            console.error("Error updating username:", err);
-            showToast(`Failed to update username: ${err.message || err}`, "error");
-
-            saveUsernameBtn.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-                Error
-            `;
-
-            setTimeout(() => {
-                saveUsernameBtn.disabled = false;
-                saveUsernameBtn.innerHTML = originalContent;
-            }, 2000);
-        }
-    });
-
-    function showConfirmPopup(message, onConfirm, onCancel) {
-        const popup = document.getElementById("notification-popup");
-        const messageEl = document.getElementById("popup-message");
-        const closeBtn = document.getElementById("popup-close");
-
-        if (!popup || !messageEl) return;
-
-        const buttonsContainer = document.createElement('div');
-        buttonsContainer.className = 'modal-popup-buttons';
-        buttonsContainer.innerHTML = `
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.className = 'modal-popup-buttons';
+    buttonsContainer.innerHTML = `
             <button id="popup-confirm" class="modal-btn-confirm">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
@@ -1937,252 +1995,252 @@ document.addEventListener("DOMContentLoaded", async () => {
             </button>
         `;
 
-        const existingButtons = popup.querySelector('.modal-popup-buttons');
-        if (existingButtons) {
-            existingButtons.remove();
-        }
-
-        messageEl.textContent = message;
-        popup.appendChild(buttonsContainer);
-        popup.classList.remove("hidden", "error", "success", "info");
-        popup.classList.add("show", "confirm");
-
-        const confirmBtn = document.getElementById('popup-confirm');
-        const cancelBtn = document.getElementById('popup-cancel');
-
-        const handleClose = () => {
-            popup.classList.add("hidden");
-            popup.classList.remove('show');
-            buttonsContainer.remove();
-        };
-
-        const newClose = closeBtn.cloneNode(true);
-        closeBtn.parentNode.replaceChild(newClose, closeBtn);
-        newClose.addEventListener('click', () => {
-            handleClose();
-            if (onCancel) onCancel();
-        });
-
-        confirmBtn.addEventListener('click', () => {
-            handleClose();
-            if (onConfirm) onConfirm();
-        });
-
-        cancelBtn.addEventListener('click', () => {
-            handleClose();
-            if (onCancel) onCancel();
-        });
+    const existingButtons = popup.querySelector('.modal-popup-buttons');
+    if (existingButtons) {
+        existingButtons.remove();
     }
 
-    async function initializeDatabaseSchema() {
-        try {
-            const { data, error } = await client
-                .from("messages")
-                .select("id")
-                .limit(1)
-                .is('deleted_at', null);
+    messageEl.textContent = message;
+    popup.appendChild(buttonsContainer);
+    popup.classList.remove("hidden", "error", "success", "info");
+    popup.classList.add("show", "confirm");
 
-            if (error && error.message.includes("column \"deleted_at\" does not exist")) {
-                console.log("deleted_at column does not exist, adding it...");
+    const confirmBtn = document.getElementById('popup-confirm');
+    const cancelBtn = document.getElementById('popup-cancel');
 
-                try {
-                    const { error: alterError } = await client.rpc('exec_sql', {
-                        sql: "ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;"
-                    });
-
-                    if (alterError) {
-                        console.error("Error adding deleted_at column:", alterError);
-                    } else {
-                        console.log("Successfully added deleted_at column");
-                    }
-                } catch (alterErr) {
-                    console.error("Exception when adding deleted_at column:", alterErr);
-                }
-            }
-        } catch (err) {
-            console.error("Error initializing database schema:", err);
-        }
-    }
-
-    // Open specific chat functionality
-    async function getUserProfile(userId) {
-        try {
-            const { data, error } = await client
-                .from("user_profiles")
-                .select("user_name, profile_image_url")
-                .eq("user_id", userId)
-                .maybeSingle();
-
-            if (error) {
-                console.error("Error fetching user profile:", error);
-                return null;
-            }
-
-            return data;
-        } catch (err) {
-            console.error("Unexpected error in getUserProfile:", err);
-            return null;
-        }
-    }
-
-    async function openSpecificChat(userId, profile = null) {
-        if (!currentUserId) {
-            const user = await getCurrentUser();
-            if (!user) {
-                showToast("You must be logged in to open a chat", "error");
-                return;
-            }
-        }
-
-        if (currentOpenChatId === userId) {
-            return;
-        }
-
-        let userProfile = profile;
-        if (!userProfile) {
-            userProfile = await getUserProfile(userId);
-            if (!userProfile) {
-                showToast("User not found", "error");
-                return;
-            }
-        }
-
-        openChat(userId, userProfile.user_name, userProfile.profile_image_url);
-    }
-
-    function generateChatLink(friendId) {
-        const baseUrl = window.location.origin + window.location.pathname;
-        return `${baseUrl}?chat=${friendId}`;
-    }
-
-    function openChatFromUrl() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const friendId = urlParams.get('chat');
-
-        if (friendId && currentUserId) {
-            client.from("user_profiles")
-                .select("user_name, profile_image_url")
-                .eq("user_id", friendId)
-                .maybeSingle()
-                .then(({ data, error }) => {
-                    if (!error && data) {
-                        openSpecificChat(friendId, data);
-                    }
-                });
-        }
-    }
-
-    window.openChatWithUser = async function (userId) {
-        if (!currentUserId) return;
-
-        try {
-            const { data: profile, error } = await client
-                .from("user_profiles")
-                .select("user_name, profile_image_url")
-                .eq("user_id", userId)
-                .maybeSingle();
-
-            if (error) throw error;
-
-            if (profile) {
-                openSpecificChat(userId, profile);
-            } else {
-                showToast("User not found", "error");
-            }
-        } catch (err) {
-            console.error("Error opening chat:", err);
-            showToast("Failed to open chat", "error");
-        }
+    const handleClose = () => {
+        popup.classList.add("hidden");
+        popup.classList.remove('show');
+        buttonsContainer.remove();
     };
 
-    async function fetchRecentChats() {
-        try {
-            // First, let's get the list of friends
-            const { data: friends, error: friendsError } = await client
-                .from("friends")
-                .select("*")
-                .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
+    const newClose = closeBtn.cloneNode(true);
+    closeBtn.parentNode.replaceChild(newClose, closeBtn);
+    newClose.addEventListener('click', () => {
+        handleClose();
+        if (onCancel) onCancel();
+    });
 
-            if (friendsError) throw friendsError;
+    confirmBtn.addEventListener('click', () => {
+        handleClose();
+        if (onConfirm) onConfirm();
+    });
 
-            if (!friends || friends.length === 0) {
-                renderRecentChats([]);
-                return;
+    cancelBtn.addEventListener('click', () => {
+        handleClose();
+        if (onCancel) onCancel();
+    });
+}
+
+async function initializeDatabaseSchema() {
+    try {
+        const { data, error } = await client
+            .from("messages")
+            .select("id")
+            .limit(1)
+            .is('deleted_at', null);
+
+        if (error && error.message.includes("column \"deleted_at\" does not exist")) {
+            console.log("deleted_at column does not exist, adding it...");
+
+            try {
+                const { error: alterError } = await client.rpc('exec_sql', {
+                    sql: "ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;"
+                });
+
+                if (alterError) {
+                    console.error("Error adding deleted_at column:", alterError);
+                } else {
+                    console.log("Successfully added deleted_at column");
+                }
+            } catch (alterErr) {
+                console.error("Exception when adding deleted_at column:", alterErr);
             }
+        }
+    } catch (err) {
+        console.error("Error initializing database schema:", err);
+    }
+}
 
-            // Extract friend IDs
-            const friendIds = friends.map(f =>
-                f.user1_id === currentUserId ? f.user2_id : f.user1_id
-            );
+// Open specific chat functionality
+async function getUserProfile(userId) {
+    try {
+        const { data, error } = await client
+            .from("user_profiles")
+            .select("user_name, profile_image_url")
+            .eq("user_id", userId)
+            .maybeSingle();
 
-            // Get profiles for these friends
-            const { data: profiles, error: profilesError } = await client
-                .from("user_profiles")
-                .select("user_id, user_name, profile_image_url, is_online")
-                .in("user_id", friendIds);
+        if (error) {
+            console.error("Error fetching user profile:", error);
+            return null;
+        }
 
-            if (profilesError) throw profilesError;
+        return data;
+    } catch (err) {
+        console.error("Unexpected error in getUserProfile:", err);
+        return null;
+    }
+}
 
-            // Get the most recent message for each friend
-            const recentChatsPromises = friendIds.map(async (friendId) => {
-                const { data: lastMessage } = await client
-                    .from("messages")
-                    .select("content, created_at")
-                    .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
-                    .is('deleted_at', null)
-                    .order("created_at", { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
-
-                const profile = profiles?.find(p => p.user_id === friendId);
-
-                return {
-                    user_id: friendId,
-                    user_name: profile?.user_name || "Unknown",
-                    avatar_url: profile?.profile_image_url || DEFAULT_PROFILE_IMG,
-                    is_online: profile?.is_online || false,
-                    last_message: lastMessage?.content || "No messages yet",
-                    last_message_time: lastMessage?.created_at || null
-                };
-            });
-
-            const recentChats = await Promise.all(recentChatsPromises);
-
-            // Sort by most recent message time
-            recentChats.sort((a, b) => {
-                if (!a.last_message_time) return 1;
-                if (!b.last_message_time) return -1;
-                return new Date(b.last_message_time) - new Date(a.last_message_time);
-            });
-
-            renderRecentChats(recentChats);
-        } catch (err) {
-            console.error("Error fetching recent chats:", err);
-            // If there's an error, render empty recent chats
-            renderRecentChats([]);
+async function openSpecificChat(userId, profile = null) {
+    if (!currentUserId) {
+        const user = await getCurrentUser();
+        if (!user) {
+            showToast("You must be logged in to open a chat", "error");
+            return;
         }
     }
 
-    function renderRecentChats(chats) {
-        const recentChatsContainer = document.getElementById('recent-chats');
-        if (!recentChatsContainer) return;
+    if (currentOpenChatId === userId) {
+        return;
+    }
 
-        recentChatsContainer.innerHTML = '';
+    let userProfile = profile;
+    if (!userProfile) {
+        userProfile = await getUserProfile(userId);
+        if (!userProfile) {
+            showToast("User not found", "error");
+            return;
+        }
+    }
 
-        if (chats.length === 0) {
-            recentChatsContainer.innerHTML = '<p class="no-recent-chats">No recent chats</p>';
+    openChat(userId, userProfile.user_name, userProfile.profile_image_url);
+}
+
+function generateChatLink(friendId) {
+    const baseUrl = window.location.origin + window.location.pathname;
+    return `${baseUrl}?chat=${friendId}`;
+}
+
+function openChatFromUrl() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const friendId = urlParams.get('chat');
+
+    if (friendId && currentUserId) {
+        client.from("user_profiles")
+            .select("user_name, profile_image_url")
+            .eq("user_id", friendId)
+            .maybeSingle()
+            .then(({ data, error }) => {
+                if (!error && data) {
+                    openSpecificChat(friendId, data);
+                }
+            });
+    }
+}
+
+window.openChatWithUser = async function (userId) {
+    if (!currentUserId) return;
+
+    try {
+        const { data: profile, error } = await client
+            .from("user_profiles")
+            .select("user_name, profile_image_url")
+            .eq("user_id", userId)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        if (profile) {
+            openSpecificChat(userId, profile);
+        } else {
+            showToast("User not found", "error");
+        }
+    } catch (err) {
+        console.error("Error opening chat:", err);
+        showToast("Failed to open chat", "error");
+    }
+};
+
+async function fetchRecentChats() {
+    try {
+        // First, let's get the list of friends
+        const { data: friends, error: friendsError } = await client
+            .from("friends")
+            .select("*")
+            .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
+
+        if (friendsError) throw friendsError;
+
+        if (!friends || friends.length === 0) {
+            renderRecentChats([]);
             return;
         }
 
-        chats.forEach(chat => {
-            const chatElement = document.createElement('div');
-            chatElement.className = 'recent-chat';
+        // Extract friend IDs
+        const friendIds = friends.map(f =>
+            f.user1_id === currentUserId ? f.user2_id : f.user1_id
+        );
 
-            const timeStr = chat.last_message_time
-                ? new Date(chat.last_message_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                : '';
+        // Get profiles for these friends
+        const { data: profiles, error: profilesError } = await client
+            .from("user_profiles")
+            .select("user_id, user_name, profile_image_url, is_online")
+            .in("user_id", friendIds);
 
-            chatElement.innerHTML = `
+        if (profilesError) throw profilesError;
+
+        // Get the most recent message for each friend
+        const recentChatsPromises = friendIds.map(async (friendId) => {
+            const { data: lastMessage } = await client
+                .from("messages")
+                .select("content, created_at")
+                .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                .is('deleted_at', null)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const profile = profiles?.find(p => p.user_id === friendId);
+
+            return {
+                user_id: friendId,
+                user_name: profile?.user_name || "Unknown",
+                avatar_url: profile?.profile_image_url || DEFAULT_PROFILE_IMG,
+                is_online: profile?.is_online || false,
+                last_message: lastMessage?.content || "No messages yet",
+                last_message_time: lastMessage?.created_at || null
+            };
+        });
+
+        const recentChats = await Promise.all(recentChatsPromises);
+
+        // Sort by most recent message time
+        recentChats.sort((a, b) => {
+            if (!a.last_message_time) return 1;
+            if (!b.last_message_time) return -1;
+            return new Date(b.last_message_time) - new Date(a.last_message_time);
+        });
+
+        renderRecentChats(recentChats);
+    } catch (err) {
+        console.error("Error fetching recent chats:", err);
+        // If there's an error, render empty recent chats
+        renderRecentChats([]);
+    }
+}
+
+function renderRecentChats(chats) {
+    const recentChatsContainer = document.getElementById('recent-chats');
+    if (!recentChatsContainer) return;
+
+    recentChatsContainer.innerHTML = '';
+
+    if (chats.length === 0) {
+        recentChatsContainer.innerHTML = '<p class="no-recent-chats">No recent chats</p>';
+        return;
+    }
+
+    chats.forEach(chat => {
+        const chatElement = document.createElement('div');
+        chatElement.className = 'recent-chat';
+
+        const timeStr = chat.last_message_time
+            ? new Date(chat.last_message_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : '';
+
+        chatElement.innerHTML = `
                 <div class="recent-chat-avatar">
                     <img src="${chat.avatar_url || DEFAULT_PROFILE_IMG}" alt="${chat.user_name}">
                     ${chat.is_online ? '<span class="online-dot"></span>' : ''}
@@ -2194,30 +2252,30 @@ document.addEventListener("DOMContentLoaded", async () => {
                 <div class="recent-chat-time">${timeStr}</div>
             `;
 
-            chatElement.addEventListener('click', () => {
-                openSpecificChat(chat.user_id, {
-                    user_name: chat.user_name,
-                    profile_image_url: chat.avatar_url
-                });
+        chatElement.addEventListener('click', () => {
+            openSpecificChat(chat.user_id, {
+                user_name: chat.user_name,
+                profile_image_url: chat.avatar_url
             });
-
-            recentChatsContainer.appendChild(chatElement);
         });
+
+        recentChatsContainer.appendChild(chatElement);
+    });
+}
+
+const me = await getCurrentUser();
+if (me) {
+    await initializeDatabaseSchema();
+    await fetchFriends();
+    await fetchFriendRequests();
+    await subscribeToGlobalMessages();
+    await subscribeToFriendRequests();
+    await fetchRecentChats();
+
+    if (Object.keys(notificationData).length > 0) {
+        handleNotificationRedirect();
     }
 
-    const me = await getCurrentUser();
-    if (me) {
-        await initializeDatabaseSchema();
-        await fetchFriends();
-        await fetchFriendRequests();
-        await subscribeToGlobalMessages();
-        await subscribeToFriendRequests();
-        await fetchRecentChats();
-
-        if (Object.keys(notificationData).length > 0) {
-            handleNotificationRedirect();
-        }
-
-        openChatFromUrl();
-    }
+    openChatFromUrl();
+}
 });
