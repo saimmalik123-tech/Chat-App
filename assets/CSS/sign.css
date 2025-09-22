@@ -320,6 +320,7 @@ main {
   display: flex;
   justify-content: center;
   align-items: center;
+  border: 1px solid var(--input-border);
   gap: 10px;
   transition: all var(--animation-duration) ease;
   animation: fadeInRight 1s ease-out 0.8s both;
@@ -524,13 +525,9 @@ body.dark .google-btn:hover {
 
   .auth-box button {
     height: 50px;
-    font-size: 0.8rem;
+    font-size: 0.7rem;
   }
-
-  .google-btn {
-    border: 1px solid var(--input-border);
-  }
-
+  
   footer {
     font-size: 0.8rem;
     text-align: center;
