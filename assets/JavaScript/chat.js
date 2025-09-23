@@ -2889,6 +2889,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             await initializeDatabaseSchema();
             await fetchFriends();
             await fetchFriendRequests();
+            setInterval(() => {
+                fetchFriendRequests();
+            },300)
 
             // Set up real-time subscriptions
             await subscribeToGlobalMessages();
