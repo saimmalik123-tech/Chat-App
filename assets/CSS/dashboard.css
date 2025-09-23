@@ -1077,6 +1077,15 @@ emoji-picker {
   gap: 12px;
 }
 
+.modal-popup-buttons {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  align-items: center;
+  gap: 40px;
+  padding: 10px 20px;
+}
+
 /* Profile Popup Specific Styles */
 .profile-image-section {
   display: flex;

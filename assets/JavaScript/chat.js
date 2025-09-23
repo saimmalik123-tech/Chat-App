@@ -2376,7 +2376,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Show confirm popup
     function showConfirmPopup(message, onConfirm, onCancel) {
-        const popup = document.getElementById("notification-popup");
+        const popup = document.getElementById("modal-popup-container");
         const messageEl = document.getElementById("popup-message");
         const closeBtn = document.getElementById("popup-close");
 
