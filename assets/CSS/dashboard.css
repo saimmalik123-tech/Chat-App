@@ -546,7 +546,7 @@ nav h2 a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: #2196f3;
+  background-color: --;
   color: #fff;
   padding: 12px 16px;
   border-radius: 4px;
@@ -590,7 +590,7 @@ nav h2 a {
 .popup-close {
   background: transparent;
   border: none;
-  color: #fff;
+  color: var(--accent);
   font-size: 1.3rem;
   cursor: pointer;
   transition: color 0.2s;
@@ -600,7 +600,7 @@ nav h2 a {
 }
 
 .popup-close:hover {
-  color: #ddd;
+  color: var(--bg-hover);
 }
 /* ------------------------------------------  */
 

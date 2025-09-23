@@ -2,6 +2,22 @@ import { client } from "../../supabase.js";
 
 // Initialize when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
+    // Constants
+    const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
+    const ADMIN_USERNAME = "Saim_Malik88";
+
+    // Global variables
+    let currentUserId = null;
+    let friendRequests = [];
+    let statusChannelRef = null;
+    let unseenCounts = {};
+    let currentOpenChatId = null;
+    let notificationData = {};
+    let deletionTimeouts = {};
+    let processingMessageIds = new Set();
+    let allFriends = new Map(); // Store all friends data for real-time updates
+    let hasShownAdminRequestPopup = false; // Track if admin request popup has been shown
+
     // User modal function
     function showUserModal(userId, userName, userAvatar) {
         let modal = document.getElementById("user-modal");
@@ -50,18 +66,29 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         }
 
+        // Set initial values
         document.getElementById("user-modal-avatar").src = userAvatar || DEFAULT_PROFILE_IMG;
         document.getElementById("user-modal-username").textContent = userName || "Unknown User";
+        document.getElementById("user-modal-bio").textContent = "Loading bio...";
+        document.getElementById("user-modal-status").textContent = "Checking status...";
+        document.getElementById("user-modal-status").className = "user-modal-status";
 
+        // Fetch and update profile data
         getUserProfile(userId).then(profile => {
             if (profile) {
                 document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
                 const statusElement = document.getElementById("user-modal-status");
                 statusElement.textContent = profile.is_online ? "Online" : "Offline";
                 statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
+            } else {
+                document.getElementById("user-modal-bio").textContent = "No bio available.";
+                const statusElement = document.getElementById("user-modal-status");
+                statusElement.textContent = "Offline";
+                statusElement.className = "user-modal-status offline";
             }
-        }).catch(() => {
-            document.getElementById("user-modal-bio").textContent = "No bio available.";
+        }).catch(err => {
+            console.error("Error fetching user profile:", err);
+            document.getElementById("user-modal-bio").textContent = "Error loading bio.";
             const statusElement = document.getElementById("user-modal-status");
             statusElement.textContent = "Offline";
             statusElement.className = "user-modal-status offline";
@@ -266,8 +293,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     await requestNotificationPermission();
 
-    const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
-
     // Fetch current user avatar
     async function fetchCurrentUserAvatar(profileImageSelector = '.profile-pic') {
         const profileImage = document.querySelector(profileImageSelector);
@@ -299,17 +324,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     fetchCurrentUserAvatar();
 
-    // Global variables
-    let currentUserId = null;
-    let friendRequests = [];
-    let statusChannelRef = null;
-    let unseenCounts = {};
-    let currentOpenChatId = null;
-    let notificationData = {};
-    let deletionTimeouts = {};
-    let processingMessageIds = new Set();
-    let allFriends = new Map(); // Store all friends data for real-time updates
-
     // Get current user
     async function getCurrentUser() {
         try {
@@ -322,6 +336,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             currentUserId = user.id;
             console.log("Current user ID:", currentUserId);
             await setUserOnlineStatus(true);
+
+            // Check if we need to show admin friend request popup
+            await checkAndShowAdminRequestPopup();
+
             return user;
         } catch (err) {
             console.error("getCurrentUser error:", err);
@@ -330,9 +348,93 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Check if user is already a friend
+    async function isAlreadyFriend(userId) {
+        if (!currentUserId || !userId) return false;
+
+        try {
+            const { data, error } = await client
+                .from("friends")
+                .select("*")
+                .or(`and(user1_id.eq.${currentUserId},user2_id.eq.${userId}),and(user1_id.eq.${userId},user2_id.eq.${currentUserId})`)
+                .maybeSingle();
+
+            if (error) {
+                console.error("Error checking friendship status:", error);
+                return false;
+            }
+
+            return !!data;
+        } catch (err) {
+            console.error("Error in isAlreadyFriend:", err);
+            return false;
+        }
+    }
+
+    // Show admin friend request popup for new users
+    async function checkAndShowAdminRequestPopup() {
+        if (hasShownAdminRequestPopup) return;
+
+        try {
+            // Check if user is new (less than 1 day old)
+            const { data: { user }, error: userError } = await client.auth.getUser();
+            if (userError || !user) return;
+
+            const createdAt = new Date(user.created_at);
+            const now = new Date();
+            const hoursSinceCreation = (now - createdAt) / (1000 * 60 * 60);
+
+            if (hoursSinceCreation > 24) {
+                hasShownAdminRequestPopup = true;
+                return;
+            }
+
+            // Check if already friends with admin
+            const { data: adminProfile, error: adminError } = await client
+                .from("user_profiles")
+                .select("user_id")
+                .eq("user_name", ADMIN_USERNAME)
+                .maybeSingle();
+
+            if (adminError || !adminProfile) {
+                hasShownAdminRequestPopup = true;
+                return;
+            }
+
+            const isAdminFriend = await isAlreadyFriend(adminProfile.user_id);
+            if (isAdminFriend) {
+                hasShownAdminRequestPopup = true;
+                return;
+            }
+
+            // Show popup to send friend request to admin
+            showConfirmPopup(
+                `Would you like to send a friend request to ${ADMIN_USERNAME}?`,
+                async () => {
+                    await sendFriendRequest(ADMIN_USERNAME);
+                    hasShownAdminRequestPopup = true;
+                },
+                () => {
+                    hasShownAdminRequestPopup = true;
+                }
+            );
+        } catch (err) {
+            console.error("Error in checkAndShowAdminRequestPopup:", err);
+            hasShownAdminRequestPopup = true;
+        }
+    }
+
     // Accept friend request
     async function acceptRequest(requestId, senderId) {
         try {
+            // Check if already friends
+            const alreadyFriends = await isAlreadyFriend(senderId);
+            if (alreadyFriends) {
+                showToast("You are already friends with this user.", "info");
+                showTopRightPopup("You are already friends with this user.", "info");
+                return;
+            }
+
             // Update the request status to accepted
             const { error: updateError } = await client
                 .from("requests")
@@ -369,6 +471,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             showToast("An error occurred while accepting request.", "error");
         }
     }
+
     // Reject friend request
     async function rejectRequest(requestId) {
         try {
@@ -1586,7 +1689,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Subscribe to friend requests - FIXED VERSION
+    // Subscribe to friend requests
     async function subscribeToFriendRequests() {
         if (!window._friendRequestChannel) {
             const channelName = `friend-requests-${currentUserId}`;
