@@ -72,7 +72,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Track active popups to prevent duplicates
     const activePopups = new Set();
 
-    // NEW: Top-right popup function
+    // Top-right popup function
     function showTopRightPopup(message, type = "info", image = null) {
         // Create a unique key for this popup to prevent duplicates
         const popupKey = `${message}-${type}-${image || ''}`;
@@ -203,7 +203,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const { data: { user }, error } = await client.auth.getUser();
             if (error || !user) return;
 
-            // FIXED: Use maybeSingle() instead of single() to avoid 409 Conflict
+            // Use maybeSingle() instead of single() to avoid 409 Conflict
             const { data: profile, error: profileError } = await client
                 .from("user_profiles")
                 .select("profile_image_url")
@@ -276,7 +276,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             showToast("Friend request accepted!", "success");
-            // NEW: Show top-right popup
             showTopRightPopup("Friend request accepted!", "success");
             fetchFriendRequests();
             fetchFriends();
@@ -300,7 +299,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             showToast("Friend request rejected!", "info");
-            // NEW: Show top-right popup
             showTopRightPopup("Friend request rejected", "info");
             fetchFriendRequests();
         } catch (err) {
@@ -961,10 +959,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.error("Unexpected error in sendFriendRequest:", err);
             showToast("Unexpected error. Please try again.", "error");
         } finally {
-            hideLoading();
+            hideLoading(); // Hide loading overlay in all cases
         }
     }
-
 
     function updateMessageSeenStatus(chatBox, messageId) {
         const chatMessage = chatBox.querySelector(`.message[data-message-id="${messageId}"] .seen-status`);
@@ -1051,7 +1048,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         try {
                             const { username, avatarUrl } = await getUsername(newMsg.sender_id);
-                            // NEW: Show top-right popup for new message with image
+                            // Show top-right popup for new message with image
                             showTopRightPopup(`New message from ${username}`, "info", avatarUrl);
 
                             if (Notification.permission === "granted") {
@@ -1382,7 +1379,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 const senderName = senderProfile?.user_name || "New Message";
                                 const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
 
-                                // NEW: Show top-right popup for new message with image
+                                // Show top-right popup for new message with image
                                 showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
 
                                 if (Notification.permission === "granted") {
@@ -1441,6 +1438,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         }
     }
+
     async function subscribeToFriendRequests() {
         if (!window._friendRequestChannel) {
             // Create a unique channel name for this user
@@ -1852,7 +1850,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             `;
 
             showToast("Profile updated successfully!", "success");
-            // NEW: Show top-right popup
             showTopRightPopup("Profile updated successfully!", "success");
 
             setTimeout(() => {
@@ -1892,7 +1889,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     await setUserOnlineStatus(false);
                     await client.auth.signOut();
                     showToast("Logged out!", "info");
-                    // NEW: Show top-right popup
                     showTopRightPopup("Logged out successfully!", "info");
                     window.location.href = "signup.html";
                 } catch (err) {
@@ -1949,104 +1945,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             `;
 
             showToast("Username updated!", "success");
-            // NEW: Show top-right popup
-            showTopRightPopup("Username updated successfully!", "success");
-            profileUsername.textContent = newUsername;
-
-            setTimeout(() => {
-                saveUsernameBtn.disabled = false;
-                saveUsernameBtn.innerHTML = originalContent;
-                usernamePopup?.classList.add("hidden");
-            }, 1500);
-
-            fetchFriends();
-        } catch (err) {
-            console.error("Error updating username:", err);
-            showToast(`Failed to update username: ${err.message || err}`, "error");
-
-            saveUsernameBtn.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-                Error
-            `;
-
-            setTimeout(() => {
-                saveUsernameBtn.disabled = false;
-                saveUsernameBtn.innerHTML = originalContent;
-            }, 2000);
-        }
-    });
-
-    logoutBtn?.addEventListener("click", async () => {
-        showConfirmPopup(
-            "Are you sure you want to logout?",
-            async () => {
-                showLoading("Logging out...");
-                try {
-                    await setUserOnlineStatus(false);
-                    await client.auth.signOut();
-                    showToast("Logged out!", "info");
-                    // NEW: Show top-right popup
-                    showTopRightPopup("Logged out successfully!", "info");
-                    window.location.href = "signup.html";
-                } catch (err) {
-                    console.error("Logout error:", err);
-                    showToast("Logout failed.", "error");
-                } finally {
-                    hideLoading();
-                }
-            },
-            () => {
-            }
-        );
-    });
-
-    changeUsernameBtn?.addEventListener("click", () => {
-        profilePopup?.classList.add("hidden");
-        usernamePopup?.classList.remove("hidden");
-    });
-
-    closeUsername?.addEventListener("click", () => {
-        usernamePopup?.classList.add("hidden");
-    });
-    cancelUsername?.addEventListener("click", () => {
-        usernamePopup?.classList.add("hidden");
-    });
-
-    saveUsernameBtn?.addEventListener("click", async () => {
-        const newUsername = newUsernameInput?.value.trim();
-        if (!newUsername) {
-            showToast("Username cannot be empty!", "error");
-            return;
-        }
-
-        const originalContent = saveUsernameBtn.innerHTML;
-
-        saveUsernameBtn.disabled = true;
-        saveUsernameBtn.innerHTML = '';
-        saveUsernameBtn.appendChild(createLoader());
-
-        try {
-            const { error } = await client
-                .from("user_profiles")
-                .update({ user_name: newUsername })
-                .eq("user_id", currentUserId);
-
-            if (error) throw error;
-
-            saveUsernameBtn.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                    <path d="M20 6L9 17l-5 5"></path>
-                </svg>
-                Saved!
-            `;
-
-            showToast("Username updated!", "success");
-            // NEW: Show top-right popup
             showTopRightPopup("Username updated successfully!", "success");
             profileUsername.textContent = newUsername;
 
