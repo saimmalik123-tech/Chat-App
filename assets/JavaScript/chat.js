@@ -2526,7 +2526,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         openChatFromUrl();
 
-        // Set up periodic refresh to ensure subscriptions are active
         setInterval(() => {
             if (window._friendRequestChannel && window._friendRequestChannel.state !== 'joined') {
                 console.log("Reconnecting friend request subscription");
@@ -2536,6 +2535,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.log("Reconnecting global message subscription");
                 subscribeToGlobalMessages();
             }
-        }, 30000); // Check every 30 seconds
+        }, 300); 
     }
 });
