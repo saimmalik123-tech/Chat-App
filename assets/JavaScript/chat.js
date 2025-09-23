@@ -37,34 +37,62 @@ document.addEventListener("DOMContentLoaded", async () => {
             // Create new channel
             let channel;
             try {
-                channel = client.channel(channelName);
+                // For postgres changes, we need to create the channel differently
+                if (config.table) {
+                    channel = client
+                        .channel(channelName)
+                        .on('postgres_changes', config, (payload) => {
+                            console.log(`Received payload for ${channelName}:`, payload);
+                        })
+                        .subscribe((status, err) => {
+                            if (status === 'SUBSCRIBED') {
+                                console.log(`Successfully subscribed to ${channelName}`);
+                                if (callback) callback(true);
+                            } else if (status === 'CHANNEL_ERROR') {
+                                console.error(`Error subscribing to ${channelName}:`, err);
+                                if (callback) callback(false);
+
+                                // Attempt to reconnect after delay
+                                setTimeout(() => {
+                                    console.log(`Attempting to resubscribe to ${channelName}...`);
+                                    this.subscribe(channelName, config, callback);
+                                }, 5000);
+                            } else if (status === 'TIMED_OUT') {
+                                console.warn(`Subscription to ${channelName} timed out, retrying...`);
+                                setTimeout(() => {
+                                    this.subscribe(channelName, config, callback);
+                                }, 3000);
+                            }
+                        });
+                } else {
+                    // For broadcast channels
+                    channel = client.channel(channelName);
+                    channel.subscribe((status, err) => {
+                        if (status === 'SUBSCRIBED') {
+                            console.log(`Successfully subscribed to ${channelName}`);
+                            if (callback) callback(true);
+                        } else if (status === 'CHANNEL_ERROR') {
+                            console.error(`Error subscribing to ${channelName}:`, err);
+                            if (callback) callback(false);
+
+                            // Attempt to reconnect after delay
+                            setTimeout(() => {
+                                console.log(`Attempting to resubscribe to ${channelName}...`);
+                                this.subscribe(channelName, config, callback);
+                            }, 5000);
+                        } else if (status === 'TIMED_OUT') {
+                            console.warn(`Subscription to ${channelName} timed out, retrying...`);
+                            setTimeout(() => {
+                                this.subscribe(channelName, config, callback);
+                            }, 3000);
+                        }
+                    });
+                }
             } catch (err) {
                 console.error(`Error creating channel ${channelName}:`, err);
                 if (callback) callback(false);
                 return null;
             }
-
-            // Set up subscription with better error handling
-            channel.subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`Successfully subscribed to ${channelName}`);
-                    if (callback) callback(true);
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error(`Error subscribing to ${channelName}:`, err);
-                    if (callback) callback(false);
-
-                    // Attempt to reconnect after delay
-                    setTimeout(() => {
-                        console.log(`Attempting to resubscribe to ${channelName}...`);
-                        this.subscribe(channelName, config, callback);
-                    }, 5000);
-                } else if (status === 'TIMED_OUT') {
-                    console.warn(`Subscription to ${channelName} timed out, retrying...`);
-                    setTimeout(() => {
-                        this.subscribe(channelName, config, callback);
-                    }, 3000);
-                }
-            });
 
             // Store channel reference
             this.channels.set(channelName, channel);
@@ -1334,9 +1362,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const channelTopic = `chat:${[currentUserId, friendId].sort().join(":")}`;
 
-            let msgChannel = await subscriptionManager.subscribe(
+            // Create message channel with proper postgres changes configuration
+            const msgChannel = await subscriptionManager.subscribe(
                 channelTopic,
-                { event: "INSERT", schema: "public", table: "messages" },
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `or(and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId}))`
+                },
                 (isSubscribed) => {
                     console.log(`Message subscription for ${friendId}: ${isSubscribed ? 'Active' : 'Failed'}`);
                 }
@@ -1347,6 +1381,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return null;
             }
 
+            // Set up INSERT event handler
             msgChannel.on(
                 "postgres_changes",
                 { event: "INSERT", schema: "public", table: "messages" },
@@ -1415,6 +1450,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             );
 
+            // Set up UPDATE event handler
             msgChannel.on(
                 "postgres_changes",
                 { event: "UPDATE", schema: "public", table: "messages" },
@@ -1459,7 +1495,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             );
 
             const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
-            let typingChannel = await subscriptionManager.subscribe(
+            const typingChannel = await subscriptionManager.subscribe(
                 typingChannelName,
                 {},
                 (isSubscribed) => {
@@ -1491,10 +1527,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             const statusChannelName = `user-status-${friendId}`;
-            let statusChannel = await subscriptionManager.subscribe(
+            const statusChannel = await subscriptionManager.subscribe(
                 statusChannelName,
                 {
-                    event: "*",
+                    event: "UPDATE",
                     schema: "public",
                     table: "user_profiles",
                     filter: `user_id=eq.${friendId}`
@@ -1742,7 +1778,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const channel = await subscriptionManager.subscribe(
                 channelName,
-                { event: "INSERT", schema: "public", table: "messages" },
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `receiver_id=eq.${currentUserId}`
+                },
                 (isSubscribed) => {
                     console.log(`Global messages subscription: ${isSubscribed ? 'Active' : 'Failed'}`);
                 }
@@ -1842,9 +1883,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             const channel = await subscriptionManager.subscribe(
                 channelName,
                 {
-                    event: "*",
-                    schema: "public",
-                    table: "requests",
+                    event: '*',
+                    schema: 'public',
+                    table: 'requests',
                     filter: `receiver_id=eq.${currentUserId}`
                 },
                 (isSubscribed) => {
@@ -1952,7 +1993,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const channel = await subscriptionManager.subscribe(
                 channelName,
-                { event: "*", schema: "public", table: "friends" },
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'friends',
+                    filter: `or(user1_id=eq.${currentUserId},user2_id=eq.${currentUserId})`
+                },
                 (isSubscribed) => {
                     console.log(`Friends updates subscription: ${isSubscribed ? 'Active' : 'Failed'}`);
                 }
@@ -1970,17 +2016,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     console.log("Friends update event received:", payload);
 
                     const { eventType, new: newRecord, old: oldRecord } = payload;
-
-                    // Check if this update is relevant to current user
-                    const isRelevant = newRecord && (
-                        newRecord.user1_id === currentUserId ||
-                        newRecord.user2_id === currentUserId
-                    ) || oldRecord && (
-                        oldRecord.user1_id === currentUserId ||
-                        oldRecord.user2_id === currentUserId
-                    );
-
-                    if (!isRelevant) return;
 
                     if (eventType === 'INSERT') {
                         // New friend added
@@ -2008,7 +2043,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const channel = await subscriptionManager.subscribe(
                 channelName,
-                { event: "UPDATE", schema: "public", table: "user_profiles" },
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'user_profiles'
+                },
                 (isSubscribed) => {
                     console.log(`User profiles updates subscription: ${isSubscribed ? 'Active' : 'Failed'}`);
                 }
