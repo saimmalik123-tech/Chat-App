@@ -2882,6 +2882,45 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
+    // Test function to check if Realtime is working
+    async function testRealtimeConnection() {
+        try {
+            console.log("Testing Realtime connection...");
+
+            // Create a test channel
+            const testChannel = client.channel('test-connection');
+
+            // Subscribe to the channel
+            testChannel.subscribe((status) => {
+                console.log(`Test channel status: ${status}`);
+
+                if (status === 'SUBSCRIBED') {
+                    console.log("Realtime connection is working!");
+                    testChannel.send({
+                        type: 'broadcast',
+                        event: 'test',
+                        payload: { message: 'Test message' }
+                    });
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error("Realtime connection failed!");
+                }
+            });
+
+            // Listen for broadcasts
+            testChannel.on('broadcast', { event: 'test' }, (payload) => {
+                console.log("Received test broadcast:", payload);
+            });
+
+            // Clean up after 5 seconds
+            setTimeout(() => {
+                client.removeChannel(testChannel);
+                console.log("Test channel removed");
+            }, 5000);
+        } catch (error) {
+            console.error("Error testing Realtime connection:", error);
+        }
+    }
+
     // Initialize app
     try {
         const me = await getCurrentUser();
@@ -2889,16 +2928,25 @@ document.addEventListener("DOMContentLoaded", async () => {
             await initializeDatabaseSchema();
             await fetchFriends();
             await fetchFriendRequests();
-            setInterval(async () => {
-                await fetchFriendRequests();
-            }, 300)
 
-            // Set up real-time subscriptions
-            await subscribeToGlobalMessages();
-            await subscribeToFriendRequests();
-            await subscribeToFriendsUpdates();
-            await subscribeToUserProfilesUpdates();
+            // Test Realtime connection (uncomment for debugging)
+            // await testRealtimeConnection();
 
+            // Set up real-time subscriptions with retry logic
+            const setupSubscriptions = async () => {
+                try {
+                    await subscribeToGlobalMessages();
+                    await subscribeToFriendRequests();
+                    await subscribeToFriendsUpdates();
+                    await subscribeToUserProfilesUpdates();
+                    console.log("All subscriptions set up successfully");
+                } catch (error) {
+                    console.error("Error setting up subscriptions:", error);
+                    setTimeout(setupSubscriptions, 5000);
+                }
+            };
+
+            await setupSubscriptions();
             await fetchRecentChats();
 
             if (Object.keys(notificationData).length > 0) {
