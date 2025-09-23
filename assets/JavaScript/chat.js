@@ -57,14 +57,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         }
 
-        // Set modal content
         document.getElementById("user-modal-avatar").src = userAvatar || DEFAULT_PROFILE_IMG;
         document.getElementById("user-modal-username").textContent = userName || "Unknown User";
+        document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
 
         // Fetch user profile data
         getUserProfile(userId).then(profile => {
             if (profile) {
-                document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
+                // document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
                 const statusElement = document.getElementById("user-modal-status");
                 statusElement.textContent = profile.is_online ? "Online" : "Offline";
                 statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
@@ -76,11 +76,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             statusElement.className = "user-modal-status offline";
         });
 
-        // Show modal
         modal.style.display = "flex";
     }
 
-    // Get user profile data
     async function getUserProfile(userId) {
         try {
             const { data, error } = await client
