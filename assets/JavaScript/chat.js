@@ -57,14 +57,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         }
 
+        // Set modal content
         document.getElementById("user-modal-avatar").src = userAvatar || DEFAULT_PROFILE_IMG;
         document.getElementById("user-modal-username").textContent = userName || "Unknown User";
-        document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
 
         // Fetch user profile data
         getUserProfile(userId).then(profile => {
             if (profile) {
-                // document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
+                document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
                 const statusElement = document.getElementById("user-modal-status");
                 statusElement.textContent = profile.is_online ? "Online" : "Offline";
                 statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
@@ -76,9 +76,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             statusElement.className = "user-modal-status offline";
         });
 
+        // Show modal
         modal.style.display = "flex";
     }
 
+    // Get user profile data
     async function getUserProfile(userId) {
         try {
             const { data, error } = await client
@@ -315,6 +317,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let notificationData = {};
     let deletionTimeouts = {};
     let processingMessageIds = new Set();
+    let allFriends = new Map(); // Store all friends data for real-time updates
 
     // Get current user
     async function getCurrentUser() {
@@ -732,11 +735,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .select("user_id, user_name, profile_image_url, is_online")
                 .in("user_id", friendIds);
 
-            const profilesById = {};
-            (profiles || []).forEach(p => { profilesById[p.user_id] = p; });
+            // Store all friends data for real-time updates
+            allFriends.clear();
+            (profiles || []).forEach(p => {
+                allFriends.set(p.user_id, p);
+            });
 
             const friendDataPromises = friendIds.map(async (friendId) => {
-                const profile = profilesById[friendId] || {};
+                const profile = allFriends.get(friendId) || {};
                 const friendName = profile.user_name || "Unknown";
                 const avatarUrl = profile.profile_image_url || DEFAULT_PROFILE_IMG;
                 const isOnline = profile.is_online || false;
@@ -1632,6 +1638,141 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Subscribe to friends updates
+    async function subscribeToFriendsUpdates() {
+        if (!window._friendsUpdatesChannel) {
+            window._friendsUpdatesChannel = client.channel("friends-updates");
+
+            window._friendsUpdatesChannel.on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "friends" },
+                payload => {
+                    console.log("Friends update event received:", payload);
+
+                    const { eventType, new: newRecord, old: oldRecord } = payload;
+
+                    // Check if this update is relevant to current user
+                    const isRelevant = newRecord && (
+                        newRecord.user1_id === currentUserId ||
+                        newRecord.user2_id === currentUserId
+                    ) || oldRecord && (
+                        oldRecord.user1_id === currentUserId ||
+                        oldRecord.user2_id === currentUserId
+                    );
+
+                    if (!isRelevant) return;
+
+                    if (eventType === 'INSERT') {
+                        // New friend added
+                        console.log("New friend added:", newRecord);
+                        fetchFriends();
+                    } else if (eventType === 'DELETE') {
+                        // Friend removed
+                        console.log("Friend removed:", oldRecord);
+                        fetchFriends();
+                    }
+                }
+            );
+
+            try {
+                await window._friendsUpdatesChannel.subscribe();
+                console.log("Subscribed to friends updates channel.");
+            } catch (err) {
+                console.warn("subscribeToFriendsUpdates subscribe failed:", err);
+            }
+        }
+    }
+
+    // Subscribe to user profiles updates
+    async function subscribeToUserProfilesUpdates() {
+        if (!window._userProfilesUpdatesChannel) {
+            window._userProfilesUpdatesChannel = client.channel("user-profiles-updates");
+
+            window._userProfilesUpdatesChannel.on(
+                "postgres_changes",
+                { event: "UPDATE", schema: "public", table: "user_profiles" },
+                payload => {
+                    console.log("User profile update event received:", payload);
+
+                    const { new: newRecord } = payload;
+
+                    // Update friend data in our cache if it's a friend
+                    if (allFriends.has(newRecord.user_id)) {
+                        allFriends.set(newRecord.user_id, {
+                            ...allFriends.get(newRecord.user_id),
+                            ...newRecord
+                        });
+
+                        // Update UI for this friend
+                        updateFriendUI(newRecord.user_id);
+                    }
+
+                    // If current user's profile was updated, refresh avatar
+                    if (newRecord.user_id === currentUserId) {
+                        fetchCurrentUserAvatar();
+                    }
+                }
+            );
+
+            try {
+                await window._userProfilesUpdatesChannel.subscribe();
+                console.log("Subscribed to user profiles updates channel.");
+            } catch (err) {
+                console.warn("subscribeToUserProfilesUpdates subscribe failed:", err);
+            }
+        }
+    }
+
+    // Update friend UI in real-time
+    function updateFriendUI(friendId) {
+        const friendData = allFriends.get(friendId);
+        if (!friendData) return;
+
+        const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
+        if (!chatLi) return;
+
+        // Update online status
+        const avatarWrapper = chatLi.querySelector(".avatar-wrapper");
+        if (avatarWrapper) {
+            // Remove existing online dot
+            const existingDot = avatarWrapper.querySelector(".online-dot");
+            if (existingDot) existingDot.remove();
+
+            // Add online dot if friend is online
+            if (friendData.is_online) {
+                const onlineDot = document.createElement("span");
+                onlineDot.className = "online-dot";
+                avatarWrapper.appendChild(onlineDot);
+            }
+        }
+
+        // Update profile image if changed
+        const avatarImg = chatLi.querySelector(".avatar-wrapper img");
+        if (avatarImg && friendData.profile_image_url) {
+            avatarImg.src = friendData.profile_image_url;
+        }
+
+        // Update username if changed
+        const nameEl = chatLi.querySelector("h4");
+        if (nameEl && friendData.user_name) {
+            nameEl.textContent = friendData.user_name;
+        }
+
+        // If this is the currently open chat, update the chat header as well
+        if (currentOpenChatId === friendId) {
+            const chatHeaderName = document.querySelector("#chat-header-name");
+            const chatHeaderImg = document.querySelector(".chat-header img");
+
+            if (chatHeaderName && friendData.user_name) {
+                chatHeaderName.textContent = friendData.user_name;
+            }
+
+            if (chatHeaderImg && friendData.profile_image_url) {
+                chatHeaderImg.src = friendData.profile_image_url;
+            }
+        }
+    }
+
     // Handle notification redirect
     function handleNotificationRedirect() {
         if (!currentOpenChatId && notificationData.type === 'message' && notificationData.senderId) {
@@ -2394,6 +2535,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         await fetchFriendRequests();
         await subscribeToGlobalMessages();
         await subscribeToFriendRequests();
+        await subscribeToFriendsUpdates();
+        await subscribeToUserProfilesUpdates();
         await fetchRecentChats();
 
         if (Object.keys(notificationData).length > 0) {
