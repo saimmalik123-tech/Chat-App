@@ -2280,6 +2280,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     logoutBtn?.addEventListener("click", async () => {
+        alert('logot Click')
         showConfirmPopup(
             "Are you sure you want to logout?",
             async () => {
