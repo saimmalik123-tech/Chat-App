@@ -292,18 +292,6 @@ nav h2 a {
   font-size: 14px;
   word-wrap: break-word;
   padding: 20px 40px 20px 10px;
-  animation: fadeIn var(--animation-duration) var(--animation-timing);
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .sent {
