@@ -1,6 +1,92 @@
 import { client } from "../../supabase.js";
 
+const link = document.createElement('link');
+link.rel = 'stylesheet';
+link.href = '../CSS/dashboard.css';
+document.head.appendChild(link);
+
 document.addEventListener("DOMContentLoaded", async () => {
+    function showUserModal(userId, userName, userAvatar) {
+        let modal = document.getElementById("user-modal");
+        if (!modal) {
+            modal = document.createElement("div");
+            modal.id = "user-modal";
+            modal.className = "user-modal";
+            modal.innerHTML = `
+                <div class="user-modal-content">
+                    <span class="user-modal-close">&times;</span>
+                    <img id="user-modal-avatar" class="user-modal-avatar" src="" alt="User Avatar">
+                    <h2 id="user-modal-username" class="user-modal-username"></h2>
+                    <p id="user-modal-bio" class="user-modal-bio"></p>
+                    <p id="user-modal-status" class="user-modal-status"></p>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // Add event listener to close button
+            const closeBtn = modal.querySelector(".user-modal-close");
+            closeBtn.addEventListener("click", () => {
+                modal.style.display = "none";
+            });
+
+            // Close modal when clicking outside
+            window.addEventListener("click", (event) => {
+                if (event.target === modal) {
+                    modal.style.display = "none";
+                }
+            });
+        }
+
+        // Set the content
+        document.getElementById("user-modal-avatar").src = userAvatar || DEFAULT_PROFILE_IMG;
+        document.getElementById("user-modal-username").textContent = userName || "Unknown User";
+
+        // Fetch additional user info (bio and online status)
+        getUserProfile(userId).then(profile => {
+            if (profile) {
+                document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
+                const statusElement = document.getElementById("user-modal-status");
+                statusElement.textContent = profile.is_online ? "Online" : "Offline";
+                statusElement.className = profile.is_online ? "user-modal-status online" : "user-modal-status offline";
+            } else {
+                document.getElementById("user-modal-bio").textContent = "No bio available.";
+                const statusElement = document.getElementById("user-modal-status");
+                statusElement.textContent = "Offline";
+                statusElement.className = "user-modal-status offline";
+            }
+        }).catch(err => {
+            console.error("Error fetching user profile:", err);
+            document.getElementById("user-modal-bio").textContent = "No bio available.";
+            const statusElement = document.getElementById("user-modal-status");
+            statusElement.textContent = "Offline";
+            statusElement.className = "user-modal-status offline";
+        });
+
+        // Show the modal
+        modal.style.display = "block";
+    }
+
+    // Update getUserProfile to include bio and online status
+    async function getUserProfile(userId) {
+        try {
+            const { data, error } = await client
+                .from("user_profiles")
+                .select("user_name, profile_image_url, bio, is_online")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            if (error) {
+                console.error("Error fetching user profile:", error);
+                return null;
+            }
+
+            return data;
+        } catch (err) {
+            console.error("Unexpected error in getUserProfile:", err);
+            return null;
+        }
+    }
+
     function showPopup(message, type = "info") {
         const popup = document.getElementById("notification-popup");
         const messageEl = document.getElementById("popup-message");
@@ -1180,6 +1266,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         const chatHeaderImg = chatContainer.querySelector(".chat-header img");
         if (chatHeaderName) chatHeaderName.textContent = friendName || "Unknown";
         if (chatHeaderImg) chatHeaderImg.src = friendAvatar || DEFAULT_PROFILE_IMG;
+
+        // Add click event to chat header to show user modal
+        const chatHeader = chatContainer.querySelector(".chat-header");
+        if (chatHeader) {
+            // Remove any existing event listeners
+            const newChatHeader = chatHeader.cloneNode(true);
+            chatHeader.parentNode.replaceChild(newChatHeader, chatHeader);
+
+            // Add click event listener
+            newChatHeader.addEventListener("click", () => {
+                showUserModal(friendId, friendName, friendAvatar);
+            });
+        }
 
         if (window.innerWidth <= 768 || fromNotification) {
             if (sidebar) sidebar.style.display = "none";

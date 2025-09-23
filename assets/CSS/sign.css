@@ -247,6 +247,7 @@ main {
   border-top-color: white;
   animation: spin 0.8s linear infinite;
   margin: 0;
+  z-index: 22222222222222200022;
 }
 
 .auth-box button.loading .loader {
@@ -337,7 +338,6 @@ main {
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
-/* Google Button Loader */
 .google-btn .loader {
   display: none;
   width: 18px;
@@ -347,6 +347,7 @@ main {
   border-top-color: #ea4335;
   animation: spin 0.8s linear infinite;
   margin: 0;
+  z-index: 999999999999999999999999999999999999;
 }
 
 .google-btn.loading .loader {
