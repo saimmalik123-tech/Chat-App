@@ -1,11 +1,5 @@
 import { client } from "../../supabase.js";
 
-// Load dashboard styles
-// const link = document.createElement('link');
-// link.rel = 'stylesheet';
-// link.href = '../CSS/dashboard.css';
-// document.head.appendChild(link);
-
 // Initialize when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
     // User modal function
@@ -953,8 +947,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Linkify function to make URLs clickable
     function linkify(text) {
+        // URL pattern to match http/https URLs
         const urlRegex = /(https?:\/\/[^\s]+)/g;
-        return text.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+
+        // Replace URLs with anchor tags
+        return text.replace(urlRegex, function (url) {
+            // Create the anchor tag
+            return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">${url}</a>`;
+        });
     }
 
     // Render chat messages
@@ -972,16 +972,34 @@ document.addEventListener("DOMContentLoaded", async () => {
                 minute: "2-digit"
             }) : "";
 
-            msgDiv.innerHTML = `
-                ${!isMe ? `<img src="${friendAvatar}" class="msg-avatar" style="width:25px;height:25px;border-radius:50%;margin-right:6px;">` : ""}
-                <div class="msg-bubble">
-                    <span class="msg-text">${linkify(msg.content)}</span>
-                    <div class="msg-meta">
-                        <small class="msg-time">${timeStr}</small>
-                        ${isMe ? `<small class="seen-status">${msg.seen ? "✓✓" : "✓"}</small>` : ""}
-                    </div>
-                </div>
+            // Create message bubble with linkified content
+            const msgBubble = document.createElement("div");
+            msgBubble.className = "msg-bubble";
+
+            const msgText = document.createElement("span");
+            msgText.className = "msg-text";
+            // Use innerHTML instead of textContent to render HTML links
+            msgText.innerHTML = linkify(msg.content);
+
+            const msgMeta = document.createElement("div");
+            msgMeta.className = "msg-meta";
+            msgMeta.innerHTML = `
+                <small class="msg-time">${timeStr}</small>
+                ${isMe ? `<small class="seen-status">${msg.seen ? "✓✓" : "✓"}</small>` : ""}
             `;
+
+            msgBubble.appendChild(msgText);
+            msgBubble.appendChild(msgMeta);
+
+            if (!isMe) {
+                const avatarImg = document.createElement("img");
+                avatarImg.src = friendAvatar;
+                avatarImg.className = "msg-avatar";
+                avatarImg.style.cssText = "width:25px;height:25px;border-radius:50%;margin-right:6px;";
+                msgDiv.appendChild(avatarImg);
+            }
+
+            msgDiv.appendChild(msgBubble);
             chatBox.appendChild(msgDiv);
         });
         chatBox.scrollTop = chatBox.scrollHeight;
@@ -1562,7 +1580,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Subscribe to friend requests
+    // Subscribe to friend requests - FIXED VERSION
     async function subscribeToFriendRequests() {
         if (!window._friendRequestChannel) {
             const channelName = `friend-requests-${currentUserId}`;
@@ -1578,22 +1596,71 @@ document.addEventListener("DOMContentLoaded", async () => {
                     table: "requests",
                     filter: `receiver_id=eq.${currentUserId}`
                 },
-                payload => {
+                async payload => {
                     console.log("Friend request event received:", payload);
-                    const { eventType, new: newRecord } = payload;
+                    const { eventType, new: newRecord, old: oldRecord } = payload;
 
                     if (eventType === 'INSERT' && newRecord.status === "pending") {
                         console.log("New friend request received:", newRecord);
-                        showTopRightPopup("You have a new friend request!", "info");
+
+                        // Get sender details for notification
+                        try {
+                            const { data: senderProfile } = await client
+                                .from("user_profiles")
+                                .select("user_name, profile_image_url")
+                                .eq("user_id", newRecord.sender_id)
+                                .maybeSingle();
+
+                            const senderName = senderProfile?.user_name || "Someone";
+                            const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
+
+                            showTopRightPopup(`${senderName} sent you a friend request`, "info", senderAvatar);
+
+                            if (Notification.permission === "granted") {
+                                const notif = new Notification("Friend Request 👥", {
+                                    body: `${senderName} sent you a request`,
+                                    icon: senderAvatar,
+                                    data: { type: 'friend_request', senderId: newRecord.sender_id }
+                                });
+
+                                notif.addEventListener('click', () => {
+                                    window.focus();
+                                    openSpecificChat(newRecord.sender_id);
+                                    notif.close();
+                                });
+                            }
+                        } catch (err) {
+                            console.error("Error fetching sender profile for notification:", err);
+                        }
+
+                        // Refresh friend requests list
                         fetchFriendRequests();
                     } else if (eventType === 'UPDATE') {
                         console.log("Friend request updated:", newRecord);
+
                         if (newRecord.status === "accepted") {
-                            showTopRightPopup("Friend request accepted!", "success");
+                            // If this user accepted a request
+                            if (newRecord.sender_id === currentUserId) {
+                                showTopRightPopup("Your friend request was accepted!", "success");
+                            } else {
+                                // If this user received an accepted request
+                                showTopRightPopup("You accepted a friend request!", "success");
+                            }
+                            // Refresh friends list
                             fetchFriends();
                         } else if (newRecord.status === "rejected") {
-                            showTopRightPopup("Friend request rejected", "info");
+                            if (newRecord.sender_id === currentUserId) {
+                                showTopRightPopup("Your friend request was rejected", "warning");
+                            } else {
+                                showTopRightPopup("You rejected a friend request", "info");
+                            }
                         }
+
+                        // Refresh friend requests list
+                        fetchFriendRequests();
+                    } else if (eventType === 'DELETE') {
+                        console.log("Friend request deleted:", oldRecord);
+                        // Refresh friend requests list
                         fetchFriendRequests();
                     }
                 }
@@ -1604,14 +1671,22 @@ document.addEventListener("DOMContentLoaded", async () => {
                     console.log("Friend request subscription status:", status);
                     if (status === 'SUBSCRIBED') {
                         console.log("Successfully subscribed to friend requests");
+                        // Initial fetch after subscription
                         fetchFriendRequests();
                     } else if (status === 'CHANNEL_ERROR') {
                         console.error("Error subscribing to friend requests");
-                        setTimeout(() => subscribeToFriendRequests(), 5000);
+                        setTimeout(() => {
+                            console.log("Attempting to resubscribe to friend requests...");
+                            // Clear the existing channel reference
+                            window._friendRequestChannel = null;
+                            subscribeToFriendRequests();
+                        }, 5000);
                     }
                 });
             } catch (err) {
                 console.error("Error setting up friend request subscription:", err);
+                // Clear the existing channel reference
+                window._friendRequestChannel = null;
             }
         }
     }
@@ -2526,15 +2601,39 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         openChatFromUrl();
 
+        // Set up periodic refresh to ensure subscriptions are active
         setInterval(() => {
-            if (window._friendRequestChannel && window._friendRequestChannel.state !== 'joined') {
+            // Check and reconnect friend request subscription if needed
+            if (!window._friendRequestChannel || window._friendRequestChannel.state !== 'joined') {
                 console.log("Reconnecting friend request subscription");
+                // Clear the existing channel reference
+                window._friendRequestChannel = null;
                 subscribeToFriendRequests();
             }
-            if (window._globalMessageChannel && window._globalMessageChannel.state !== 'joined') {
+
+            // Check and reconnect global message subscription if needed
+            if (!window._globalMessageChannel || window._globalMessageChannel.state !== 'joined') {
                 console.log("Reconnecting global message subscription");
+                // Clear the existing channel reference
+                window._globalMessageChannel = null;
                 subscribeToGlobalMessages();
             }
-        }, 300); 
+
+            // Check and reconnect friends updates subscription if needed
+            if (!window._friendsUpdatesChannel || window._friendsUpdatesChannel.state !== 'joined') {
+                console.log("Reconnecting friends updates subscription");
+                // Clear the existing channel reference
+                window._friendsUpdatesChannel = null;
+                subscribeToFriendsUpdates();
+            }
+
+            // Check and reconnect user profiles updates subscription if needed
+            if (!window._userProfilesUpdatesChannel || window._userProfilesUpdatesChannel.state !== 'joined') {
+                console.log("Reconnecting user profiles updates subscription");
+                // Clear the existing channel reference
+                window._userProfilesUpdatesChannel = null;
+                subscribeToUserProfilesUpdates();
+            }
+        }, 30000); // Check every 30 seconds
     }
 });
