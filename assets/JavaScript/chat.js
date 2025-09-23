@@ -1,10 +1,10 @@
 import { client } from "../../supabase.js";
 
 // Load dashboard styles
-const link = document.createElement('link');
-link.rel = 'stylesheet';
-link.href = '../CSS/dashboard.css';
-document.head.appendChild(link);
+// const link = document.createElement('link');
+// link.rel = 'stylesheet';
+// link.href = '../CSS/dashboard.css';
+// document.head.appendChild(link);
 
 // Initialize when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
@@ -45,7 +45,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             `;
             document.body.appendChild(modal);
 
-            // Modal event listeners
             const closeModal = () => modal.style.display = "none";
             modal.querySelector(".user-modal-close").addEventListener("click", closeModal);
             modal.querySelector("#user-modal-close-btn").addEventListener("click", closeModal);
@@ -57,11 +56,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         }
 
-        // Set modal content
         document.getElementById("user-modal-avatar").src = userAvatar || DEFAULT_PROFILE_IMG;
         document.getElementById("user-modal-username").textContent = userName || "Unknown User";
 
-        // Fetch user profile data
         getUserProfile(userId).then(profile => {
             if (profile) {
                 document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
@@ -1290,7 +1287,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (chatHeaderImg) chatHeaderImg.src = friendAvatar || DEFAULT_PROFILE_IMG;
 
         // Add click event to chat header to show user modal
-        const chatHeader = chatContainer.querySelector(".chat-header");
+        const chatHeader = chatContainer.querySelector(".chat-header img");
         if (chatHeader) {
             const newChatHeader = chatHeader.cloneNode(true);
             chatHeader.parentNode.replaceChild(newChatHeader, chatHeader);
