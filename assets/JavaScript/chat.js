@@ -1,12 +1,14 @@
 import { client } from "../../supabase.js";
 
+// Load dashboard styles
 const link = document.createElement('link');
 link.rel = 'stylesheet';
 link.href = '../CSS/dashboard.css';
 document.head.appendChild(link);
 
+// Initialize when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
-    // Professional user modal function
+    // User modal function
     function showUserModal(userId, userName, userAvatar) {
         let modal = document.getElementById("user-modal");
         if (!modal) {
@@ -43,56 +45,42 @@ document.addEventListener("DOMContentLoaded", async () => {
             `;
             document.body.appendChild(modal);
 
-            // Add event listeners
-            const closeBtn = modal.querySelector(".user-modal-close");
-            const closeBtn2 = modal.querySelector("#user-modal-close-btn");
-            const messageBtn = modal.querySelector("#user-modal-message-btn");
-            const backdrop = modal.querySelector(".user-modal-backdrop");
+            // Modal event listeners
+            const closeModal = () => modal.style.display = "none";
+            modal.querySelector(".user-modal-close").addEventListener("click", closeModal);
+            modal.querySelector("#user-modal-close-btn").addEventListener("click", closeModal);
+            modal.querySelector(".user-modal-backdrop").addEventListener("click", closeModal);
 
-            const closeModal = () => {
-                modal.style.display = "none";
-            };
-
-            closeBtn.addEventListener("click", closeModal);
-            closeBtn2.addEventListener("click", closeModal);
-            backdrop.addEventListener("click", closeModal);
-
-            messageBtn.addEventListener("click", () => {
+            modal.querySelector("#user-modal-message-btn").addEventListener("click", () => {
                 closeModal();
                 openSpecificChat(userId);
             });
         }
 
-        // Set the content
+        // Set modal content
         document.getElementById("user-modal-avatar").src = userAvatar || DEFAULT_PROFILE_IMG;
         document.getElementById("user-modal-username").textContent = userName || "Unknown User";
 
-        // Fetch additional user info
+        // Fetch user profile data
         getUserProfile(userId).then(profile => {
             if (profile) {
                 document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
                 const statusElement = document.getElementById("user-modal-status");
                 statusElement.textContent = profile.is_online ? "Online" : "Offline";
                 statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
-            } else {
-                document.getElementById("user-modal-bio").textContent = "No bio available.";
-                const statusElement = document.getElementById("user-modal-status");
-                statusElement.textContent = "Offline";
-                statusElement.className = "user-modal-status offline";
             }
-        }).catch(err => {
-            console.error("Error fetching user profile:", err);
+        }).catch(() => {
             document.getElementById("user-modal-bio").textContent = "No bio available.";
             const statusElement = document.getElementById("user-modal-status");
             statusElement.textContent = "Offline";
             statusElement.className = "user-modal-status offline";
         });
 
-        // Show the modal
+        // Show modal
         modal.style.display = "flex";
     }
 
-    // Get user profile with bio and online status
+    // Get user profile data
     async function getUserProfile(userId) {
         try {
             const { data, error } = await client
@@ -101,14 +89,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .eq("user_id", userId)
                 .maybeSingle();
 
-            if (error) {
-                console.error("Error fetching user profile:", error);
-                return null;
-            }
-
+            if (error) throw error;
             return data;
         } catch (err) {
-            console.error("Unexpected error in getUserProfile:", err);
+            console.error("Error fetching user profile:", err);
             return null;
         }
     }
@@ -117,18 +101,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     function showPopup(message, type = "info") {
         const popup = document.getElementById("notification-popup");
         const messageEl = document.getElementById("popup-message");
-        const closeBtn = document.getElementById("popup-close");
-
         if (!popup || !messageEl) return;
 
         messageEl.textContent = message;
         popup.classList.remove("hidden", "error", "success", "info");
         popup.classList.add("show", String(type));
 
+        const closeBtn = document.getElementById("popup-close");
         if (closeBtn) {
-            const newClose = closeBtn.cloneNode(true);
-            closeBtn.parentNode.replaceChild(newClose, closeBtn);
-            newClose.addEventListener('click', () => {
+            closeBtn.addEventListener('click', () => {
                 popup.classList.add("hidden");
                 popup.classList.remove('show');
             });
@@ -139,18 +120,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     function showToast(message, type = "info") {
         const toast = document.getElementById("toast-notification");
         const messageEl = document.getElementById("toast-message");
-        const closeBtn = document.getElementById("toast-close");
-
         if (!toast || !messageEl) return;
 
         messageEl.textContent = message;
         toast.classList.remove("hidden", "success", "error", "info", "warning");
         toast.classList.add("show", String(type));
 
+        const closeBtn = document.getElementById("toast-close");
         if (closeBtn) {
-            const newClose = closeBtn.cloneNode(true);
-            closeBtn.parentNode.replaceChild(newClose, closeBtn);
-            newClose.addEventListener('click', () => {
+            closeBtn.addEventListener('click', () => {
                 toast.classList.add("hidden");
                 toast.classList.remove('show');
             });
@@ -166,11 +144,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     function showLoading(message = 'Loading...') {
         const overlay = document.getElementById("loading-overlay");
         const msgEl = document.getElementById("loading-message");
-
-        if (!overlay) {
-            console.warn("⚠️ Missing #loading-overlay element");
-            return;
-        }
+        if (!overlay) return;
 
         if (msgEl) msgEl.textContent = message;
         overlay.classList.remove('hidden');
@@ -191,10 +165,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Top-right popup function
     function showTopRightPopup(message, type = "info", image = null) {
         const popupKey = `${message}-${type}-${image || ''}`;
-
-        if (activePopups.has(popupKey)) {
-            return;
-        }
+        if (activePopups.has(popupKey)) return;
 
         activePopups.add(popupKey);
 
@@ -222,6 +193,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             </div>
         `;
 
+        // Style popup
         popup.style.backgroundColor = type === "success" ? "#4CAF50" :
             type === "error" ? "#f44336" :
                 type === "warning" ? "#ff9800" : "#2196F3";
@@ -236,6 +208,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         popup.style.alignItems = "center";
         popup.style.animation = "slideIn 0.3s ease-out";
 
+        // Add animation styles if not present
         if (!document.getElementById("popup-styles")) {
             const style = document.createElement("style");
             style.id = "popup-styles";
@@ -260,6 +233,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.head.appendChild(style);
         }
 
+        // Close button event
         popup.querySelector(".popup-close").addEventListener("click", () => {
             popup.style.animation = "slideOut 0.3s ease-out forwards";
             setTimeout(() => {
@@ -268,6 +242,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }, 300);
         });
 
+        // Auto remove after 5 seconds
         setTimeout(() => {
             if (popup.parentNode) {
                 popup.style.animation = "slideOut 0.3s ease-out forwards";
@@ -1580,7 +1555,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Subscribe to friend requests - FIXED
+    // Subscribe to friend requests
     async function subscribeToFriendRequests() {
         if (!window._friendRequestChannel) {
             const channelName = `friend-requests-${currentUserId}`;
