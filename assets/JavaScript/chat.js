@@ -885,6 +885,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!username) return showToast("Enter a username.", "error");
 
         console.log("Sending friend request to:", username);
+        showLoading("Sending friend request..."); // Show loading overlay
 
         try {
             const { data: user, error: userError } = await client
@@ -895,6 +896,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (userError || !user) {
                 console.error("User not found:", userError);
+                hideLoading(); // Hide loading overlay
                 return showToast("User not found.", "error");
             }
 
@@ -902,6 +904,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.log("Found user with ID:", receiverId);
 
             if (receiverId === currentUserId) {
+                hideLoading(); // Hide loading overlay
                 return showToast("You cannot send a request to yourself.", "warning");
             }
 
@@ -913,11 +916,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (existingError) {
                 console.error("Error checking existing request:", existingError);
+                hideLoading(); // Hide loading overlay
                 return showToast("Something went wrong. Try again.", "error");
             }
 
             if (existing) {
                 console.log("Existing request found:", existing);
+                hideLoading(); // Hide loading overlay
                 if (existing.status === "pending") {
                     showTopRightPopup(`You already have a pending request to ${username}`, "warning");
                     return showToast("You have already sent a request.", "info");
@@ -945,6 +950,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (requestError) {
                 console.error("Error sending friend request:", requestError);
+                hideLoading(); // Hide loading overlay
                 return showToast("Failed to send friend request.", "error");
             }
 
@@ -954,8 +960,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         } catch (err) {
             console.error("Unexpected error in sendFriendRequest:", err);
             showToast("Unexpected error. Please try again.", "error");
+        } finally {
+            hideLoading();
         }
     }
+
 
     function updateMessageSeenStatus(chatBox, messageId) {
         const chatMessage = chatBox.querySelector(`.message[data-message-id="${messageId}"] .seen-status`);
@@ -1432,7 +1441,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         }
     }
-
     async function subscribeToFriendRequests() {
         if (!window._friendRequestChannel) {
             // Create a unique channel name for this user
@@ -1448,7 +1456,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     event: "*",  // Listen to all events (INSERT, UPDATE, DELETE)
                     schema: "public",
                     table: "requests",
-                    filter: `receiver_id=eq.${currentUserId}`  // Only listen for requests sent to this user
+                    // Modified filter to include both sender and receiver
+                    filter: `or(receiver_id=eq.${currentUserId},sender_id=eq.${currentUserId})`
                 },
                 payload => {
                     console.log("Friend request event received:", payload);
@@ -1457,6 +1466,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     if (eventType === 'INSERT') {
                         console.log("New friend request received:", newRecord);
+                        // Only show notification if current user is the receiver
                         if (newRecord.receiver_id === currentUserId && newRecord.status === "pending") {
                             // Show popup immediately
                             showTopRightPopup("You have a new friend request!", "info");
@@ -1465,16 +1475,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                         }
                     } else if (eventType === 'UPDATE') {
                         console.log("Friend request updated:", newRecord);
-                        if ((newRecord.receiver_id === currentUserId || newRecord.sender_id === currentUserId) &&
-                            (newRecord.status === "accepted" || newRecord.status === "rejected")) {
-
-                            // Show appropriate popup based on status change
+                        // Handle both sender and receiver perspectives
+                        if (newRecord.receiver_id === currentUserId || newRecord.sender_id === currentUserId) {
                             if (newRecord.status === "accepted") {
                                 if (newRecord.receiver_id === currentUserId) {
                                     showTopRightPopup("Your friend request was accepted!", "success");
                                 } else {
                                     showTopRightPopup("You accepted a friend request!", "success");
                                 }
+                                fetchFriends(); // Update friends list
                             } else if (newRecord.status === "rejected") {
                                 if (newRecord.receiver_id === currentUserId) {
                                     showTopRightPopup("Your friend request was rejected", "warning");
@@ -1482,10 +1491,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                                     showTopRightPopup("You rejected a friend request", "info");
                                 }
                             }
-
-                            // Update both friend requests and friends list
+                            // Update the friend requests list
                             fetchFriendRequests();
-                            fetchFriends();
                         }
                     } else if (eventType === 'DELETE') {
                         console.log("Friend request deleted:", oldRecord);
@@ -1496,7 +1503,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             );
 
-            // Subscribe to the channel and handle errors
             try {
                 const status = await window._friendRequestChannel.subscribe((status) => {
                     console.log("Friend request subscription status:", status);
@@ -1505,7 +1511,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         console.log("Successfully subscribed to friend requests");
                     } else if (status === 'CHANNEL_ERROR') {
                         console.error("Error subscribing to friend requests");
-                        // Try to resubscribe after a delay
                         setTimeout(() => {
                             console.log("Attempting to resubscribe to friend requests...");
                             subscribeToFriendRequests();
