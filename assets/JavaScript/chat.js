@@ -333,6 +333,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Accept friend request
     async function acceptRequest(requestId, senderId) {
         try {
+            // Update the request status to accepted
             const { error: updateError } = await client
                 .from("requests")
                 .update({ status: "accepted" })
@@ -354,15 +355,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             showToast("Friend request accepted!", "success");
             showTopRightPopup("Friend request accepted!", "success");
-            fetchFriendRequests();
-            fetchFriends();
-            openSpecificChat(senderId);
+
+            // Fetch updated friend requests and friends lists
+            await fetchFriendRequests();
+            await fetchFriends();
+
+            await openSpecificChat(senderId);
+
+            await fetchRecentChats();
+
         } catch (err) {
             console.error("Unexpected error:", err);
             showToast("An error occurred while accepting request.", "error");
         }
     }
-
     // Reject friend request
     async function rejectRequest(requestId) {
         try {
