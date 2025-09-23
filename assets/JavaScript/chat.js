@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Constants
     const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
     const ADMIN_USERNAME = "Saim_Malik88";
+    const ADMIN_REQUEST_KEY = "adminRequestShown"; // localStorage key
 
     // Global variables
     let currentUserId = null;
@@ -16,7 +17,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     let deletionTimeouts = {};
     let processingMessageIds = new Set();
     let allFriends = new Map(); // Store all friends data for real-time updates
-    let hasShownAdminRequestPopup = false; // Track if admin request popup has been shown
 
     // User modal function
     function showUserModal(userId, userName, userAvatar) {
@@ -112,25 +112,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         } catch (err) {
             console.error("Error fetching user profile:", err);
             return null;
-        }
-    }
-
-    // Show popup notification
-    function showPopup(message, type = "info") {
-        const popup = document.getElementById("notification-popup");
-        const messageEl = document.getElementById("popup-message");
-        if (!popup || !messageEl) return;
-
-        messageEl.textContent = message;
-        popup.classList.remove("hidden", "error", "success", "info");
-        popup.classList.add("show", String(type));
-
-        const closeBtn = document.getElementById("popup-close");
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                popup.classList.add("hidden");
-                popup.classList.remove('show');
-            });
         }
     }
 
@@ -373,7 +354,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Show admin friend request popup for new users
     async function checkAndShowAdminRequestPopup() {
-        if (hasShownAdminRequestPopup) return;
+        // Check if we've already shown the admin request popup
+        if (localStorage.getItem(ADMIN_REQUEST_KEY) === 'true') return;
 
         try {
             // Check if user is new (less than 1 day old)
@@ -385,7 +367,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const hoursSinceCreation = (now - createdAt) / (1000 * 60 * 60);
 
             if (hoursSinceCreation > 24) {
-                hasShownAdminRequestPopup = true;
+                localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
                 return;
             }
 
@@ -397,13 +379,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .maybeSingle();
 
             if (adminError || !adminProfile) {
-                hasShownAdminRequestPopup = true;
+                localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
                 return;
             }
 
             const isAdminFriend = await isAlreadyFriend(adminProfile.user_id);
             if (isAdminFriend) {
-                hasShownAdminRequestPopup = true;
+                localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
                 return;
             }
 
@@ -412,15 +394,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                 `Would you like to send a friend request to ${ADMIN_USERNAME}?`,
                 async () => {
                     await sendFriendRequest(ADMIN_USERNAME);
-                    hasShownAdminRequestPopup = true;
+                    localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
                 },
                 () => {
-                    hasShownAdminRequestPopup = true;
+                    localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
                 }
             );
         } catch (err) {
             console.error("Error in checkAndShowAdminRequestPopup:", err);
-            hasShownAdminRequestPopup = true;
+            localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
         }
     }
 
@@ -2709,40 +2691,5 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         openChatFromUrl();
-
-        // Set up periodic refresh to ensure subscriptions are active
-        setInterval(() => {
-            // Check and reconnect friend request subscription if needed
-            if (!window._friendRequestChannel || window._friendRequestChannel.state !== 'joined') {
-                console.log("Reconnecting friend request subscription");
-                // Clear the existing channel reference
-                window._friendRequestChannel = null;
-                subscribeToFriendRequests();
-            }
-
-            // Check and reconnect global message subscription if needed
-            if (!window._globalMessageChannel || window._globalMessageChannel.state !== 'joined') {
-                console.log("Reconnecting global message subscription");
-                // Clear the existing channel reference
-                window._globalMessageChannel = null;
-                subscribeToGlobalMessages();
-            }
-
-            // Check and reconnect friends updates subscription if needed
-            if (!window._friendsUpdatesChannel || window._friendsUpdatesChannel.state !== 'joined') {
-                console.log("Reconnecting friends updates subscription");
-                // Clear the existing channel reference
-                window._friendsUpdatesChannel = null;
-                subscribeToFriendsUpdates();
-            }
-
-            // Check and reconnect user profiles updates subscription if needed
-            if (!window._userProfilesUpdatesChannel || window._userProfilesUpdatesChannel.state !== 'joined') {
-                console.log("Reconnecting user profiles updates subscription");
-                // Clear the existing channel reference
-                window._userProfilesUpdatesChannel = null;
-                subscribeToUserProfilesUpdates();
-            }
-        }, 300);
     }
 });
