@@ -598,25 +598,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     });
 
                     console.log(`Added friend request from ${senderName}`);
-
-                    try {
-                        if (Notification.permission === "granted") {
-                            const notif = new Notification("Friend Request 👥", {
-                                body: `${senderName} sent you a request`,
-                                icon: avatarUrl,
-                                data: { type: 'friend_request', senderId: req.senderId }
-                            });
-
-                            notif.addEventListener('click', () => {
-                                window.focus();
-                                openSpecificChat(req.senderId);
-                                notif.close();
-                            });
-                        }
-                        showTopRightPopup(`${senderName} sent you a friend request`, "info", avatarUrl);
-                    } catch (err) {
-                        console.warn("Error sending friend request notification:", err);
-                    }
                 }
             }
 
@@ -1907,10 +1888,25 @@ document.addEventListener("DOMContentLoaded", async () => {
                 );
 
                 try {
-                    await window._userProfilesUpdatesChannel.subscribe();
+                    await window._userProfilesUpdatesChannel.subscribe((status) => {
+                        console.log("User profiles updates subscription status:", status);
+                        if (status === 'SUBSCRIBED') {
+                            console.log("Successfully subscribed to user profiles updates");
+                        } else if (status === 'CHANNEL_ERROR') {
+                            console.error("Error subscribing to user profiles updates");
+                            setTimeout(() => {
+                                console.log("Attempting to resubscribe to user profiles updates...");
+                                // Clear the existing channel reference
+                                window._userProfilesUpdatesChannel = null;
+                                subscribeToUserProfilesUpdates();
+                            }, 5000);
+                        }
+                    });
                     console.log("Subscribed to user profiles updates channel.");
                 } catch (err) {
                     console.warn("subscribeToUserProfilesUpdates subscribe failed:", err);
+                    // Clear the existing channel reference
+                    window._userProfilesUpdatesChannel = null;
                 }
             }
         } catch (error) {
@@ -1958,6 +1954,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (currentOpenChatId === friendId) {
                 const chatHeaderName = document.querySelector("#chat-header-name");
                 const chatHeaderImg = document.querySelector(".chat-header img");
+                const typingIndicator = document.querySelector("#typing-indicator");
 
                 if (chatHeaderName && friendData.user_name) {
                     chatHeaderName.textContent = friendData.user_name;
@@ -1965,6 +1962,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 if (chatHeaderImg && friendData.profile_image_url) {
                     chatHeaderImg.src = friendData.profile_image_url;
+                }
+
+                if (typingIndicator) {
+                    typingIndicator.textContent = friendData.is_online ? "Online" : "Offline";
                 }
             }
         } catch (error) {
