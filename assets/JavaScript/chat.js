@@ -18,101 +18,26 @@ document.addEventListener("DOMContentLoaded", async () => {
     let processingMessageIds = new Set();
     let allFriends = new Map(); // Store all friends data for real-time updates
 
-    // User modal function
-    function showUserModal(userId, userName, userAvatar) {
-        let modal = document.getElementById("user-modal");
-        if (!modal) {
-            modal = document.createElement("div");
-            modal.id = "user-modal";
-            modal.className = "user-modal";
-            modal.innerHTML = `
-                <div class="user-modal-backdrop"></div>
-                <div class="user-modal-container">
-                    <div class="user-modal-header">
-                        <h2>User Profile</h2>
-                        <span class="user-modal-close">&times;</span>
-                    </div>
-                    <div class="user-modal-body">
-                        <div class="user-modal-avatar-section">
-                            <img id="user-modal-avatar" class="user-modal-avatar" src="" alt="User Avatar">
-                            <div id="user-modal-status" class="user-modal-status"></div>
-                        </div>
-                        <div class="user-modal-info">
-                            <h3 id="user-modal-username" class="user-modal-username"></h3>
-                            <p id="user-modal-bio" class="user-modal-bio"></p>
-                            <div class="user-modal-actions">
-                                <button id="user-modal-message-btn" class="user-modal-btn primary">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                                    </svg>
-                                    Message
-                                </button>
-                                <button id="user-modal-close-btn" class="user-modal-btn secondary">Close</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
+    // Show modal with animation
+    function showModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
 
-            const closeModal = () => modal.style.display = "none";
-            modal.querySelector(".user-modal-close").addEventListener("click", closeModal);
-            modal.querySelector("#user-modal-close-btn").addEventListener("click", closeModal);
-            modal.querySelector(".user-modal-backdrop").addEventListener("click", closeModal);
-
-            modal.querySelector("#user-modal-message-btn").addEventListener("click", () => {
-                closeModal();
-                openSpecificChat(userId);
-            });
-        }
-
-        // Set initial values
-        document.getElementById("user-modal-avatar").src = userAvatar || DEFAULT_PROFILE_IMG;
-        document.getElementById("user-modal-username").textContent = userName || "Unknown User";
-        document.getElementById("user-modal-bio").textContent = "Loading bio...";
-        document.getElementById("user-modal-status").textContent = "Checking status...";
-        document.getElementById("user-modal-status").className = "user-modal-status";
-
-        // Fetch and update profile data
-        getUserProfile(userId).then(profile => {
-            if (profile) {
-                document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
-                const statusElement = document.getElementById("user-modal-status");
-                statusElement.textContent = profile.is_online ? "Online" : "Offline";
-                statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
-            } else {
-                document.getElementById("user-modal-bio").textContent = "No bio available.";
-                const statusElement = document.getElementById("user-modal-status");
-                statusElement.textContent = "Offline";
-                statusElement.className = "user-modal-status offline";
-            }
-        }).catch(err => {
-            console.error("Error fetching user profile:", err);
-            document.getElementById("user-modal-bio").textContent = "Error loading bio.";
-            const statusElement = document.getElementById("user-modal-status");
-            statusElement.textContent = "Offline";
-            statusElement.className = "user-modal-status offline";
-        });
-
-        // Show modal
-        modal.style.display = "flex";
+        modal.classList.remove('hidden');
+        // Force reflow
+        modal.offsetHeight;
+        modal.classList.add('show');
     }
 
-    // Get user profile data
-    async function getUserProfile(userId) {
-        try {
-            const { data, error } = await client
-                .from("user_profiles")
-                .select("user_name, profile_image_url, bio, is_online")
-                .eq("user_id", userId)
-                .maybeSingle();
+    // Hide modal with animation
+    function hideModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
 
-            if (error) throw error;
-            return data;
-        } catch (err) {
-            console.error("Error fetching user profile:", err);
-            return null;
-        }
+        modal.classList.remove('show');
+        setTimeout(() => {
+            modal.classList.add('hidden');
+        }, 300); // Match animation duration
     }
 
     // Show toast notification
@@ -123,19 +48,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         messageEl.textContent = message;
         toast.classList.remove("hidden", "success", "error", "info", "warning");
-        toast.classList.add("show", String(type));
+        toast.classList.add("show", type);
 
         const closeBtn = document.getElementById("toast-close");
         if (closeBtn) {
             closeBtn.addEventListener('click', () => {
-                toast.classList.add("hidden");
-                toast.classList.remove('show');
+                toast.classList.remove("show");
+                setTimeout(() => toast.classList.add("hidden"), 300);
             });
         }
 
         setTimeout(() => {
-            toast.classList.add("hidden");
-            toast.classList.remove('show');
+            toast.classList.remove("show");
+            setTimeout(() => toast.classList.add("hidden"), 300);
         }, 3000);
     }
 
@@ -147,15 +72,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (msgEl) msgEl.textContent = message;
         overlay.classList.remove('hidden');
-        overlay.style.display = "flex";
+        // Force reflow
+        overlay.offsetHeight;
+        overlay.classList.add('show');
     }
 
     // Hide loading overlay
     function hideLoading() {
         const overlay = document.getElementById("loading-overlay");
         if (!overlay) return;
-        overlay.classList.add('hidden');
-        overlay.style.display = "none";
+
+        overlay.classList.remove('show');
+        setTimeout(() => overlay.classList.add('hidden'), 300);
     }
 
     // Track active popups
@@ -391,7 +319,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             // Show popup to send friend request to admin
             showConfirmPopup(
-                `Would you like to send a friend request to ${ADMIN_USERNAME}?`,
+                `Would you like to send a friend request to Admin ${ADMIN_USERNAME}?`,
                 async () => {
                     await sendFriendRequest(ADMIN_USERNAME);
                     localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
@@ -493,16 +421,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Render friend requests
     function renderFriendRequests() {
-        const messageList = document.getElementById("message-list");
+        const messageList = document.getElementById("friend-requests-list");
         const unreadBadge = document.getElementById("unread-count");
         if (!messageList || !unreadBadge) return;
 
         messageList.innerHTML = "";
         if (!friendRequests || friendRequests.length === 0) {
-            messageList.textContent = "No pending friend requests.";
-            messageList.style.textAlign = "center";
+            const noRequestsItem = document.createElement("li");
+            noRequestsItem.className = "no-requests";
+            noRequestsItem.textContent = "No pending friend requests.";
+            messageList.appendChild(noRequestsItem);
         } else {
-            messageList.style.textAlign = "left";
             friendRequests.forEach((req) => {
                 const li = document.createElement("li");
                 li.className = "message-item";
@@ -544,16 +473,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Message notification click handler
     document.getElementById("message-notification")?.addEventListener("click", () => {
-        const popup = document.getElementById("message-popup");
-        if (popup) popup.style.display = popup.style.display === "block" ? "none" : "block";
+        const popup = document.getElementById("friend-requests-popup");
+        if (popup) {
+            if (popup.classList.contains("show")) {
+                popup.classList.remove("show");
+            } else {
+                popup.classList.add("show");
+            }
+        }
     });
 
     // Close message popup when clicking outside
     document.addEventListener("click", (e) => {
         const messageIcon = document.getElementById("message-notification");
-        const messagePopup = document.getElementById("message-popup");
+        const messagePopup = document.getElementById("friend-requests-popup");
         if (messageIcon && messagePopup && !messageIcon.contains(e.target) && !messagePopup.contains(e.target)) {
-            messagePopup.style.display = "none";
+            messagePopup.classList.remove("show");
         }
     });
 
@@ -1052,11 +987,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     function renderChatMessages(chatBox, msgs, friendAvatar) {
         if (!chatBox) return;
         chatBox.innerHTML = "";
-        msgs.forEach(msg => {
+
+        // Add line timing animation
+        const animationDelay = 50; // milliseconds between each message
+
+        msgs.forEach((msg, index) => {
             const isMe = msg.sender_id === currentUserId;
             const msgDiv = document.createElement("div");
             msgDiv.className = `message ${isMe ? "sent" : "received"}`;
             msgDiv.setAttribute("data-message-id", msg.id);
+
+            // Add animation delay for each message
+            msgDiv.style.animationDelay = `${index * animationDelay}ms`;
 
             const timeStr = msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], {
                 hour: "2-digit",
@@ -1093,7 +1035,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             msgDiv.appendChild(msgBubble);
             chatBox.appendChild(msgDiv);
         });
-        chatBox.scrollTop = chatBox.scrollHeight;
+
+        // Scroll to bottom after all messages are rendered
+        setTimeout(() => {
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }, msgs.length * animationDelay);
     }
 
     // Send friend request
@@ -1528,7 +1474,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     currentOpenChatId = null;
                     await deleteSeenMessagesForChat(friendId);
 
-                    document.getElementById('message-notification').classList.remove('hidden');
+                    document.getElementById('message-notification').classList.remove("hidden");
                     if (window.innerWidth <= 768) {
                         if (sidebar) sidebar.style.display = "flex";
                         if (messageCon) messageCon.style.display = "flex";
@@ -2166,7 +2112,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Profile pic click handler
     profilePic?.addEventListener("click", async () => {
         if (!profilePopup) return;
-        profilePopup.classList.remove("hidden");
+        showModal("profile-popup");
 
         try {
             const { data: profile, error } = await client
@@ -2192,7 +2138,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     closeProfile?.addEventListener("click", () => {
-        profilePopup?.classList.add("hidden");
+        hideModal("profile-popup");
     });
 
     profileUpload?.addEventListener("change", (e) => {
@@ -2254,7 +2200,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             setTimeout(() => {
                 saveProfileBtn.disabled = false;
                 saveProfileBtn.innerHTML = originalContent;
-                profilePopup?.classList.add("hidden");
+                hideModal("profile-popup");
             }, 1500);
 
             fetchCurrentUserAvatar();
@@ -2280,7 +2226,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     logoutBtn?.addEventListener("click", async () => {
-        alert('logot Click')
         showConfirmPopup(
             "Are you sure you want to logout?",
             async () => {
@@ -2304,15 +2249,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     changeUsernameBtn?.addEventListener("click", () => {
-        profilePopup?.classList.add("hidden");
-        usernamePopup?.classList.remove("hidden");
+        hideModal("profile-popup");
+        showModal("username-popup");
     });
 
     closeUsername?.addEventListener("click", () => {
-        usernamePopup?.classList.add("hidden");
+        hideModal("username-popup");
     });
     cancelUsername?.addEventListener("click", () => {
-        usernamePopup?.classList.add("hidden");
+        hideModal("username-popup");
     });
 
     saveUsernameBtn?.addEventListener("click", async () => {
@@ -2351,7 +2296,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             setTimeout(() => {
                 saveUsernameBtn.disabled = false;
                 saveUsernameBtn.innerHTML = originalContent;
-                usernamePopup?.classList.add("hidden");
+                hideModal("username-popup");
             }, 1500);
 
             fetchFriends();
@@ -2377,14 +2322,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Show confirm popup
     function showConfirmPopup(message, onConfirm, onCancel) {
-        const popup = document.getElementById("modal-popup-container");
+        const popup = document.getElementById("notification-popup");
         const messageEl = document.getElementById("popup-message");
         const closeBtn = document.getElementById("popup-close");
 
         if (!popup || !messageEl) return;
 
         const buttonsContainer = document.createElement('div');
-        buttonsContainer.className = 'modal-popup-buttons';
+        buttonsContainer.className = 'modal-popup-footer';
         buttonsContainer.innerHTML = `
             <button id="popup-confirm" class="modal-btn-confirm">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2403,7 +2348,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             </button>
         `;
 
-        const existingButtons = popup.querySelector('.modal-popup-buttons');
+        const existingButtons = popup.querySelector('.modal-popup-footer');
         if (existingButtons) {
             existingButtons.remove();
         }
@@ -2417,8 +2362,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const cancelBtn = document.getElementById('popup-cancel');
 
         const handleClose = () => {
-            popup.classList.add("hidden");
-            popup.classList.remove('show');
+            hideModal("notification-popup");
             buttonsContainer.remove();
         };
 
@@ -2438,6 +2382,70 @@ document.addEventListener("DOMContentLoaded", async () => {
             handleClose();
             if (onCancel) onCancel();
         });
+    }
+
+    // User modal function
+    function showUserModal(userId, userName, userAvatar) {
+        const modal = document.getElementById("user-modal");
+        if (!modal) return;
+
+        // Set initial values
+        document.getElementById("user-modal-avatar").src = userAvatar || DEFAULT_PROFILE_IMG;
+        document.getElementById("user-modal-username").textContent = userName || "Unknown User";
+        document.getElementById("user-modal-bio").textContent = "Loading bio...";
+        document.getElementById("user-modal-status").textContent = "Checking status...";
+        document.getElementById("user-modal-status").className = "user-modal-status";
+
+        // Fetch and update profile data
+        getUserProfile(userId).then(profile => {
+            if (profile) {
+                document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
+                const statusElement = document.getElementById("user-modal-status");
+                statusElement.textContent = profile.is_online ? "Online" : "Offline";
+                statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
+            } else {
+                document.getElementById("user-modal-bio").textContent = "No bio available.";
+                const statusElement = document.getElementById("user-modal-status");
+                statusElement.textContent = "Offline";
+                statusElement.className = "user-modal-status offline";
+            }
+        }).catch(err => {
+            console.error("Error fetching user profile:", err);
+            document.getElementById("user-modal-bio").textContent = "Error loading bio.";
+            const statusElement = document.getElementById("user-modal-status");
+            statusElement.textContent = "Offline";
+            statusElement.className = "user-modal-status offline";
+        });
+
+        // Show modal
+        showModal("user-modal");
+
+        // Add event listeners
+        const closeModal = () => hideModal("user-modal");
+        modal.querySelector(".user-modal-close").addEventListener("click", closeModal);
+        modal.querySelector("#user-modal-close-btn").addEventListener("click", closeModal);
+
+        modal.querySelector("#user-modal-message-btn").addEventListener("click", () => {
+            closeModal();
+            openSpecificChat(userId);
+        });
+    }
+
+    // Get user profile data
+    async function getUserProfile(userId) {
+        try {
+            const { data, error } = await client
+                .from("user_profiles")
+                .select("user_name, profile_image_url, bio, is_online")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            if (error) throw error;
+            return data;
+        } catch (err) {
+            console.error("Error fetching user profile:", err);
+            return null;
+        }
     }
 
     // Initialize database schema
@@ -2672,6 +2680,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    // Add friend button
+    document.querySelector(".addFriends")?.addEventListener("click", () => {
+        showModal("friendModal");
+    });
+
+    // Close friend modal
+    document.querySelector("#friendModal .close")?.addEventListener("click", () => {
+        hideModal("friendModal");
+    });
+
+    // Close friend requests popup
+    document.querySelector("#friend-requests-popup .popup-close")?.addEventListener("click", () => {
+        document.getElementById("friend-requests-popup").classList.remove("show");
+    });
+
     // Initialize app
     const me = await getCurrentUser();
     if (me) {
@@ -2693,4 +2716,4 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         openChatFromUrl();
     }
-});
+}); 

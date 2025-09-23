@@ -79,19 +79,23 @@
         <span id="unread-count">0</span>
     </div>
 
-    <!-- Popup for messages -->
-    <div id="message-popup">
-        <ul id="message-list">
-            No Request!
-        </ul>
+    <!-- Friend Requests Popup -->
+    <div id="friend-requests-popup" class="popup-container hidden">
+        <div class="popup-header">
+            <h3>Friend Requests</h3>
+            <span class="popup-close">&times;</span>
+        </div>
+        <div class="popup-content">
+            <ul id="friend-requests-list">
+                <li class="no-requests">No pending friend requests</li>
+            </ul>
+        </div>
     </div>
 
     <!-- Loading Overlay -->
-    <div id="loading-overlay" class="hidden">
-        <div class="loading-box">
-            <div class="spinner"></div>
-            <p id="loading-message">Loading...</p>
-        </div>
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <p id="loading-message">Loading...</p>
     </div>
 
     <!-- Profile Modal Popup -->
@@ -259,9 +263,35 @@
         <button id="toast-close">×</button>
     </div>
 
-    <div id="loading-overlay-end" class="loading-overlay hidden">
-        <div class="loading-spinner"></div>
-        <p id="loading-message">Loading...</p>
+    <!-- User Profile Modal -->
+    <div id="user-modal" class="modal-popup hidden">
+        <div class="modal-popup-container">
+            <div class="modal-popup-header">
+                <h2>User Profile</h2>
+                <span class="user-modal-close modal-close-btn">&times;</span>
+            </div>
+            <div class="modal-popup-content">
+                <div class="user-modal-avatar-section">
+                    <img id="user-modal-avatar" class="user-modal-avatar" src="" alt="User Avatar">
+                    <div id="user-modal-status" class="user-modal-status"></div>
+                </div>
+                <div class="user-modal-info">
+                    <h3 id="user-modal-username" class="user-modal-username"></h3>
+                    <p id="user-modal-bio" class="user-modal-bio"></p>
+                    <div class="user-modal-actions">
+                        <button id="user-modal-message-btn" class="user-modal-btn primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                           No Message
+                        </button>
+                        <button id="user-modal-close-btn" class="user-modal-btn secondary">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="https://unpkg.com/@supabase/supabase-js"></script>
