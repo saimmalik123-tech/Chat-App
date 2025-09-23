@@ -418,7 +418,6 @@ emoji-picker {
   color: var(--text-secondary);
   line-height: 1.6;
   max-width: 520px;
-  opacity: 0;
   animation: fadeIn 0.9s 0.25s forwards;
 }
 

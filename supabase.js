@@ -3,10 +3,4 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = "https://svvkllfwanhoqbjazjfm.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2dmtsbGZ3YW5ob3FiamF6amZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY1NDczNTYsImV4cCI6MjA3MjEyMzM1Nn0.0kOLDoyLNoRRd27ClwqLT2157wt60YsB7qxPghfhCes";
 
-export const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    realtime: {
-        params: {
-            eventsPerSecond: 10
-        }
-    }
-});
+export const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);

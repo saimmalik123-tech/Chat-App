@@ -18,6 +18,68 @@ document.addEventListener("DOMContentLoaded", async () => {
     let processingMessageIds = new Set();
     let allFriends = new Map(); // Store all friends data for real-time updates
 
+    // Subscription Manager
+    const subscriptionManager = {
+        channels: new Map(),
+
+        async subscribe(channelName, config, callback) {
+            // Remove existing channel if it exists
+            if (this.channels.has(channelName)) {
+                try {
+                    await client.removeChannel(this.channels.get(channelName));
+                } catch (err) {
+                    console.warn(`Error removing channel ${channelName}:`, err);
+                }
+            }
+
+            // Create new channel
+            const channel = client.channel(channelName);
+
+            // Set up subscription
+            channel.subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log(`Successfully subscribed to ${channelName}`);
+                    if (callback) callback(true);
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error(`Error subscribing to ${channelName}`);
+                    if (callback) callback(false);
+
+                    // Attempt to reconnect after delay
+                    setTimeout(() => {
+                        console.log(`Attempting to resubscribe to ${channelName}...`);
+                        this.subscribe(channelName, config, callback);
+                    }, 5000);
+                }
+            });
+
+            // Store channel reference
+            this.channels.set(channelName, channel);
+
+            return channel;
+        },
+
+        async unsubscribe(channelName) {
+            if (this.channels.has(channelName)) {
+                try {
+                    await client.removeChannel(this.channels.get(channelName));
+                    this.channels.delete(channelName);
+                    return true;
+                } catch (err) {
+                    console.warn(`Error unsubscribing from ${channelName}:`, err);
+                    return false;
+                }
+            }
+            return false;
+        },
+
+        async unsubscribeAll() {
+            const promises = Array.from(this.channels.keys()).map(channelName =>
+                this.unsubscribe(channelName)
+            );
+            return Promise.all(promises);
+        }
+    };
+
     // Show modal with animation
     function showModal(modalId) {
         try {
@@ -226,19 +288,48 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function requestNotificationPermission() {
         if (!("Notification" in window)) {
             console.warn("Browser does not support notifications.");
-            return;
+            return false;
         }
+
+        if (Notification.permission === "granted") {
+            console.log("Notifications already enabled ✅");
+            return true;
+        }
+
         try {
             const permission = await Notification.requestPermission();
-            if (permission !== "granted") {
-                console.log("Notifications blocked by user.");
-            } else {
+            if (permission === "granted") {
                 console.log("Notifications enabled ✅");
+                return true;
+            } else {
+                console.log("Notifications blocked by user.");
+                return false;
             }
         } catch (err) {
             console.warn("Notification permission error", err);
+            return false;
         }
     }
+
+    // Function to show notification with fallback to in-app notification
+    async function showNotification(title, options = {}) {
+        const hasPermission = await requestNotificationPermission();
+
+        if (hasPermission) {
+            try {
+                const notif = new Notification(title, options);
+                return notif;
+            } catch (err) {
+                console.warn("Error showing notification:", err);
+            }
+        }
+
+        // Fallback to in-app notification
+        showTopRightPopup(title, "info", options.icon);
+        return null;
+    }
+
+    // Initialize notifications
     await requestNotificationPermission();
 
     // Fetch current user avatar
@@ -1227,7 +1318,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             const channelTopic = `chat:${[currentUserId, friendId].sort().join(":")}`;
-            const msgChannel = client.channel(channelTopic);
+
+            const msgChannel = await subscriptionManager.subscribe(
+                channelTopic,
+                { event: "INSERT", schema: "public", table: "messages" },
+                (isSubscribed) => {
+                    console.log(`Message subscription for ${friendId}: ${isSubscribed ? 'Active' : 'Failed'}`);
+                }
+            );
 
             msgChannel.on(
                 "postgres_changes",
@@ -1341,46 +1439,52 @@ document.addEventListener("DOMContentLoaded", async () => {
             );
 
             const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
-            const typingChannel = client.channel(typingChannelName)
-                .on("broadcast", { event: "typing" }, payload => {
-                    if (payload.userId === friendId) {
-                        typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
-                        setTimeout(async () => {
-                            try {
-                                const { data: profile } = await client
-                                    .from("user_profiles")
-                                    .select("is_online")
-                                    .eq("user_id", friendId)
-                                    .maybeSingle();
-                                typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
-                            } catch (err) {
-                                typingIndicator.textContent = "Offline";
-                            }
-                        }, 1500);
-                    }
-                });
+            const typingChannel = await subscriptionManager.subscribe(
+                typingChannelName,
+                {},
+                (isSubscribed) => {
+                    console.log(`Typing subscription for ${friendId}: ${isSubscribed ? 'Active' : 'Failed'}`);
+                }
+            );
 
-            if (statusChannelRef) {
-                try { await client.removeChannel(statusChannelRef); } catch (err) { /* ignore */ }
-                statusChannelRef = null;
-            }
+            typingChannel.on("broadcast", { event: "typing" }, payload => {
+                if (payload.userId === friendId) {
+                    typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
+                    setTimeout(async () => {
+                        try {
+                            const { data: profile } = await client
+                                .from("user_profiles")
+                                .select("is_online")
+                                .eq("user_id", friendId)
+                                .maybeSingle();
+                            typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
+                        } catch (err) {
+                            typingIndicator.textContent = "Offline";
+                        }
+                    }, 1500);
+                }
+            });
 
-            statusChannelRef = client.channel("user_status")
-                .on("postgres_changes", {
+            const statusChannelName = `user-status-${friendId}`;
+            const statusChannel = await subscriptionManager.subscribe(
+                statusChannelName,
+                {
                     event: "*",
                     schema: "public",
                     table: "user_profiles",
                     filter: `user_id=eq.${friendId}`
-                }, payload => {
-                    const onlineTextElt = typingIndicator;
-                    if (onlineTextElt) onlineTextElt.textContent = payload.new?.is_online ? "Online" : "Offline";
-                });
+                },
+                (isSubscribed) => {
+                    console.log(`Status subscription for ${friendId}: ${isSubscribed ? 'Active' : 'Failed'}`);
+                }
+            );
 
-            await msgChannel.subscribe();
-            await typingChannel.subscribe();
-            await statusChannelRef.subscribe();
+            statusChannel.on("postgres_changes", payload => {
+                const onlineTextElt = typingIndicator;
+                if (onlineTextElt) onlineTextElt.textContent = payload.new?.is_online ? "Online" : "Offline";
+            });
 
-            return { msgChannel, typingChannel, statusChannelRef };
+            return { msgChannel, typingChannel, statusChannel };
         } catch (error) {
             console.error("Error subscribing to messages:", error);
             return null;
@@ -1602,315 +1706,297 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Subscribe to global messages
     async function subscribeToGlobalMessages() {
         try {
-            if (!window._globalMessageChannel) {
-                window._globalMessageChannel = client.channel("global-messages");
+            const channelName = "global-messages";
 
-                window._globalMessageChannel.on(
-                    "postgres_changes",
-                    { event: "INSERT", schema: "public", table: "messages" },
-                    async payload => {
-                        const newMsg = payload.new;
-                        if (!newMsg || !currentUserId) return;
-
-                        if (newMsg.receiver_id === currentUserId) {
-                            const senderId = newMsg.sender_id;
-
-                            if (currentOpenChatId !== senderId) {
-                                updateUnseenCountForFriend(senderId);
-                                updateLastMessage(senderId, newMsg.content, newMsg.created_at);
-
-                                try {
-                                    const { data: senderProfile, error } = await client
-                                        .from("user_profiles")
-                                        .select("user_name, profile_image_url")
-                                        .eq("user_id", senderId)
-                                        .maybeSingle();
-
-                                    const senderName = senderProfile?.user_name || "New Message";
-                                    const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
-
-                                    showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
-
-                                    if (Notification.permission === "granted") {
-                                        const notif = new Notification(senderName, {
-                                            body: newMsg.content,
-                                            icon: senderAvatar,
-                                            data: { type: 'message', senderId, senderName }
-                                        });
-
-                                        notif.addEventListener('click', () => {
-                                            window.focus();
-                                            openSpecificChat(senderId);
-                                            notif.close();
-                                        });
-                                    }
-                                } catch (err) {
-                                    console.warn("Error sending message notification:", err);
-                                }
-                            }
-                        }
-                    }
-                );
-
-                window._globalMessageChannel.on(
-                    "postgres_changes",
-                    { event: "UPDATE", schema: "public", table: "messages" },
-                    payload => {
-                        const updatedMsg = payload.new;
-                        if (!updatedMsg || !currentUserId) return;
-
-                        if (updatedMsg.deleted_at) {
-                            updateLastMessageInChatList(updatedMsg.sender_id);
-                            updateLastMessageInChatList(updatedMsg.receiver_id);
-
-                            if (currentOpenChatId !== updatedMsg.sender_id) {
-                                updateUnseenCountForFriend(updatedMsg.sender_id);
-                            }
-                            return;
-                        }
-
-                        if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
-                            const senderId = updatedMsg.sender_id;
-
-                            if (currentOpenChatId !== senderId) {
-                                updateUnseenCountForFriend(senderId);
-                            }
-                        }
-                    }
-                );
-
-                try {
-                    await window._globalMessageChannel.subscribe();
-                    console.log("Subscribed to global-messages channel.");
-                } catch (err) {
-                    console.warn("subscribeToGlobalMessages subscribe failed:", err);
+            const channel = await subscriptionManager.subscribe(
+                channelName,
+                { event: "INSERT", schema: "public", table: "messages" },
+                (isSubscribed) => {
+                    console.log(`Global messages subscription: ${isSubscribed ? 'Active' : 'Failed'}`);
                 }
-            }
+            );
+
+            channel.on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "messages" },
+                async payload => {
+                    const newMsg = payload.new;
+                    if (!newMsg || !currentUserId) return;
+
+                    if (newMsg.receiver_id === currentUserId) {
+                        const senderId = newMsg.sender_id;
+
+                        if (currentOpenChatId !== senderId) {
+                            updateUnseenCountForFriend(senderId);
+                            updateLastMessage(senderId, newMsg.content, newMsg.created_at);
+
+                            try {
+                                const { data: senderProfile, error } = await client
+                                    .from("user_profiles")
+                                    .select("user_name, profile_image_url")
+                                    .eq("user_id", senderId)
+                                    .maybeSingle();
+
+                                const senderName = senderProfile?.user_name || "New Message";
+                                const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
+
+                                showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
+
+                                if (Notification.permission === "granted") {
+                                    const notif = new Notification(senderName, {
+                                        body: newMsg.content,
+                                        icon: senderAvatar,
+                                        data: { type: 'message', senderId, senderName }
+                                    });
+
+                                    notif.addEventListener('click', () => {
+                                        window.focus();
+                                        openSpecificChat(senderId);
+                                        notif.close();
+                                    });
+                                }
+                            } catch (err) {
+                                console.warn("Error sending message notification:", err);
+                            }
+                        }
+                    }
+                }
+            );
+
+            channel.on(
+                "postgres_changes",
+                { event: "UPDATE", schema: "public", table: "messages" },
+                payload => {
+                    const updatedMsg = payload.new;
+                    if (!updatedMsg || !currentUserId) return;
+
+                    if (updatedMsg.deleted_at) {
+                        updateLastMessageInChatList(updatedMsg.sender_id);
+                        updateLastMessageInChatList(updatedMsg.receiver_id);
+
+                        if (currentOpenChatId !== updatedMsg.sender_id) {
+                            updateUnseenCountForFriend(updatedMsg.sender_id);
+                        }
+                        return;
+                    }
+
+                    if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
+                        const senderId = updatedMsg.sender_id;
+
+                        if (currentOpenChatId !== senderId) {
+                            updateUnseenCountForFriend(senderId);
+                        }
+                    }
+                }
+            );
+
+            return channel;
         } catch (error) {
             console.error("Error subscribing to global messages:", error);
+            return null;
         }
     }
 
     // Subscribe to friend requests
     async function subscribeToFriendRequests() {
         try {
-            if (!window._friendRequestChannel) {
-                const channelName = `friend-requests-${currentUserId}`;
-                window._friendRequestChannel = client.channel(channelName);
+            const channelName = `friend-requests-${currentUserId}`;
 
-                console.log("Setting up friend request subscription for user:", currentUserId);
-
-                window._friendRequestChannel.on(
-                    "postgres_changes",
-                    {
-                        event: "*",
-                        schema: "public",
-                        table: "requests",
-                        filter: `receiver_id=eq.${currentUserId}`
-                    },
-                    async payload => {
-                        console.log("Friend request event received:", payload);
-                        const { eventType, new: newRecord, old: oldRecord } = payload;
-
-                        if (eventType === 'INSERT' && newRecord.status === "pending") {
-                            console.log("New friend request received:", newRecord);
-
-                            // Get sender details for notification
-                            try {
-                                const { data: senderProfile } = await client
-                                    .from("user_profiles")
-                                    .select("user_name, profile_image_url")
-                                    .eq("user_id", newRecord.sender_id)
-                                    .maybeSingle();
-
-                                const senderName = senderProfile?.user_name || "Someone";
-                                const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
-
-                                showTopRightPopup(`${senderName} sent you a friend request`, "info", senderAvatar);
-
-                                if (Notification.permission === "granted") {
-                                    const notif = new Notification("Friend Request 👥", {
-                                        body: `${senderName} sent you a request`,
-                                        icon: senderAvatar,
-                                        data: { type: 'friend_request', senderId: newRecord.sender_id }
-                                    });
-
-                                    notif.addEventListener('click', () => {
-                                        window.focus();
-                                        openSpecificChat(newRecord.sender_id);
-                                        notif.close();
-                                    });
-                                }
-                            } catch (err) {
-                                console.error("Error fetching sender profile for notification:", err);
-                            }
-
-                            // Refresh friend requests list
-                            fetchFriendRequests();
-                        } else if (eventType === 'UPDATE') {
-                            console.log("Friend request updated:", newRecord);
-
-                            if (newRecord.status === "accepted") {
-                                // If this user accepted a request
-                                if (newRecord.sender_id === currentUserId) {
-                                    showTopRightPopup("Your friend request was accepted!", "success");
-                                } else {
-                                    // If this user received an accepted request
-                                    showTopRightPopup("You accepted a friend request!", "success");
-                                }
-                                // Refresh friends list
-                                fetchFriends();
-                            } else if (newRecord.status === "rejected") {
-                                if (newRecord.sender_id === currentUserId) {
-                                    showTopRightPopup("Your friend request was rejected", "warning");
-                                } else {
-                                    showTopRightPopup("You rejected a friend request", "info");
-                                }
-                            }
-
-                            // Refresh friend requests list
-                            fetchFriendRequests();
-                        } else if (eventType === 'DELETE') {
-                            console.log("Friend request deleted:", oldRecord);
-                            // Refresh friend requests list
-                            fetchFriendRequests();
-                        }
+            const channel = await subscriptionManager.subscribe(
+                channelName,
+                {
+                    event: "*",
+                    schema: "public",
+                    table: "requests",
+                    filter: `receiver_id=eq.${currentUserId}`
+                },
+                (isSubscribed) => {
+                    if (isSubscribed) {
+                        // Initial fetch after subscription
+                        fetchFriendRequests();
                     }
-                );
-
-                try {
-                    await window._friendRequestChannel.subscribe((status) => {
-                        console.log("Friend request subscription status:", status);
-                        if (status === 'SUBSCRIBED') {
-                            console.log("Successfully subscribed to friend requests");
-                            // Initial fetch after subscription
-                            fetchFriendRequests();
-                        } else if (status === 'CHANNEL_ERROR') {
-                            console.error("Error subscribing to friend requests");
-                            setTimeout(() => {
-                                console.log("Attempting to resubscribe to friend requests...");
-                                // Clear the existing channel reference
-                                window._friendRequestChannel = null;
-                                subscribeToFriendRequests();
-                            }, 5000);
-                        }
-                    });
-                } catch (err) {
-                    console.error("Error setting up friend request subscription:", err);
-                    // Clear the existing channel reference
-                    window._friendRequestChannel = null;
                 }
-            }
+            );
+
+            channel.on(
+                "postgres_changes",
+                {
+                    event: "*",
+                    schema: "public",
+                    table: "requests",
+                    filter: `receiver_id=eq.${currentUserId}`
+                },
+                async payload => {
+                    console.log("Friend request event received:", payload);
+                    const { eventType, new: newRecord, old: oldRecord } = payload;
+
+                    if (eventType === 'INSERT' && newRecord.status === "pending") {
+                        console.log("New friend request received:", newRecord);
+
+                        // Get sender details for notification
+                        try {
+                            const { data: senderProfile } = await client
+                                .from("user_profiles")
+                                .select("user_name, profile_image_url")
+                                .eq("user_id", newRecord.sender_id)
+                                .maybeSingle();
+
+                            const senderName = senderProfile?.user_name || "Someone";
+                            const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
+
+                            showTopRightPopup(`${senderName} sent you a friend request`, "info", senderAvatar);
+
+                            if (Notification.permission === "granted") {
+                                const notif = new Notification("Friend Request 👥", {
+                                    body: `${senderName} sent you a request`,
+                                    icon: senderAvatar,
+                                    data: { type: 'friend_request', senderId: newRecord.sender_id }
+                                });
+
+                                notif.addEventListener('click', () => {
+                                    window.focus();
+                                    openSpecificChat(newRecord.sender_id);
+                                    notif.close();
+                                });
+                            }
+                        } catch (err) {
+                            console.error("Error fetching sender profile for notification:", err);
+                        }
+
+                        // Refresh friend requests list
+                        fetchFriendRequests();
+                    } else if (eventType === 'UPDATE') {
+                        console.log("Friend request updated:", newRecord);
+
+                        if (newRecord.status === "accepted") {
+                            // If this user accepted a request
+                            if (newRecord.sender_id === currentUserId) {
+                                showTopRightPopup("Your friend request was accepted!", "success");
+                            } else {
+                                // If this user received an accepted request
+                                showTopRightPopup("You accepted a friend request!", "success");
+                            }
+                            // Refresh friends list
+                            fetchFriends();
+                        } else if (newRecord.status === "rejected") {
+                            if (newRecord.sender_id === currentUserId) {
+                                showTopRightPopup("Your friend request was rejected", "warning");
+                            } else {
+                                showTopRightPopup("You rejected a friend request", "info");
+                            }
+                        }
+
+                        // Refresh friend requests list
+                        fetchFriendRequests();
+                    } else if (eventType === 'DELETE') {
+                        console.log("Friend request deleted:", oldRecord);
+                        // Refresh friend requests list
+                        fetchFriendRequests();
+                    }
+                }
+            );
+
+            return channel;
         } catch (error) {
             console.error("Error subscribing to friend requests:", error);
+            return null;
         }
     }
 
     // Subscribe to friends updates
     async function subscribeToFriendsUpdates() {
         try {
-            if (!window._friendsUpdatesChannel) {
-                window._friendsUpdatesChannel = client.channel("friends-updates");
+            const channelName = "friends-updates";
 
-                window._friendsUpdatesChannel.on(
-                    "postgres_changes",
-                    { event: "*", schema: "public", table: "friends" },
-                    payload => {
-                        console.log("Friends update event received:", payload);
-
-                        const { eventType, new: newRecord, old: oldRecord } = payload;
-
-                        // Check if this update is relevant to current user
-                        const isRelevant = newRecord && (
-                            newRecord.user1_id === currentUserId ||
-                            newRecord.user2_id === currentUserId
-                        ) || oldRecord && (
-                            oldRecord.user1_id === currentUserId ||
-                            oldRecord.user2_id === currentUserId
-                        );
-
-                        if (!isRelevant) return;
-
-                        if (eventType === 'INSERT') {
-                            // New friend added
-                            console.log("New friend added:", newRecord);
-                            fetchFriends();
-                        } else if (eventType === 'DELETE') {
-                            // Friend removed
-                            console.log("Friend removed:", oldRecord);
-                            fetchFriends();
-                        }
-                    }
-                );
-
-                try {
-                    await window._friendsUpdatesChannel.subscribe();
-                    console.log("Subscribed to friends updates channel.");
-                } catch (err) {
-                    console.warn("subscribeToFriendsUpdates subscribe failed:", err);
+            const channel = await subscriptionManager.subscribe(
+                channelName,
+                { event: "*", schema: "public", table: "friends" },
+                (isSubscribed) => {
+                    console.log(`Friends updates subscription: ${isSubscribed ? 'Active' : 'Failed'}`);
                 }
-            }
+            );
+
+            channel.on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "friends" },
+                payload => {
+                    console.log("Friends update event received:", payload);
+
+                    const { eventType, new: newRecord, old: oldRecord } = payload;
+
+                    // Check if this update is relevant to current user
+                    const isRelevant = newRecord && (
+                        newRecord.user1_id === currentUserId ||
+                        newRecord.user2_id === currentUserId
+                    ) || oldRecord && (
+                        oldRecord.user1_id === currentUserId ||
+                        oldRecord.user2_id === currentUserId
+                    );
+
+                    if (!isRelevant) return;
+
+                    if (eventType === 'INSERT') {
+                        // New friend added
+                        console.log("New friend added:", newRecord);
+                        fetchFriends();
+                    } else if (eventType === 'DELETE') {
+                        // Friend removed
+                        console.log("Friend removed:", oldRecord);
+                        fetchFriends();
+                    }
+                }
+            );
+
+            return channel;
         } catch (error) {
             console.error("Error subscribing to friends updates:", error);
+            return null;
         }
     }
 
     // Subscribe to user profiles updates
     async function subscribeToUserProfilesUpdates() {
         try {
-            if (!window._userProfilesUpdatesChannel) {
-                window._userProfilesUpdatesChannel = client.channel("user-profiles-updates");
+            const channelName = "user-profiles-updates";
 
-                window._userProfilesUpdatesChannel.on(
-                    "postgres_changes",
-                    { event: "UPDATE", schema: "public", table: "user_profiles" },
-                    payload => {
-                        console.log("User profile update event received:", payload);
-
-                        const { new: newRecord } = payload;
-
-                        // Update friend data in our cache if it's a friend
-                        if (allFriends.has(newRecord.user_id)) {
-                            allFriends.set(newRecord.user_id, {
-                                ...allFriends.get(newRecord.user_id),
-                                ...newRecord
-                            });
-
-                            // Update UI for this friend
-                            updateFriendUI(newRecord.user_id);
-                        }
-
-                        // If current user's profile was updated, refresh avatar
-                        if (newRecord.user_id === currentUserId) {
-                            fetchCurrentUserAvatar();
-                        }
-                    }
-                );
-
-                try {
-                    await window._userProfilesUpdatesChannel.subscribe((status) => {
-                        console.log("User profiles updates subscription status:", status);
-                        if (status === 'SUBSCRIBED') {
-                            console.log("Successfully subscribed to user profiles updates");
-                        } else if (status === 'CHANNEL_ERROR') {
-                            console.error("Error subscribing to user profiles updates");
-                            setTimeout(() => {
-                                console.log("Attempting to resubscribe to user profiles updates...");
-                                // Clear the existing channel reference
-                                window._userProfilesUpdatesChannel = null;
-                                subscribeToUserProfilesUpdates();
-                            }, 5000);
-                        }
-                    });
-                    console.log("Subscribed to user profiles updates channel.");
-                } catch (err) {
-                    console.warn("subscribeToUserProfilesUpdates subscribe failed:", err);
-                    // Clear the existing channel reference
-                    window._userProfilesUpdatesChannel = null;
+            const channel = await subscriptionManager.subscribe(
+                channelName,
+                { event: "UPDATE", schema: "public", table: "user_profiles" },
+                (isSubscribed) => {
+                    console.log(`User profiles updates subscription: ${isSubscribed ? 'Active' : 'Failed'}`);
                 }
-            }
+            );
+
+            channel.on(
+                "postgres_changes",
+                { event: "UPDATE", schema: "public", table: "user_profiles" },
+                payload => {
+                    console.log("User profile update event received:", payload);
+
+                    const { new: newRecord } = payload;
+
+                    // Update friend data in our cache if it's a friend
+                    if (allFriends.has(newRecord.user_id)) {
+                        allFriends.set(newRecord.user_id, {
+                            ...allFriends.get(newRecord.user_id),
+                            ...newRecord
+                        });
+
+                        // Update UI for this friend
+                        updateFriendUI(newRecord.user_id);
+                    }
+
+                    // If current user's profile was updated, refresh avatar
+                    if (newRecord.user_id === currentUserId) {
+                        fetchCurrentUserAvatar();
+                    }
+                }
+            );
+
+            return channel;
         } catch (error) {
             console.error("Error subscribing to user profiles updates:", error);
+            return null;
         }
     }
 
@@ -2882,45 +2968,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // Test function to check if Realtime is working
-    async function testRealtimeConnection() {
-        try {
-            console.log("Testing Realtime connection...");
-
-            // Create a test channel
-            const testChannel = client.channel('test-connection');
-
-            // Subscribe to the channel
-            testChannel.subscribe((status) => {
-                console.log(`Test channel status: ${status}`);
-
-                if (status === 'SUBSCRIBED') {
-                    console.log("Realtime connection is working!");
-                    testChannel.send({
-                        type: 'broadcast',
-                        event: 'test',
-                        payload: { message: 'Test message' }
-                    });
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error("Realtime connection failed!");
-                }
-            });
-
-            // Listen for broadcasts
-            testChannel.on('broadcast', { event: 'test' }, (payload) => {
-                console.log("Received test broadcast:", payload);
-            });
-
-            // Clean up after 5 seconds
-            setTimeout(() => {
-                client.removeChannel(testChannel);
-                console.log("Test channel removed");
-            }, 5000);
-        } catch (error) {
-            console.error("Error testing Realtime connection:", error);
-        }
-    }
-
     // Initialize app
     try {
         const me = await getCurrentUser();
@@ -2929,16 +2976,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             await fetchFriends();
             await fetchFriendRequests();
 
-            // Test Realtime connection (uncomment for debugging)
-            // await testRealtimeConnection();
-
             // Set up real-time subscriptions with retry logic
             const setupSubscriptions = async () => {
                 try {
+                    // Clean up any existing subscriptions
+                    await subscriptionManager.unsubscribeAll();
+
+                    // Set up new subscriptions
                     await subscribeToGlobalMessages();
                     await subscribeToFriendRequests();
                     await subscribeToFriendsUpdates();
                     await subscribeToUserProfilesUpdates();
+
                     console.log("All subscriptions set up successfully");
                 } catch (error) {
                     console.error("Error setting up subscriptions:", error);
@@ -2954,6 +3003,20 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             openChatFromUrl();
+
+            // Set up a periodic check for subscription health
+            setInterval(async () => {
+                console.log("Checking subscription health...");
+                try {
+                    // Check if we have active subscriptions
+                    if (subscriptionManager.channels.size === 0) {
+                        console.warn("No active subscriptions found, reinitializing...");
+                        await setupSubscriptions();
+                    }
+                } catch (error) {
+                    console.error("Error checking subscription health:", error);
+                }
+            }, 300); // Check every 30 seconds
         }
     } catch (error) {
         console.error("Error initializing app:", error);
