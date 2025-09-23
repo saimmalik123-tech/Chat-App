@@ -2634,6 +2634,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 window._userProfilesUpdatesChannel = null;
                 subscribeToUserProfilesUpdates();
             }
-        }, 30000);
+        }, 300);
     }
 });
