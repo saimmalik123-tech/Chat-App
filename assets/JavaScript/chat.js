@@ -26,22 +26,31 @@ document.addEventListener("DOMContentLoaded", async () => {
             // Remove existing channel if it exists
             if (this.channels.has(channelName)) {
                 try {
-                    await client.removeChannel(this.channels.get(channelName));
+                    const existingChannel = this.channels.get(channelName);
+                    await client.removeChannel(existingChannel);
+                    this.channels.delete(channelName);
                 } catch (err) {
                     console.warn(`Error removing channel ${channelName}:`, err);
                 }
             }
 
             // Create new channel
-            const channel = client.channel(channelName);
+            let channel;
+            try {
+                channel = client.channel(channelName);
+            } catch (err) {
+                console.error(`Error creating channel ${channelName}:`, err);
+                if (callback) callback(false);
+                return null;
+            }
 
-            // Set up subscription
-            channel.subscribe((status) => {
+            // Set up subscription with better error handling
+            channel.subscribe((status, err) => {
                 if (status === 'SUBSCRIBED') {
                     console.log(`Successfully subscribed to ${channelName}`);
                     if (callback) callback(true);
                 } else if (status === 'CHANNEL_ERROR') {
-                    console.error(`Error subscribing to ${channelName}`);
+                    console.error(`Error subscribing to ${channelName}:`, err);
                     if (callback) callback(false);
 
                     // Attempt to reconnect after delay
@@ -49,6 +58,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                         console.log(`Attempting to resubscribe to ${channelName}...`);
                         this.subscribe(channelName, config, callback);
                     }, 5000);
+                } else if (status === 'TIMED_OUT') {
+                    console.warn(`Subscription to ${channelName} timed out, retrying...`);
+                    setTimeout(() => {
+                        this.subscribe(channelName, config, callback);
+                    }, 3000);
                 }
             });
 
@@ -61,7 +75,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         async unsubscribe(channelName) {
             if (this.channels.has(channelName)) {
                 try {
-                    await client.removeChannel(this.channels.get(channelName));
+                    const channel = this.channels.get(channelName);
+                    await client.removeChannel(channel);
                     this.channels.delete(channelName);
                     return true;
                 } catch (err) {
@@ -1319,13 +1334,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const channelTopic = `chat:${[currentUserId, friendId].sort().join(":")}`;
 
-            const msgChannel = await subscriptionManager.subscribe(
+            let msgChannel = await subscriptionManager.subscribe(
                 channelTopic,
                 { event: "INSERT", schema: "public", table: "messages" },
                 (isSubscribed) => {
                     console.log(`Message subscription for ${friendId}: ${isSubscribed ? 'Active' : 'Failed'}`);
                 }
             );
+
+            if (!msgChannel) {
+                console.error(`Failed to create message channel for ${friendId}`);
+                return null;
+            }
 
             msgChannel.on(
                 "postgres_changes",
@@ -1439,7 +1459,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             );
 
             const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
-            const typingChannel = await subscriptionManager.subscribe(
+            let typingChannel = await subscriptionManager.subscribe(
                 typingChannelName,
                 {},
                 (isSubscribed) => {
@@ -1447,26 +1467,31 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             );
 
-            typingChannel.on("broadcast", { event: "typing" }, payload => {
-                if (payload.userId === friendId) {
-                    typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
-                    setTimeout(async () => {
-                        try {
-                            const { data: profile } = await client
-                                .from("user_profiles")
-                                .select("is_online")
-                                .eq("user_id", friendId)
-                                .maybeSingle();
-                            typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
-                        } catch (err) {
-                            typingIndicator.textContent = "Offline";
-                        }
-                    }, 1500);
-                }
-            });
+            if (!typingChannel) {
+                console.error(`Failed to create typing channel for ${friendId}`);
+                // Continue without typing indicator
+            } else {
+                typingChannel.on("broadcast", { event: "typing" }, payload => {
+                    if (payload.userId === friendId) {
+                        typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
+                        setTimeout(async () => {
+                            try {
+                                const { data: profile } = await client
+                                    .from("user_profiles")
+                                    .select("is_online")
+                                    .eq("user_id", friendId)
+                                    .maybeSingle();
+                                typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
+                            } catch (err) {
+                                typingIndicator.textContent = "Offline";
+                            }
+                        }, 1500);
+                    }
+                });
+            }
 
             const statusChannelName = `user-status-${friendId}`;
-            const statusChannel = await subscriptionManager.subscribe(
+            let statusChannel = await subscriptionManager.subscribe(
                 statusChannelName,
                 {
                     event: "*",
@@ -1479,10 +1504,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             );
 
-            statusChannel.on("postgres_changes", payload => {
-                const onlineTextElt = typingIndicator;
-                if (onlineTextElt) onlineTextElt.textContent = payload.new?.is_online ? "Online" : "Offline";
-            });
+            if (!statusChannel) {
+                console.error(`Failed to create status channel for ${friendId}`);
+                // Continue without status updates
+            } else {
+                statusChannel.on("postgres_changes", payload => {
+                    const onlineTextElt = typingIndicator;
+                    if (onlineTextElt) onlineTextElt.textContent = payload.new?.is_online ? "Online" : "Offline";
+                });
+            }
 
             return { msgChannel, typingChannel, statusChannel };
         } catch (error) {
@@ -1603,14 +1633,16 @@ document.addEventListener("DOMContentLoaded", async () => {
             inputSafe.addEventListener("input", () => {
                 sendBtnSafe.disabled = !inputSafe.value.trim();
                 try {
-                    client.channel(typingChannelName).send({
-                        type: "broadcast",
-                        event: "typing",
-                        payload: {
-                            userId: currentUserId,
-                            userName: "You",
-                        },
-                    });
+                    if (typingChannel) {
+                        typingChannel.send({
+                            type: "broadcast",
+                            event: "typing",
+                            payload: {
+                                userId: currentUserId,
+                                userName: "You",
+                            },
+                        });
+                    }
                 } catch (err) {
                     console.error('Something went wrong', err);
                 }
@@ -1652,9 +1684,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                     }
 
                     try {
-                        if (msgChannel) await client.removeChannel(msgChannel);
-                        if (typingChannel) await client.removeChannel(typingChannel);
-                        if (statusChan) await client.removeChannel(statusChan);
+                        if (msgChannel) await subscriptionManager.unsubscribe(msgChannel.topic);
+                        if (typingChannel) await subscriptionManager.unsubscribe(typingChannel.topic);
+                        if (statusChan) await subscriptionManager.unsubscribe(statusChan.topic);
                     } catch (err) {
                         console.warn("Error removing channels:", err);
                     }
@@ -1715,6 +1747,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                     console.log(`Global messages subscription: ${isSubscribed ? 'Active' : 'Failed'}`);
                 }
             );
+
+            if (!channel) {
+                console.error(`Failed to create global messages channel`);
+                return null;
+            }
 
             channel.on(
                 "postgres_changes",
@@ -1818,6 +1855,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             );
 
+            if (!channel) {
+                console.error(`Failed to create friend requests channel`);
+                return null;
+            }
+
             channel.on(
                 "postgres_changes",
                 {
@@ -1916,6 +1958,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             );
 
+            if (!channel) {
+                console.error(`Failed to create friends updates channel`);
+                return null;
+            }
+
             channel.on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "friends" },
@@ -1966,6 +2013,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                     console.log(`User profiles updates subscription: ${isSubscribed ? 'Active' : 'Failed'}`);
                 }
             );
+
+            if (!channel) {
+                console.error(`Failed to create user profiles updates channel`);
+                return null;
+            }
 
             channel.on(
                 "postgres_changes",
@@ -3016,7 +3068,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 } catch (error) {
                     console.error("Error checking subscription health:", error);
                 }
-            }, 300); // Check every 30 seconds
+            }, 30000); // Check every 30 seconds
         }
     } catch (error) {
         console.error("Error initializing app:", error);
