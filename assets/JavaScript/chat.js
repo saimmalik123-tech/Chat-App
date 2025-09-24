@@ -898,7 +898,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const { data: profiles } = await client
                 .from("user_profiles")
-                .select("user_id, user_name, profile_image_url, is_online")
+                .select("user_id, user_name, profile_image_url, is_online, bio")
                 .in("user_id", friendIds);
 
             // Store all friends data for real-time updates
@@ -969,7 +969,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 li.addEventListener("click", () => {
                     openSpecificChat(friendId, {
                         user_name: friendName,
-                        profile_image_url: avatarUrl
+                        profile_image_url: avatarUrl,
+                        bio: allFriends.get(friendId)?.bio || ""
                     });
 
                     const chatArea = document.querySelector('.chat-area-main');
@@ -1363,13 +1364,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             // Set up postgres changes listener with proper error handling
             try {
+                // Listen for new messages where current user is sender or receiver
                 msgChannel.on(
                     "postgres_changes",
                     {
                         event: "INSERT",
                         schema: "public",
                         table: "messages",
-                        filter: `or(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`
+                        filter: `sender_id=eq.${currentUserId},receiver_id=eq.${friendId}`
                     },
                     async payload => {
                         const newMsg = payload.new;
@@ -1381,50 +1383,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         upsertMessageAndRender(oldMessages, newMsg);
                         updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
-                        if (newMsg.receiver_id === currentUserId) {
-                            if (currentOpenChatId === friendId) {
-                                try {
-                                    await client
-                                        .from("messages")
-                                        .update({ seen: true })
-                                        .eq("id", newMsg.id);
-
-                                    const idx = oldMessages.findIndex(m => m.id === newMsg.id);
-                                    if (idx !== -1) {
-                                        oldMessages[idx].seen = true;
-                                    }
-                                    renderChatMessages(chatBox, oldMessages, friendAvatar);
-
-                                    unseenCounts[newMsg.sender_id] = 0;
-                                    updateUnseenBadge(newMsg.sender_id, 0);
-                                    scheduleMessageDeletion(newMsg.id, friendId);
-                                } catch (err) {
-                                    console.error("Error marking message as seen:", err);
-                                }
-                            } else {
-                                await updateUnseenCountForFriend(friendId);
-
-                                try {
-                                    const { username, avatarUrl } = await getUsername(newMsg.sender_id);
-                                    showTopRightPopup(`New message from ${username}`, "info", avatarUrl);
-
-                                    if (Notification.permission === "granted") {
-                                        const notif = new Notification(`${username}`, {
-                                            body: newMsg.content,
-                                            icon: avatarUrl,
-                                            data: { type: 'message', senderId: newMsg.sender_id, senderName: username }
-                                        });
-
-                                        notif.addEventListener('click', () => {
-                                            window.focus();
-                                            openSpecificChat(newMsg.sender_id);
-                                            notif.close();
-                                        });
-                                    }
-                                } catch (err) { /* ignore */ }
-                            }
-                        }
-
                         setTimeout(() => {
                             processingMessageIds.delete(newMsg.id);
                         }, 1000);
@@ -1434,10 +1392,77 @@ document.addEventListener("DOMContentLoaded", async () => {
                 msgChannel.on(
                     "postgres_changes",
                     {
+                        event: "INSERT",
+                        schema: "public",
+                        table: "messages",
+                        filter: `sender_id=eq.${friendId},receiver_id=eq.${currentUserId}`
+                    },
+                    async payload => {
+                        const newMsg = payload.new;
+                        if (processingMessageIds.has(newMsg.id)) {
+                            return;
+                        }
+                        processingMessageIds.add(newMsg.id);
+
+                        upsertMessageAndRender(oldMessages, newMsg);
+                        updateLastMessage(friendId, newMsg.content, newMsg.created_at);
+
+                        if (currentOpenChatId === friendId) {
+                            try {
+                                await client
+                                    .from("messages")
+                                    .update({ seen: true })
+                                    .eq("id", newMsg.id);
+
+                                const idx = oldMessages.findIndex(m => m.id === newMsg.id);
+                                if (idx !== -1) {
+                                    oldMessages[idx].seen = true;
+                                }
+                                renderChatMessages(chatBox, oldMessages, friendAvatar);
+
+                                unseenCounts[newMsg.sender_id] = 0;
+                                updateUnseenBadge(newMsg.sender_id, 0);
+                                scheduleMessageDeletion(newMsg.id, friendId);
+                            } catch (err) {
+                                console.error("Error marking message as seen:", err);
+                            }
+                        } else {
+                            await updateUnseenCountForFriend(friendId);
+
+                            try {
+                                const { username, avatarUrl } = await getUsername(newMsg.sender_id);
+                                showTopRightPopup(`New message from ${username}`, "info", avatarUrl);
+
+                                if (Notification.permission === "granted") {
+                                    const notif = new Notification(`${username}`, {
+                                        body: newMsg.content,
+                                        icon: avatarUrl,
+                                        data: { type: 'message', senderId: newMsg.sender_id, senderName: username }
+                                    });
+
+                                    notif.addEventListener('click', () => {
+                                        window.focus();
+                                        openSpecificChat(newMsg.sender_id);
+                                        notif.close();
+                                    });
+                                }
+                            } catch (err) { /* ignore */ }
+                        }
+
+                        setTimeout(() => {
+                            processingMessageIds.delete(newMsg.id);
+                        }, 1000);
+                    }
+                );
+
+                // Listen for message updates
+                msgChannel.on(
+                    "postgres_changes",
+                    {
                         event: "UPDATE",
                         schema: "public",
                         table: "messages",
-                        filter: `or(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`
+                        filter: `sender_id=eq.${currentUserId},receiver_id=eq.${friendId}`
                     },
                     payload => {
                         const updated = payload.new;
@@ -1466,6 +1491,41 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         if (updated.sender_id === currentUserId && updated.seen === true) {
                             updateMessageSeenStatus(chatBox, updated.id);
+                        }
+                    }
+                );
+
+                msgChannel.on(
+                    "postgres_changes",
+                    {
+                        event: "UPDATE",
+                        schema: "public",
+                        table: "messages",
+                        filter: `sender_id=eq.${friendId},receiver_id=eq.${currentUserId}`
+                    },
+                    payload => {
+                        const updated = payload.new;
+
+                        if (updated.deleted_at) {
+                            if (updated.receiver_id === currentUserId) {
+                                const idx = oldMessages.findIndex(m => m.id === updated.id);
+                                if (idx !== -1) {
+                                    oldMessages.splice(idx, 1);
+                                    renderChatMessages(chatBox, oldMessages, friendAvatar);
+                                }
+                            }
+                            updateLastMessageInChatList(updated.sender_id);
+                            updateLastMessageInChatList(updated.receiver_id);
+
+                            if (currentOpenChatId !== updated.sender_id) {
+                                updateUnseenCountForFriend(updated.sender_id);
+                            }
+                            return;
+                        }
+
+                        const idx = oldMessages.findIndex(m => m.id === updated.id);
+                        if (idx !== -1) {
+                            oldMessages[idx] = { ...oldMessages[idx], ...updated };
                         }
 
                         if (updated.receiver_id === currentUserId && updated.seen === true) {
@@ -1529,6 +1589,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 payload => {
                     const onlineTextElt = typingIndicator;
                     if (onlineTextElt) onlineTextElt.textContent = payload.new?.is_online ? "Online" : "Offline";
+
+                    // Update the online status dot in the friends list
+                    updateFriendUI(friendId);
                 }
             );
 
@@ -1540,7 +1603,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Open chat
-    async function openChat(friendId, friendName, friendAvatar, fromNotification = false) {
+    async function openChat(friendId, friendName, friendAvatar, friendBio = "", fromNotification = false) {
         try {
             currentOpenChatId = friendId;
 
@@ -1568,7 +1631,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const newChatHeader = chatHeader.cloneNode(true);
                 chatHeader.parentNode.replaceChild(newChatHeader, chatHeader);
                 newChatHeader.addEventListener("click", () => {
-                    showUserModal(friendId, friendName, friendAvatar);
+                    showUserModal(friendId, friendName, friendAvatar, friendBio);
                 });
             }
 
@@ -1774,6 +1837,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             // Set up postgres changes listener with proper error handling
             try {
+                // Listen for new messages where current user is receiver
                 channel.on(
                     "postgres_changes",
                     {
@@ -1824,6 +1888,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     }
                 );
 
+                // Listen for message updates where current user is receiver
                 channel.on(
                     "postgres_changes",
                     {
@@ -1889,19 +1954,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             // Set up postgres changes listener with proper error handling
             try {
+                // Listen for new friend requests where current user is receiver
                 channel.on(
                     "postgres_changes",
                     {
-                        event: "*",
+                        event: "INSERT",
                         schema: "public",
                         table: "requests",
                         filter: `receiver_id=eq.${currentUserId}`
                     },
                     async payload => {
                         console.log("Friend request event received:", payload);
-                        const { eventType, new: newRecord, old: oldRecord } = payload;
+                        const newRecord = payload.new;
 
-                        if (eventType === 'INSERT' && newRecord.status === "pending") {
+                        if (newRecord.status === "pending") {
                             console.log("New friend request received:", newRecord);
 
                             // Get sender details for notification
@@ -1936,34 +2002,59 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                             // Refresh friend requests list
                             fetchFriendRequests();
-                        } else if (eventType === 'UPDATE') {
-                            console.log("Friend request updated:", newRecord);
-
-                            if (newRecord.status === "accepted") {
-                                // If this user accepted a request
-                                if (newRecord.sender_id === currentUserId) {
-                                    showTopRightPopup("Your friend request was accepted!", "success");
-                                } else {
-                                    // If this user received an accepted request
-                                    showTopRightPopup("You accepted a friend request!", "success");
-                                }
-                                // Refresh friends list
-                                fetchFriends();
-                            } else if (newRecord.status === "rejected") {
-                                if (newRecord.sender_id === currentUserId) {
-                                    showTopRightPopup("Your friend request was rejected", "warning");
-                                } else {
-                                    showTopRightPopup("You rejected a friend request", "info");
-                                }
-                            }
-
-                            // Refresh friend requests list
-                            fetchFriendRequests();
-                        } else if (eventType === 'DELETE') {
-                            console.log("Friend request deleted:", oldRecord);
-                            // Refresh friend requests list
-                            fetchFriendRequests();
                         }
+                    }
+                );
+
+                // Listen for friend request updates where current user is receiver
+                channel.on(
+                    "postgres_changes",
+                    {
+                        event: "UPDATE",
+                        schema: "public",
+                        table: "requests",
+                        filter: `receiver_id=eq.${currentUserId}`
+                    },
+                    async payload => {
+                        console.log("Friend request update event received:", payload);
+                        const newRecord = payload.new;
+
+                        if (newRecord.status === "accepted") {
+                            // If this user accepted a request
+                            if (newRecord.sender_id === currentUserId) {
+                                showTopRightPopup("Your friend request was accepted!", "success");
+                            } else {
+                                // If this user received an accepted request
+                                showTopRightPopup("You accepted a friend request!", "success");
+                            }
+                            // Refresh friends list
+                            fetchFriends();
+                        } else if (newRecord.status === "rejected") {
+                            if (newRecord.sender_id === currentUserId) {
+                                showTopRightPopup("Your friend request was rejected", "warning");
+                            } else {
+                                showTopRightPopup("You rejected a friend request", "info");
+                            }
+                        }
+
+                        // Refresh friend requests list
+                        fetchFriendRequests();
+                    }
+                );
+
+                // Listen for friend request deletions where current user is receiver
+                channel.on(
+                    "postgres_changes",
+                    {
+                        event: "DELETE",
+                        schema: "public",
+                        table: "requests",
+                        filter: `receiver_id=eq.${currentUserId}`
+                    },
+                    payload => {
+                        console.log("Friend request deletion event received:", payload);
+                        // Refresh friend requests list
+                        fetchFriendRequests();
                     }
                 );
             } catch (err) {
@@ -1998,34 +2089,51 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             // Set up postgres changes listener with proper error handling
             try {
+                // Listen for new friend relationships
                 channel.on(
                     "postgres_changes",
                     {
-                        event: "*",
+                        event: "INSERT",
                         schema: "public",
                         table: "friends"
                     },
                     payload => {
-                        console.log("Friends update event received:", payload);
-
-                        const { eventType, new: newRecord, old: oldRecord } = payload;
+                        console.log("Friends insert event received:", payload);
+                        const newRecord = payload.new;
 
                         // Check if this update is relevant to current user
                         const isRelevant = newRecord && (
                             newRecord.user1_id === currentUserId ||
                             newRecord.user2_id === currentUserId
-                        ) || oldRecord && (
+                        );
+
+                        if (isRelevant) {
+                            // New friend added
+                            console.log("New friend added:", newRecord);
+                            fetchFriends();
+                        }
+                    }
+                );
+
+                // Listen for friend relationship deletions
+                channel.on(
+                    "postgres_changes",
+                    {
+                        event: "DELETE",
+                        schema: "public",
+                        table: "friends"
+                    },
+                    payload => {
+                        console.log("Friends delete event received:", payload);
+                        const oldRecord = payload.old;
+
+                        // Check if this update is relevant to current user
+                        const isRelevant = oldRecord && (
                             oldRecord.user1_id === currentUserId ||
                             oldRecord.user2_id === currentUserId
                         );
 
-                        if (!isRelevant) return;
-
-                        if (eventType === 'INSERT') {
-                            // New friend added
-                            console.log("New friend added:", newRecord);
-                            fetchFriends();
-                        } else if (eventType === 'DELETE') {
+                        if (isRelevant) {
                             // Friend removed
                             console.log("Friend removed:", oldRecord);
                             fetchFriends();
@@ -2064,6 +2172,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             // Set up postgres changes listener with proper error handling
             try {
+                // Listen for user profile updates
                 channel.on(
                     "postgres_changes",
                     {
@@ -2073,8 +2182,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     },
                     payload => {
                         console.log("User profile update event received:", payload);
-
-                        const { new: newRecord } = payload;
+                        const newRecord = payload.new;
 
                         // Update friend data in our cache if it's a friend
                         if (allFriends.has(newRecord.user_id)) {
@@ -2174,7 +2282,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     .maybeSingle()
                     .then(({ data, error }) => {
                         if (!error && data) {
-                            openChat(notificationData.senderId, data.user_name, data.profile_image_url, true);
+                            openChat(notificationData.senderId, data.user_name, data.profile_image_url, "", true);
                         }
                     });
             }
@@ -2729,7 +2837,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // User modal function
-    function showUserModal(userId, userName, userAvatar) {
+    function showUserModal(userId, userName, userAvatar, userBio = "") {
         try {
             const modal = document.getElementById("user-modal");
             if (!modal) return;
@@ -2737,7 +2845,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             // Set initial values
             document.getElementById("user-modal-avatar").src = userAvatar || DEFAULT_PROFILE_IMG;
             document.getElementById("user-modal-username").textContent = userName || "Unknown User";
-            document.getElementById("user-modal-bio").textContent = "Loading bio...";
+            document.getElementById("user-modal-bio").textContent = userBio || "No bio available.";
             document.getElementById("user-modal-status").textContent = "Checking status...";
             document.getElementById("user-modal-status").className = "user-modal-status";
 
@@ -2832,7 +2940,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             const { data, error } = await client
                 .from("user_profiles")
-                .select("user_name, profile_image_url")
+                .select("user_name, profile_image_url, bio")
                 .eq("user_id", userId)
                 .maybeSingle();
 
@@ -2872,7 +2980,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             }
 
-            openChat(userId, userProfile.user_name, userProfile.profile_image_url);
+            openChat(userId, userProfile.user_name, userProfile.profile_image_url, userProfile.bio);
         } catch (error) {
             console.error("Error opening specific chat:", error);
         }
@@ -2897,7 +3005,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (friendId && currentUserId) {
                 client.from("user_profiles")
-                    .select("user_name, profile_image_url")
+                    .select("user_name, profile_image_url, bio")
                     .eq("user_id", friendId)
                     .maybeSingle()
                     .then(({ data, error }) => {
@@ -2918,7 +3026,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const { data: profile, error } = await client
                 .from("user_profiles")
-                .select("user_name, profile_image_url")
+                .select("user_name, profile_image_url, bio")
                 .eq("user_id", userId)
                 .maybeSingle();
 
@@ -3087,7 +3195,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     // Clean up any existing subscriptions
                     await subscriptionManager.unsubscribeAll();
 
-                    // Set up new subscriptions
                     await subscribeToGlobalMessages();
                     await subscribeToFriendRequests();
                     await subscribeToFriendsUpdates();
