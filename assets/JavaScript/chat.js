@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const AI_ASSISTANT_BIO = "I'm your AI assistant! Feel free to ask me anything.";
     const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.png"; // Make sure to add this image
     const OPENROUTER_API_KEY = "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";
+    const AI_ASSISTANT_ID = "ai-assistant-fixed-id"; // Fixed ID for AI assistant
 
     const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
     const ADMIN_USERNAME = "Saim_Malik88";
@@ -317,6 +318,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.log("Current user ID:", currentUserId);
             await setUserOnlineStatus(true);
 
+            // Add AI assistant as friend for new users
+            await addAIAssistantAsFriend();
+
             // Check if we need to show admin friend request popup
             await checkAndShowAdminRequestPopup();
 
@@ -330,6 +334,23 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Check if user is already a friend
     async function isAlreadyFriend(userId) {
+        // Special case for AI assistant
+        if (userId === AI_ASSISTANT_ID) {
+            // Check if we've already added the AI assistant as a friend
+            const { data, error } = await client
+                .from("friends")
+                .select("*")
+                .or(`and(user1_id.eq.${currentUserId},user2_id.eq.${userId}),and(user1_id.eq.${userId},user2_id.eq.${currentUserId})`)
+                .maybeSingle();
+
+            if (error) {
+                console.error("Error checking friendship status:", error);
+                return false;
+            }
+
+            return !!data;
+        }
+
         if (!currentUserId || !userId) return false;
 
         try {
@@ -822,10 +843,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                 f.user1_id === currentUserId ? f.user2_id : f.user1_id
             ))];
 
+            // Add AI assistant to friends list if not already there
+            if (!friendIds.includes(AI_ASSISTANT_ID)) {
+                friendIds.push(AI_ASSISTANT_ID);
+            }
+
+            // Fetch regular user profiles
             const { data: profiles } = await client
                 .from("user_profiles")
                 .select("user_id, user_name, profile_image_url, is_online")
-                .in("user_id", friendIds);
+                .in("user_id", friendIds.filter(id => id !== AI_ASSISTANT_ID));
 
             // Store all friends data for real-time updates
             allFriends.clear();
@@ -833,11 +860,28 @@ document.addEventListener("DOMContentLoaded", async () => {
                 allFriends.set(p.user_id, p);
             });
 
+            // Add AI assistant to friends map
+            allFriends.set(AI_ASSISTANT_ID, {
+                user_id: AI_ASSISTANT_ID,
+                user_name: AI_ASSISTANT_USERNAME,
+                profile_image_url: AI_ASSISTANT_AVATAR,
+                is_online: true
+            });
+
             const friendDataPromises = friendIds.map(async (friendId) => {
-                const profile = allFriends.get(friendId) || {};
-                const friendName = profile.user_name || "Unknown";
-                const avatarUrl = profile.profile_image_url || DEFAULT_PROFILE_IMG;
-                const isOnline = profile.is_online || false;
+                let profile = allFriends.get(friendId) || {};
+                let friendName, avatarUrl, isOnline;
+
+                if (friendId === AI_ASSISTANT_ID) {
+                    // Special handling for AI assistant
+                    friendName = AI_ASSISTANT_USERNAME;
+                    avatarUrl = AI_ASSISTANT_AVATAR;
+                    isOnline = true;
+                } else {
+                    friendName = profile.user_name || "Unknown";
+                    avatarUrl = profile.profile_image_url || DEFAULT_PROFILE_IMG;
+                    isOnline = profile.is_online || false;
+                }
 
                 const { data: lastMsgData } = await client
                     .from("messages")
@@ -966,6 +1010,36 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function sendMessage(friendId, content) {
         if (!content || !content.trim()) return;
         try {
+            // Check if this is a message to the AI assistant
+            if (friendId === AI_ASSISTANT_ID) {
+                // Show the message in the UI immediately
+                const chatBox = document.querySelector(".messages");
+                if (chatBox) {
+                    const msgDiv = document.createElement("div");
+                    msgDiv.className = "message sent";
+
+                    const timeStr = new Date().toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit"
+                    });
+
+                    msgDiv.innerHTML = `
+                        <div class="msg-bubble">
+                            <span class="msg-text">${linkify(content)}</span>
+                            <div class="msg-meta">
+                                <small class="msg-time">${timeStr}</small>
+                                <small class="seen-status">✓</small>
+                            </div>
+                        </div>
+                    `;
+
+                    chatBox.appendChild(msgDiv);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+                return;
+            }
+
+            // For regular users, store the message in the database
             const { error } = await client.from("messages").insert([{
                 sender_id: currentUserId,
                 receiver_id: friendId,
@@ -1032,6 +1106,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Fetch messages
     async function fetchMessages(friendId) {
         try {
+            // Special handling for AI assistant
+            if (friendId === AI_ASSISTANT_ID) {
+                // For AI assistant, we'll fetch messages from the database
+                const { data, error } = await client
+                    .from("messages")
+                    .select("*")
+                    .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                    .is('deleted_at', null)
+                    .order("created_at", { ascending: true });
+
+                if (error) {
+                    console.error("Error fetching messages:", error);
+                    return [];
+                }
+                return data || [];
+            }
+
+            // For regular users
             const { data, error } = await client
                 .from("messages")
                 .select("*")
@@ -1827,26 +1919,33 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.getElementById("user-modal-status").textContent = "Checking status...";
             document.getElementById("user-modal-status").className = "user-modal-status";
 
-            // Fetch and update profile data
-            getUserProfile(userId).then(profile => {
-                if (profile) {
-                    document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
-                    const statusElement = document.getElementById("user-modal-status");
-                    statusElement.textContent = profile.is_online ? "Online" : "Offline";
-                    statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
-                } else {
-                    document.getElementById("user-modal-bio").textContent = "No bio available.";
+            // Special case for AI assistant
+            if (userId === AI_ASSISTANT_ID) {
+                document.getElementById("user-modal-bio").textContent = AI_ASSISTANT_BIO;
+                document.getElementById("user-modal-status").textContent = "Online";
+                document.getElementById("user-modal-status").className = "user-modal-status online";
+            } else {
+                // Fetch and update profile data for regular users
+                getUserProfile(userId).then(profile => {
+                    if (profile) {
+                        document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
+                        const statusElement = document.getElementById("user-modal-status");
+                        statusElement.textContent = profile.is_online ? "Online" : "Offline";
+                        statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
+                    } else {
+                        document.getElementById("user-modal-bio").textContent = "No bio available.";
+                        const statusElement = document.getElementById("user-modal-status");
+                        statusElement.textContent = "Offline";
+                        statusElement.className = "user-modal-status offline";
+                    }
+                }).catch(err => {
+                    console.error("Error fetching user profile:", err);
+                    document.getElementById("user-modal-bio").textContent = "Error loading bio.";
                     const statusElement = document.getElementById("user-modal-status");
                     statusElement.textContent = "Offline";
                     statusElement.className = "user-modal-status offline";
-                }
-            }).catch(err => {
-                console.error("Error fetching user profile:", err);
-                document.getElementById("user-modal-bio").textContent = "Error loading bio.";
-                const statusElement = document.getElementById("user-modal-status");
-                statusElement.textContent = "Offline";
-                statusElement.className = "user-modal-status offline";
-            });
+                });
+            }
 
             // Show modal
             showModal("user-modal");
@@ -1867,6 +1966,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Get user profile data
     async function getUserProfile(userId) {
+        // Special case for AI assistant
+        if (userId === AI_ASSISTANT_ID) {
+            return {
+                user_name: AI_ASSISTANT_USERNAME,
+                profile_image_url: AI_ASSISTANT_AVATAR,
+                bio: AI_ASSISTANT_BIO,
+                is_online: true
+            };
+        }
+
         try {
             const { data, error } = await client
                 .from("user_profiles")
@@ -1915,6 +2024,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Get user profile for chat
     async function getUserProfileForChat(userId) {
+        // Special case for AI assistant
+        if (userId === AI_ASSISTANT_ID) {
+            return {
+                user_name: AI_ASSISTANT_USERNAME,
+                profile_image_url: AI_ASSISTANT_AVATAR
+            };
+        }
+
         try {
             const { data, error } = await client
                 .from("user_profiles")
@@ -1982,15 +2099,22 @@ document.addEventListener("DOMContentLoaded", async () => {
             const friendId = urlParams.get('chat');
 
             if (friendId && currentUserId) {
-                client.from("user_profiles")
-                    .select("user_name, profile_image_url")
-                    .eq("user_id", friendId)
-                    .maybeSingle()
-                    .then(({ data, error }) => {
-                        if (!error && data) {
-                            openSpecificChat(friendId, data);
-                        }
+                if (friendId === AI_ASSISTANT_ID) {
+                    openSpecificChat(friendId, {
+                        user_name: AI_ASSISTANT_USERNAME,
+                        profile_image_url: AI_ASSISTANT_AVATAR
                     });
+                } else {
+                    client.from("user_profiles")
+                        .select("user_name, profile_image_url")
+                        .eq("user_id", friendId)
+                        .maybeSingle()
+                        .then(({ data, error }) => {
+                            if (!error && data) {
+                                openSpecificChat(friendId, data);
+                            }
+                        });
+                }
             }
         } catch (error) {
             console.error("Error opening chat from URL:", error);
@@ -2001,6 +2125,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.openChatWithUser = async function (userId) {
         try {
             if (!currentUserId) return;
+
+            if (userId === AI_ASSISTANT_ID) {
+                openSpecificChat(userId, {
+                    user_name: AI_ASSISTANT_USERNAME,
+                    profile_image_url: AI_ASSISTANT_AVATAR
+                });
+                return;
+            }
 
             const { data: profile, error } = await client
                 .from("user_profiles")
@@ -2041,14 +2173,34 @@ document.addEventListener("DOMContentLoaded", async () => {
                 f.user1_id === currentUserId ? f.user2_id : f.user1_id
             ))];
 
+            // Add AI assistant to friends list if not already there
+            if (!friendIds.includes(AI_ASSISTANT_ID)) {
+                friendIds.push(AI_ASSISTANT_ID);
+            }
+
+            // Fetch regular user profiles
             const { data: profiles, error: profilesError } = await client
                 .from("user_profiles")
                 .select("user_id, user_name, profile_image_url, is_online")
-                .in("user_id", friendIds);
+                .in("user_id", friendIds.filter(id => id !== AI_ASSISTANT_ID));
 
             if (profilesError) throw profilesError;
 
             const recentChatsPromises = friendIds.map(async (friendId) => {
+                let profile, user_name, avatar_url, is_online;
+
+                if (friendId === AI_ASSISTANT_ID) {
+                    // Special handling for AI assistant
+                    user_name = AI_ASSISTANT_USERNAME;
+                    avatar_url = AI_ASSISTANT_AVATAR;
+                    is_online = true;
+                } else {
+                    profile = profiles?.find(p => p.user_id === friendId);
+                    user_name = profile?.user_name || "Unknown";
+                    avatar_url = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
+                    is_online = profile?.is_online || false;
+                }
+
                 const { data: lastMessage } = await client
                     .from("messages")
                     .select("content, created_at")
@@ -2058,13 +2210,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                     .limit(1)
                     .maybeSingle();
 
-                const profile = profiles?.find(p => p.user_id === friendId);
-
                 return {
                     user_id: friendId,
-                    user_name: profile?.user_name || "Unknown",
-                    avatar_url: profile?.profile_image_url || DEFAULT_PROFILE_IMG,
-                    is_online: profile?.is_online || false,
+                    user_name,
+                    avatar_url,
+                    is_online,
                     last_message: lastMessage?.content || "No messages yet",
                     last_message_time: lastMessage?.created_at || null
                 };
@@ -2190,14 +2340,21 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 updateLastMessage(senderId, newMsg.content, newMsg.created_at);
 
                                 try {
-                                    const { data: senderProfile } = await client
-                                        .from("user_profiles")
-                                        .select("user_name, profile_image_url")
-                                        .eq("user_id", senderId)
-                                        .maybeSingle();
+                                    let senderName, senderAvatar;
 
-                                    const senderName = senderProfile?.user_name || "New Message";
-                                    const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
+                                    if (senderId === AI_ASSISTANT_ID) {
+                                        senderName = AI_ASSISTANT_USERNAME;
+                                        senderAvatar = AI_ASSISTANT_AVATAR;
+                                    } else {
+                                        const { data: senderProfile } = await client
+                                            .from("user_profiles")
+                                            .select("user_name, profile_image_url")
+                                            .eq("user_id", senderId)
+                                            .maybeSingle();
+
+                                        senderName = senderProfile?.user_name || "New Message";
+                                        senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
+                                    }
 
                                     showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
 
@@ -2529,6 +2686,19 @@ document.addEventListener("DOMContentLoaded", async () => {
             inputSafe.value = "";
             sendBtnSafe.disabled = true;
 
+            // Set typing indicator based on friend type
+            if (friendId === AI_ASSISTANT_ID) {
+                typingIndicator.textContent = "Online";
+            } else {
+                const { data: profile } = await client
+                    .from("user_profiles")
+                    .select("is_online")
+                    .eq("user_id", friendId)
+                    .maybeSingle();
+
+                typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
+            }
+
             const oldMessages = await fetchMessages(friendId);
             renderChatMessages(chatBox, oldMessages, friendAvatar);
 
@@ -2687,12 +2857,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
                                 setTimeout(async () => {
                                     try {
-                                        const { data: profile } = await client
-                                            .from("user_profiles")
-                                            .select("is_online")
-                                            .eq("user_id", friendId)
-                                            .maybeSingle();
-                                        typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
+                                        if (friendId === AI_ASSISTANT_ID) {
+                                            typingIndicator.textContent = "Online";
+                                        } else {
+                                            const { data: profile } = await client
+                                                .from("user_profiles")
+                                                .select("is_online")
+                                                .eq("user_id", friendId)
+                                                .maybeSingle();
+                                            typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
+                                        }
                                     } catch (err) {
                                         typingIndicator.textContent = "Offline";
                                     }
@@ -2763,9 +2937,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             async function handleSend() {
                 const content = inputSafe.value.trim();
                 if (!content) return;
+
+                // Send the user's message
                 await sendMessage(friendId, content);
                 inputSafe.value = "";
                 sendBtnSafe.disabled = true;
+
+                // Check if this is a message to the AI assistant
+                if (friendId === AI_ASSISTANT_ID) {
+                    // Handle AI response
+                    handleAIResponse(content, friendId);
+                }
             }
 
             sendBtnSafe.addEventListener("click", handleSend);
@@ -2816,7 +2998,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Update friend UI in real-time
     function updateFriendUI(friendId) {
         try {
-            const friendData = allFriends.get(friendId);
+            let friendData;
+
+            if (friendId === AI_ASSISTANT_ID) {
+                friendData = {
+                    user_name: AI_ASSISTANT_USERNAME,
+                    profile_image_url: AI_ASSISTANT_AVATAR,
+                    is_online: true
+                };
+            } else {
+                friendData = allFriends.get(friendId);
+            }
+
             if (!friendData) return;
 
             const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
@@ -2876,16 +3069,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     function handleNotificationRedirect() {
         try {
             if (!currentOpenChatId && notificationData.type === 'message' && notificationData.senderId) {
-                client
-                    .from("user_profiles")
-                    .select("user_name, profile_image_url")
-                    .eq("user_id", notificationData.senderId)
-                    .maybeSingle()
-                    .then(({ data, error }) => {
-                        if (!error && data) {
-                            openChat(notificationData.senderId, data.user_name, data.profile_image_url, true);
-                        }
-                    });
+                if (notificationData.senderId === AI_ASSISTANT_ID) {
+                    openChat(notificationData.senderId, AI_ASSISTANT_USERNAME, AI_ASSISTANT_AVATAR, true);
+                } else {
+                    client
+                        .from("user_profiles")
+                        .select("user_name, profile_image_url")
+                        .eq("user_id", notificationData.senderId)
+                        .maybeSingle()
+                        .then(({ data, error }) => {
+                            if (!error && data) {
+                                openChat(notificationData.senderId, data.user_name, data.profile_image_url, true);
+                            }
+                        });
+                }
             }
 
             notificationData = {};
@@ -2894,46 +3091,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-
-    // Add this function to create the AI assistant user if it doesn't exist
+    // Add this function to ensure AI assistant exists
     async function ensureAIAssistantExists() {
         try {
-            // Check if AI assistant already exists
-            const { data: existingAssistant, error: fetchError } = await client
-                .from("user_profiles")
-                .select("user_id")
-                .eq("user_name", AI_ASSISTANT_USERNAME)
-                .maybeSingle();
-
-            if (fetchError) {
-                console.error("Error checking AI assistant:", fetchError);
-                return null;
-            }
-
-            // If AI assistant doesn't exist, create it
-            if (!existingAssistant) {
-                const assistantId = generateUUID();
-                const { data: newAssistant, error: insertError } = await client
-                    .from("user_profiles")
-                    .insert([{
-                        user_id: assistantId,
-                        user_name: AI_ASSISTANT_USERNAME,
-                        bio: AI_ASSISTANT_BIO,
-                        profile_image_url: AI_ASSISTANT_AVATAR,
-                        is_online: true
-                    }])
-                    .select()
-                    .single();
-
-                if (insertError) {
-                    console.error("Error creating AI assistant:", insertError);
-                    return null;
-                }
-
-                return newAssistant.user_id;
-            }
-
-            return existingAssistant.user_id;
+            // Instead of creating a user in the database, we'll just return a fixed ID
+            // for the AI assistant and handle it as a special case in the application
+            return AI_ASSISTANT_ID;
         } catch (err) {
             console.error("Error ensuring AI assistant exists:", err);
             return null;
@@ -2992,15 +3155,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Add this function to generate UUID
-    function generateUUID() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
-    }
-
     // Add this function to insert messages (used for AI responses)
     async function insertMessage(senderId, receiverId, content) {
         try {
@@ -3029,7 +3183,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
                     "Content-Type": "application/json",
                     "HTTP-Referer": window.location.origin,
-                    "X-Title": "Chat App" // 
+                    "X-Title": "Chat App"
                 },
                 body: JSON.stringify({
                     model: "openai/gpt-3.5-turbo",
@@ -3055,20 +3209,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Add this function to handle AI responses
     async function handleAIResponse(userMessage, friendId) {
         try {
-            // Get AI assistant user ID
-            const { data: assistant, error: fetchError } = await client
-                .from("user_profiles")
-                .select("user_id")
-                .eq("user_name", AI_ASSISTANT_USERNAME)
-                .maybeSingle();
-
-            if (fetchError || !assistant) {
-                console.error("Error fetching AI assistant:", fetchError);
-                return;
-            }
-
             // Check if the friend is the AI assistant
-            if (friendId === assistant.user_id) {
+            if (friendId === AI_ASSISTANT_ID) {
                 // Show typing indicator
                 const typingIndicator = document.querySelector("#typing-indicator");
                 if (typingIndicator) {
@@ -3079,7 +3221,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const aiResponse = await callOpenRouterAPI(userMessage);
 
                 // Insert AI response as a message
-                await insertMessage(assistant.user_id, currentUserId, aiResponse);
+                await insertMessage(AI_ASSISTANT_ID, currentUserId, aiResponse);
 
                 // Reset typing indicator
                 if (typingIndicator) {
@@ -3088,115 +3230,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         } catch (error) {
             console.error("Error handling AI response:", error);
-        }
-    }
-
-    // Modify the getCurrentUser function to add AI assistant as friend
-    async function getCurrentUser() {
-        try {
-            const { data: { user }, error } = await client.auth.getUser();
-            if (error || !user) {
-                showToast("User not logged in", "error");
-                window.location.href = 'signup.html';
-                return null;
-            }
-            currentUserId = user.id;
-            console.log("Current user ID:", currentUserId);
-            await setUserOnlineStatus(true);
-
-            // Add AI assistant as friend for new users
-            await addAIAssistantAsFriend();
-
-            // Check if we need to show admin friend request popup
-            await checkAndShowAdminRequestPopup();
-
-            return user;
-        } catch (err) {
-            console.error("getCurrentUser error:", err);
-            showToast("Failed to get current user.", "error");
-            return null;
-        }
-    }
-
-    // Modify the handleSend function in openChat to handle AI responses
-    async function handleSend() {
-        const content = inputSafe.value.trim();
-        if (!content) return;
-
-        // Send the user's message
-        await sendMessage(friendId, content);
-        inputSafe.value = "";
-        sendBtnSafe.disabled = true;
-
-        // Check if this is a message to the AI assistant
-        const { data: assistant, error: fetchError } = await client
-            .from("user_profiles")
-            .select("user_id")
-            .eq("user_name", AI_ASSISTANT_USERNAME)
-            .maybeSingle();
-
-        if (!fetchError && assistant && friendId === assistant.user_id) {
-            // Handle AI response
-            handleAIResponse(content, friendId);
-        }
-    }
-
-    // Modify the sendMessage function to handle AI messages differently
-    async function sendMessage(friendId, content) {
-        if (!content || !content.trim()) return;
-        try {
-            // Check if this is a message to the AI assistant
-            const { data: assistant, error: fetchError } = await client
-                .from("user_profiles")
-                .select("user_id")
-                .eq("user_name", AI_ASSISTANT_USERNAME)
-                .maybeSingle();
-
-            // If sending to AI assistant, we don't need to store it in the database
-            // since we'll handle the response separately
-            if (!fetchError && assistant && friendId === assistant.user_id) {
-                // Show the message in the UI immediately
-                const chatBox = document.querySelector(".messages");
-                if (chatBox) {
-                    const msgDiv = document.createElement("div");
-                    msgDiv.className = "message sent";
-
-                    const timeStr = new Date().toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit"
-                    });
-
-                    msgDiv.innerHTML = `
-                    <div class="msg-bubble">
-                        <span class="msg-text">${linkify(content)}</span>
-                        <div class="msg-meta">
-                            <small class="msg-time">${timeStr}</small>
-                            <small class="seen-status">✓</small>
-                        </div>
-                    </div>
-                `;
-
-                    chatBox.appendChild(msgDiv);
-                    chatBox.scrollTop = chatBox.scrollHeight;
-                }
-                return;
-            }
-
-            // For regular users, store the message in the database
-            const { error } = await client.from("messages").insert([{
-                sender_id: currentUserId,
-                receiver_id: friendId,
-                content
-            }]);
-            if (error) {
-                console.error("Error sending message:", error);
-                showToast("Message failed to send. Please try again.", "error");
-            } else {
-                updateLastMessage(friendId, content, new Date().toISOString());
-            }
-        } catch (err) {
-            console.error("sendMessage error:", err);
-            showToast("Message failed to send. Please try again.", "error");
         }
     }
 });
