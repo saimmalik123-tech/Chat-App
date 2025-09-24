@@ -3078,12 +3078,43 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Add this function to ensure AI assistant exists
     async function ensureAIAssistantExists() {
         try {
-            // Instead of creating a user in the database, we'll just return a fixed ID
-            // for the AI assistant and handle it as a special case in the application
-            return AI_ASSISTANT_ID;
+            // Check if AI assistant profile exists
+            const { data: existingProfile, error: fetchError } = await client
+                .from("user_profiles")
+                .select("user_id")
+                .eq("user_id", AI_ASSISTANT_ID)
+                .maybeSingle();
+
+            if (fetchError) {
+                console.error("Error checking AI assistant profile:", fetchError);
+                return false;
+            }
+
+            // If profile doesn't exist, create it
+            if (!existingProfile) {
+                const { error: insertError } = await client
+                    .from("user_profiles")
+                    .insert({
+                        user_id: AI_ASSISTANT_ID,
+                        user_name: AI_ASSISTANT_USERNAME,
+                        profile_image_url: AI_ASSISTANT_AVATAR,
+                        bio: AI_ASSISTANT_BIO,
+                        is_online: true
+                    });
+
+                if (insertError) {
+                    console.error("Error creating AI assistant profile:", insertError);
+                    return false;
+                }
+
+                console.log("AI assistant profile created successfully");
+                return true;
+            }
+
+            return true;
         } catch (err) {
             console.error("Error ensuring AI assistant exists:", err);
-            return null;
+            return false;
         }
     }
 
@@ -3092,6 +3123,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!currentUserId) return;
 
         try {
+            // First ensure AI assistant exists in user_profiles
+            const aiExists = await ensureAIAssistantExists();
+            if (!aiExists) {
+                console.error("Failed to ensure AI assistant exists");
+                return;
+            }
+
             // Check if already friends
             const alreadyFriends = await isAlreadyFriend(AI_ASSISTANT_ID);
             if (alreadyFriends) {
@@ -3137,6 +3175,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             // Special handling for AI assistant messages
             if (senderId === AI_ASSISTANT_ID) {
+                // First ensure AI assistant exists in user_profiles
+                const aiExists = await ensureAIAssistantExists();
+                if (!aiExists) {
+                    console.error("Failed to ensure AI assistant exists");
+                    return false;
+                }
+
                 const { error } = await client.from("messages").insert([{
                     sender_id: senderId,
                     receiver_id: receiverId,
