@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const AI_ASSISTANT_USERNAME = "AI_Assistant";
     const AI_ASSISTANT_BIO = "I'm your AI assistant! Feel free to ask me anything.";
     const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.png"; // Make sure to add this image
-    const OPENROUTER_API_KEY = "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";
+    const GEMINI_API_KEY = "AIzaSyCVqoPntSjTMdrbkhaulp2jhE_i7vootUk"; // Replace with your actual Gemini API key
     // Fixed: Use a proper UUID format for the AI assistant ID
     const AI_ASSISTANT_ID = "00000000-0000-0000-0000-000000000001"; // Valid UUID for AI assistant
 
@@ -3071,7 +3071,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     .from("private_users")
                     .insert([{
                         id: AI_ASSISTANT_ID,
-                        name: AI_ASSISTANT_USERNAME  // Fixed: Added the required name field
+                        name: AI_ASSISTANT_USERNAME
                     }]);
 
                 if (createUserError) {
@@ -3230,41 +3230,39 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Add this function to call OpenRouter API
-    async function callOpenRouterAPI(message) {
+    // Add this function to call Gemini API
+    async function callGeminiAPI(message) {
         try {
             // Verify API key is present
-            if (!OPENROUTER_API_KEY || OPENROUTER_API_KEY === "sk-or-v1-...") {
-                throw new Error("Invalid OpenRouter API key");
+            if (!GEMINI_API_KEY || GEMINI_API_KEY === "YOUR_GEMINI_API_KEY") {
+                throw new Error("Invalid Gemini API key");
             }
 
-            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
                 method: "POST",
                 headers: {
-                    "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
                     "Content-Type": "application/json",
-                    "HTTP-Referer": window.location.origin,
-                    "X-Title": "Chat App"
                 },
                 body: JSON.stringify({
-                    model: "openai/gpt-3.5-turbo",
-                    messages: [
-                        { role: "system", content: "You are a helpful AI assistant in a chat app. Keep your responses friendly, concise, and helpful." },
-                        { role: "user", content: message }
-                    ]
+                    contents: [{
+                        parts: [{
+                            text: `You are a helpful AI assistant in a chat app. Keep your responses friendly, concise, and helpful. User message: ${message}`
+                        }]
+                    }]
                 })
             });
 
             if (!response.ok) {
                 const errorData = await response.json();
-                console.error("OpenRouter API error:", errorData);
-                throw new Error(`OpenRouter API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+                console.error("Gemini API error:", errorData);
+                throw new Error(`Gemini API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
             }
 
             const data = await response.json();
-            return data.choices[0].message.content;
+            // Extract the text from the response
+            return data.candidates[0].content.parts[0].text;
         } catch (error) {
-            console.error("Error calling OpenRouter API:", error);
+            console.error("Error calling Gemini API:", error);
             return "I'm sorry, I'm having trouble responding right now. Please try again later.";
         }
     }
@@ -3280,8 +3278,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     typingIndicator.textContent = "AI is typing...";
                 }
 
-                // Call OpenRouter API
-                const aiResponse = await callOpenRouterAPI(userMessage);
+                // Call Gemini API
+                const aiResponse = await callGeminiAPI(userMessage);
 
                 // Insert AI response as a message
                 const success = await insertMessage(AI_ASSISTANT_ID, currentUserId, aiResponse);
