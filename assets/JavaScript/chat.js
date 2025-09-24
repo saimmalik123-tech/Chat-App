@@ -1,239 +1,162 @@
 import { client } from "../../supabase.js";
 
+// Load dashboard styles
+const link = document.createElement('link');
+link.rel = 'stylesheet';
+link.href = '../CSS/dashboard.css';
+document.head.appendChild(link);
+
 // Initialize when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
-    // Constants
-    const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
-    const ADMIN_USERNAME = "Saim_Malik88";
-    const ADMIN_REQUEST_KEY = "adminRequestShown"; // localStorage key
+    // User modal function
+    function showUserModal(userId, userName, userAvatar) {
+        let modal = document.getElementById("user-modal");
+        if (!modal) {
+            modal = document.createElement("div");
+            modal.id = "user-modal";
+            modal.className = "user-modal";
+            modal.innerHTML = `
+                <div class="user-modal-backdrop"></div>
+                <div class="user-modal-container">
+                    <div class="user-modal-header">
+                        <h2>User Profile</h2>
+                        <span class="user-modal-close">&times;</span>
+                    </div>
+                    <div class="user-modal-body">
+                        <div class="user-modal-avatar-section">
+                            <img id="user-modal-avatar" class="user-modal-avatar" src="" alt="User Avatar">
+                            <div id="user-modal-status" class="user-modal-status"></div>
+                        </div>
+                        <div class="user-modal-info">
+                            <h3 id="user-modal-username" class="user-modal-username"></h3>
+                            <p id="user-modal-bio" class="user-modal-bio"></p>
+                            <div class="user-modal-actions">
+                                <button id="user-modal-message-btn" class="user-modal-btn primary">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                    </svg>
+                                    Message
+                                </button>
+                                <button id="user-modal-close-btn" class="user-modal-btn secondary">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
 
-    // Global variables
-    let currentUserId = null;
-    let friendRequests = [];
-    let statusChannelRef = null;
-    let unseenCounts = {};
-    let currentOpenChatId = null;
-    let notificationData = {};
-    let deletionTimeouts = {};
-    let processingMessageIds = new Set();
-    let allFriends = new Map(); // Store all friends data for real-time updates
-    let activeChatChannels = {}; // Store active chat channels for cleanup
+            // Modal event listeners
+            const closeModal = () => modal.style.display = "none";
+            modal.querySelector(".user-modal-close").addEventListener("click", closeModal);
+            modal.querySelector("#user-modal-close-btn").addEventListener("click", closeModal);
+            modal.querySelector(".user-modal-backdrop").addEventListener("click", closeModal);
 
-    // Subscription Manager
-    const subscriptionManager = {
-        channels: new Map(),
-
-        async subscribe(channelName, config = {}, callback) {
-            // Remove existing channel if it exists
-            if (this.channels.has(channelName)) {
-                try {
-                    const existingChannel = this.channels.get(channelName);
-                    await client.removeChannel(existingChannel);
-                    this.channels.delete(channelName);
-                } catch (err) {
-                    console.warn(`Error removing channel ${channelName}:`, err);
-                }
-            }
-
-            // Create new channel
-            let channel;
-            try {
-                channel = client.channel(channelName);
-            } catch (err) {
-                console.error(`Error creating channel ${channelName}:`, err);
-                if (callback) callback(false);
-                return null;
-            }
-
-            // Set up subscription with better error handling
-            channel.subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`Successfully subscribed to ${channelName}`);
-                    if (callback) callback(true);
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error(`Error subscribing to ${channelName}:`, err);
-                    if (callback) callback(false);
-
-                    // Attempt to reconnect after delay
-                    setTimeout(() => {
-                        console.log(`Attempting to resubscribe to ${channelName}...`);
-                        this.subscribe(channelName, config, callback);
-                    }, 5000);
-                } else if (status === 'TIMED_OUT') {
-                    console.warn(`Subscription to ${channelName} timed out, retrying...`);
-                    setTimeout(() => {
-                        this.subscribe(channelName, config, callback);
-                    }, 3000);
-                }
+            modal.querySelector("#user-modal-message-btn").addEventListener("click", () => {
+                closeModal();
+                openSpecificChat(userId);
             });
-
-            // Store channel reference
-            this.channels.set(channelName, channel);
-
-            return channel;
-        },
-
-        async unsubscribe(channelName) {
-            if (this.channels.has(channelName)) {
-                try {
-                    const channel = this.channels.get(channelName);
-                    await client.removeChannel(channel);
-                    this.channels.delete(channelName);
-                    return true;
-                } catch (err) {
-                    console.warn(`Error unsubscribing from ${channelName}:`, err);
-                    return false;
-                }
-            }
-            return false;
-        },
-
-        async unsubscribeAll() {
-            const promises = Array.from(this.channels.keys()).map(channelName =>
-                this.unsubscribe(channelName)
-            );
-            return Promise.all(promises);
-        },
-
-        // Add cleanup method
-        async cleanup() {
-            console.log(`Cleaning up ${this.channels.size} subscriptions`);
-            await this.unsubscribeAll();
         }
-    };
 
-    // Cleanup function for chat subscriptions
-    async function cleanupSubscriptions(msgChannel, typingChannel, statusChannel) {
+        // Set modal content
+        document.getElementById("user-modal-avatar").src = userAvatar || DEFAULT_PROFILE_IMG;
+        document.getElementById("user-modal-username").textContent = userName || "Unknown User";
+
+        // Fetch user profile data
+        getUserProfile(userId).then(profile => {
+            if (profile) {
+                document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
+                const statusElement = document.getElementById("user-modal-status");
+                statusElement.textContent = profile.is_online ? "Online" : "Offline";
+                statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
+            }
+        }).catch(() => {
+            document.getElementById("user-modal-bio").textContent = "No bio available.";
+            const statusElement = document.getElementById("user-modal-status");
+            statusElement.textContent = "Offline";
+            statusElement.className = "user-modal-status offline";
+        });
+
+        // Show modal
+        modal.style.display = "flex";
+    }
+
+    // Get user profile data
+    async function getUserProfile(userId) {
         try {
-            if (msgChannel) await client.removeChannel(msgChannel);
-            if (typingChannel) await client.removeChannel(typingChannel);
-            if (statusChannel) await client.removeChannel(statusChannel);
-            console.log("Successfully cleaned up chat subscriptions");
+            const { data, error } = await client
+                .from("user_profiles")
+                .select("user_name, profile_image_url, bio, is_online")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            if (error) throw error;
+            return data;
         } catch (err) {
-            console.warn("Error removing channels:", err);
+            console.error("Error fetching user profile:", err);
+            return null;
         }
     }
 
-    // Global cleanup function for all subscriptions
-    async function cleanupAllSubscriptions() {
-        try {
-            // Clean up all channels in the subscription manager
-            await subscriptionManager.cleanup();
+    // Show popup notification
+    function showPopup(message, type = "info") {
+        const popup = document.getElementById("notification-popup");
+        const messageEl = document.getElementById("popup-message");
+        if (!popup || !messageEl) return;
 
-            // Clean up any active chat channels
-            for (const friendId in activeChatChannels) {
-                const { msgChannel, typingChannel, statusChannel } = activeChatChannels[friendId];
-                await cleanupSubscriptions(msgChannel, typingChannel, statusChannel);
-            }
-            activeChatChannels = {};
+        messageEl.textContent = message;
+        popup.classList.remove("hidden", "error", "success", "info");
+        popup.classList.add("show", String(type));
 
-            console.log("Successfully cleaned up all subscriptions");
-        } catch (err) {
-            console.warn("Error cleaning up subscriptions:", err);
-        }
-    }
-
-    // Show modal with animation
-    function showModal(modalId) {
-        try {
-            const modal = document.getElementById(modalId);
-            if (!modal) {
-                console.error(`Modal with ID ${modalId} not found`);
-                return;
-            }
-
-            modal.classList.remove('hidden');
-            // Force reflow
-            modal.offsetHeight;
-            modal.classList.add('show');
-        } catch (error) {
-            console.error("Error showing modal:", error);
-        }
-    }
-
-    // Hide modal with animation
-    function hideModal(modalId) {
-        try {
-            const modal = document.getElementById(modalId);
-            if (!modal) {
-                console.error(`Modal with ID ${modalId} not found`);
-                return;
-            }
-
-            modal.classList.remove('show');
-            setTimeout(() => {
-                modal.classList.add('hidden');
-            }, 300); // Match animation duration
-        } catch (error) {
-            console.error("Error hiding modal:", error);
+        const closeBtn = document.getElementById("popup-close");
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                popup.classList.add("hidden");
+                popup.classList.remove('show');
+            });
         }
     }
 
     // Show toast notification
     function showToast(message, type = "info") {
-        try {
-            const toast = document.getElementById("toast-notification");
-            const messageEl = document.getElementById("toast-message");
-            if (!toast || !messageEl) {
-                console.error("Toast notification elements not found");
-                return;
-            }
+        const toast = document.getElementById("toast-notification");
+        const messageEl = document.getElementById("toast-message");
+        if (!toast || !messageEl) return;
 
-            messageEl.textContent = message;
-            toast.classList.remove("hidden", "success", "error", "info", "warning");
-            toast.classList.add("show", type);
+        messageEl.textContent = message;
+        toast.classList.remove("hidden", "success", "error", "info", "warning");
+        toast.classList.add("show", String(type));
 
-            const closeBtn = document.getElementById("toast-close");
-            if (closeBtn) {
-                closeBtn.addEventListener('click', () => {
-                    toast.classList.remove("show");
-                    setTimeout(() => toast.classList.add("hidden"), 300);
-                });
-            }
-
-            setTimeout(() => {
-                toast.classList.remove("show");
-                setTimeout(() => toast.classList.add("hidden"), 300);
-            }, 3000);
-        } catch (error) {
-            console.error("Error showing toast:", error);
+        const closeBtn = document.getElementById("toast-close");
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                toast.classList.add("hidden");
+                toast.classList.remove('show');
+            });
         }
+
+        setTimeout(() => {
+            toast.classList.add("hidden");
+            toast.classList.remove('show');
+        }, 3000);
     }
 
     // Show loading overlay
     function showLoading(message = 'Loading...') {
-        try {
-            const overlay = document.getElementById("loading-overlay");
-            const msgEl = document.getElementById("loading-message");
-            if (!overlay) {
-                console.error("Loading overlay not found");
-                return;
-            }
+        const overlay = document.getElementById("loading-overlay");
+        const msgEl = document.getElementById("loading-message");
+        if (!overlay) return;
 
-            if (msgEl) msgEl.textContent = message;
-            overlay.classList.remove('hidden');
-            // Force reflow
-            overlay.offsetHeight;
-            overlay.classList.add('show');
-        } catch (error) {
-            console.error("Error showing loading overlay:", error);
-        }
+        if (msgEl) msgEl.textContent = message;
+        overlay.classList.remove('hidden');
+        overlay.style.display = "flex";
     }
 
     // Hide loading overlay
     function hideLoading() {
-        try {
-            const overlay = document.getElementById("loading-overlay");
-            if (!overlay) {
-                console.error("Loading overlay not found");
-                return;
-            }
-
-            overlay.classList.remove('show');
-            setTimeout(() => overlay.classList.add('hidden'), 300);
-        } catch (error) {
-            console.error("Error hiding loading overlay:", error);
-        }
+        const overlay = document.getElementById("loading-overlay");
+        if (!overlay) return;
+        overlay.classList.add('hidden');
+        overlay.style.display = "none";
     }
 
     // Track active popups
@@ -241,156 +164,125 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Top-right popup function
     function showTopRightPopup(message, type = "info", image = null) {
-        try {
-            const popupKey = `${message}-${type}-${image || ''}`;
-            if (activePopups.has(popupKey)) return;
+        const popupKey = `${message}-${type}-${image || ''}`;
+        if (activePopups.has(popupKey)) return;
 
-            activePopups.add(popupKey);
+        activePopups.add(popupKey);
 
-            let popupContainer = document.getElementById("top-right-popup-container");
-            if (!popupContainer) {
-                popupContainer = document.createElement("div");
-                popupContainer.id = "top-right-popup-container";
-                popupContainer.style.position = "fixed";
-                popupContainer.style.top = "20px";
-                popupContainer.style.right = "20px";
-                popupContainer.style.zIndex = "9999";
-                document.body.appendChild(popupContainer);
-            }
+        let popupContainer = document.getElementById("top-right-popup-container");
+        if (!popupContainer) {
+            popupContainer = document.createElement("div");
+            popupContainer.id = "top-right-popup-container";
+            popupContainer.style.position = "fixed";
+            popupContainer.style.top = "20px";
+            popupContainer.style.right = "20px";
+            popupContainer.style.zIndex = "9999";
+            document.body.appendChild(popupContainer);
+        }
 
-            const popup = document.createElement("div");
-            popup.className = `top-right-popup ${type}`;
+        const popup = document.createElement("div");
+        popup.className = `top-right-popup ${type}`;
 
-            const imageHtml = image ? `<img src="${image}" class="popup-avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover;margin-right:10px;">` : '';
+        const imageHtml = image ? `<img src="${image}" class="popup-avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover;margin-right:10px;">` : '';
 
-            popup.innerHTML = `
-                <div class="popup-content" style="display:flex;align-items:center;">
-                    ${imageHtml}
-                    <span class="popup-message">${message}</span>
-                    <button class="popup-close">&times;</button>
-                </div>
+        popup.innerHTML = `
+            <div class="popup-content" style="display:flex;align-items:center;">
+                ${imageHtml}
+                <span class="popup-message">${message}</span>
+                <button class="popup-close">&times;</button>
+            </div>
+        `;
+
+        // Style popup
+        popup.style.backgroundColor = type === "success" ? "#4CAF50" :
+            type === "error" ? "#f44336" :
+                type === "warning" ? "#ff9800" : "#2196F3";
+        popup.style.color = "white";
+        popup.style.padding = "12px 20px";
+        popup.style.borderRadius = "4px";
+        popup.style.boxShadow = "0 2px 10px rgba(0,0,0,0.2)";
+        popup.style.marginBottom = "10px";
+        popup.style.minWidth = "250px";
+        popup.style.display = "flex";
+        popup.style.justifyContent = "space-between";
+        popup.style.alignItems = "center";
+        popup.style.animation = "slideIn 0.3s ease-out";
+
+        // Add animation styles if not present
+        if (!document.getElementById("popup-styles")) {
+            const style = document.createElement("style");
+            style.id = "popup-styles";
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+                .popup-close {
+                    background: none;
+                    border: none;
+                    color: white;
+                    font-size: 18px;
+                    cursor: pointer;
+                    margin-left: 10px;
+                }
             `;
+            document.head.appendChild(style);
+        }
 
-            // Style popup
-            popup.style.backgroundColor = type === "success" ? "#4CAF50" :
-                type === "error" ? "#f44336" :
-                    type === "warning" ? "#ff9800" : "#2196F3";
-            popup.style.color = "white";
-            popup.style.padding = "12px 20px";
-            popup.style.borderRadius = "4px";
-            popup.style.boxShadow = "0 2px 10px rgba(0,0,0,0.2)";
-            popup.style.marginBottom = "10px";
-            popup.style.minWidth = "250px";
-            popup.style.display = "flex";
-            popup.style.justifyContent = "space-between";
-            popup.style.alignItems = "center";
-            popup.style.animation = "slideIn 0.3s ease-out";
+        // Close button event
+        popup.querySelector(".popup-close").addEventListener("click", () => {
+            popup.style.animation = "slideOut 0.3s ease-out forwards";
+            setTimeout(() => {
+                popup.remove();
+                activePopups.delete(popupKey);
+            }, 300);
+        });
 
-            // Add animation styles if not present
-            if (!document.getElementById("popup-styles")) {
-                const style = document.createElement("style");
-                style.id = "popup-styles";
-                style.textContent = `
-                    @keyframes slideIn {
-                        from { transform: translateX(100%); opacity: 0; }
-                        to { transform: translateX(0); opacity: 1; }
-                    }
-                    @keyframes slideOut {
-                        from { transform: translateX(0); opacity: 1; }
-                        to { transform: translateX(100%); opacity: 0; }
-                    }
-                    .popup-close {
-                        background: none;
-                        border: none;
-                        color: white;
-                        font-size: 18px;
-                        cursor: pointer;
-                        margin-left: 10px;
-                    }
-                `;
-                document.head.appendChild(style);
-            }
-
-            // Close button event
-            popup.querySelector(".popup-close").addEventListener("click", () => {
+        // Auto remove after 5 seconds
+        setTimeout(() => {
+            if (popup.parentNode) {
                 popup.style.animation = "slideOut 0.3s ease-out forwards";
                 setTimeout(() => {
                     popup.remove();
                     activePopups.delete(popupKey);
                 }, 300);
-            });
+            }
+        }, 5000);
 
-            // Auto remove after 5 seconds
-            setTimeout(() => {
-                if (popup.parentNode) {
-                    popup.style.animation = "slideOut 0.3s ease-out forwards";
-                    setTimeout(() => {
-                        popup.remove();
-                        activePopups.delete(popupKey);
-                    }, 300);
-                }
-            }, 5000);
-
-            popupContainer.appendChild(popup);
-        } catch (error) {
-            console.error("Error showing top-right popup:", error);
-        }
+        popupContainer.appendChild(popup);
     }
 
     // Request notification permission
     async function requestNotificationPermission() {
         if (!("Notification" in window)) {
             console.warn("Browser does not support notifications.");
-            return false;
+            return;
         }
-
-        if (Notification.permission === "granted") {
-            console.log("Notifications already enabled ✅");
-            return true;
-        }
-
         try {
             const permission = await Notification.requestPermission();
-            if (permission === "granted") {
-                console.log("Notifications enabled ✅");
-                return true;
-            } else {
+            if (permission !== "granted") {
                 console.log("Notifications blocked by user.");
-                return false;
+            } else {
+                console.log("Notifications enabled ✅");
             }
         } catch (err) {
             console.warn("Notification permission error", err);
-            return false;
         }
     }
-
-    // Function to show notification with fallback to in-app notification
-    async function showNotification(title, options = {}) {
-        const hasPermission = await requestNotificationPermission();
-
-        if (hasPermission) {
-            try {
-                const notif = new Notification(title, options);
-                return notif;
-            } catch (err) {
-                console.warn("Error showing notification:", err);
-            }
-        }
-
-        // Fallback to in-app notification
-        showTopRightPopup(title, "info", options.icon);
-        return null;
-    }
-
-    // Initialize notifications
     await requestNotificationPermission();
+
+    const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
 
     // Fetch current user avatar
     async function fetchCurrentUserAvatar(profileImageSelector = '.profile-pic') {
-        try {
-            const profileImage = document.querySelector(profileImageSelector);
-            if (!profileImage) return;
+        const profileImage = document.querySelector(profileImageSelector);
+        if (!profileImage) return;
 
+        try {
             const { data: { user }, error } = await client.auth.getUser();
             if (error || !user) return;
 
@@ -416,6 +308,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     fetchCurrentUserAvatar();
 
+    // Global variables
+    let currentUserId = null;
+    let friendRequests = [];
+    let statusChannelRef = null;
+    let unseenCounts = {};
+    let currentOpenChatId = null;
+    let notificationData = {};
+    let deletionTimeouts = {};
+    let processingMessageIds = new Set();
+    let allFriends = new Map(); // Store all friends data for real-time updates
+
     // Get current user
     async function getCurrentUser() {
         try {
@@ -428,10 +331,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             currentUserId = user.id;
             console.log("Current user ID:", currentUserId);
             await setUserOnlineStatus(true);
-
-            // Check if we need to show admin friend request popup
-            await checkAndShowAdminRequestPopup();
-
             return user;
         } catch (err) {
             console.error("getCurrentUser error:", err);
@@ -440,95 +339,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Check if user is already a friend
-    async function isAlreadyFriend(userId) {
-        if (!currentUserId || !userId) return false;
-
-        try {
-            const { data, error } = await client
-                .from("friends")
-                .select("*")
-                .or(`and(user1_id.eq.${currentUserId},user2_id.eq.${userId}),and(user1_id.eq.${userId},user2_id.eq.${currentUserId})`)
-                .maybeSingle();
-
-            if (error) {
-                console.error("Error checking friendship status:", error);
-                return false;
-            }
-
-            return !!data;
-        } catch (err) {
-            console.error("Error in isAlreadyFriend:", err);
-            return false;
-        }
-    }
-
-    // Show admin friend request popup for new users
-    async function checkAndShowAdminRequestPopup() {
-        // Check if we've already shown the admin request popup
-        if (localStorage.getItem(ADMIN_REQUEST_KEY) === 'true') return;
-
-        try {
-            // Check if user is new (less than 1 day old)
-            const { data: { user }, error: userError } = await client.auth.getUser();
-            if (userError || !user) return;
-
-            const createdAt = new Date(user.created_at);
-            const now = new Date();
-            const hoursSinceCreation = (now - createdAt) / (1000 * 60 * 60);
-
-            if (hoursSinceCreation > 24) {
-                localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
-                return;
-            }
-
-            // Check if already friends with admin
-            const { data: adminProfile, error: adminError } = await client
-                .from("user_profiles")
-                .select("user_id")
-                .eq("user_name", ADMIN_USERNAME)
-                .maybeSingle();
-
-            if (adminError || !adminProfile) {
-                localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
-                return;
-            }
-
-            const isAdminFriend = await isAlreadyFriend(adminProfile.user_id);
-            if (isAdminFriend) {
-                localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
-                return;
-            }
-
-            // Show popup to send friend request to admin
-            showConfirmPopup(
-                `Would you like to send a friend request to Admin ${ADMIN_USERNAME}?`,
-                async () => {
-                    await sendFriendRequest(ADMIN_USERNAME);
-                    localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
-                },
-                () => {
-                    localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
-                }
-            );
-        } catch (err) {
-            console.error("Error in checkAndShowAdminRequestPopup:", err);
-            localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
-        }
-    }
-
     // Accept friend request
     async function acceptRequest(requestId, senderId) {
         try {
-            // Check if already friends
-            const alreadyFriends = await isAlreadyFriend(senderId);
-            if (alreadyFriends) {
-                showToast("You are already friends with this user.", "info");
-                showTopRightPopup("You are already friends with this user.", "info");
-                return;
-            }
-
-            // Update the request status to accepted
             const { error: updateError } = await client
                 .from("requests")
                 .update({ status: "accepted" })
@@ -550,15 +363,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             showToast("Friend request accepted!", "success");
             showTopRightPopup("Friend request accepted!", "success");
-
-            // Fetch updated friend requests and friends lists
-            await fetchFriendRequests();
-            await fetchFriends();
-
-            await openSpecificChat(senderId);
-
-            await fetchRecentChats();
-
+            fetchFriendRequests();
+            fetchFriends();
+            openSpecificChat(senderId);
         } catch (err) {
             console.error("Unexpected error:", err);
             showToast("An error occurred while accepting request.", "error");
@@ -597,96 +404,74 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.error("Error updating online status:", err);
         }
     }
-
-    // Handle page unload
-    window.addEventListener('beforeunload', async () => {
+    window.addEventListener('beforeunload', () => {
         setUserOnlineStatus(false);
         Object.values(deletionTimeouts).forEach(timeoutId => clearTimeout(timeoutId));
-        await cleanupAllSubscriptions();
     });
 
     // Render friend requests
     function renderFriendRequests() {
-        try {
-            const messageList = document.getElementById("friend-requests-list");
-            const unreadBadge = document.getElementById("unread-count");
-            if (!messageList || !unreadBadge) return;
+        const messageList = document.getElementById("message-list");
+        const unreadBadge = document.getElementById("unread-count");
+        if (!messageList || !unreadBadge) return;
 
-            messageList.innerHTML = "";
-            if (!friendRequests || friendRequests.length === 0) {
-                const noRequestsItem = document.createElement("li");
-                noRequestsItem.className = "no-requests";
-                noRequestsItem.textContent = "No pending friend requests.";
-                messageList.appendChild(noRequestsItem);
-            } else {
-                friendRequests.forEach((req) => {
-                    const li = document.createElement("li");
-                    li.className = "message-item";
-                    li.innerHTML = `
-                        <img src="${req.avatar}" alt="User" class="msg-avatar" style="width:30px;height:30px;border-radius:50%;object-fit:cover;">
-                        <div class="message-text">${req.text}</div>
-                        <div class="message-actions">
-                            <button class="accept-btn">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="20 6 9 17 4 12"></polyline>
-                                    <path d="M20 6L9 17l-5 5"></path>
-                                </svg>
-                                Accept
-                            </button>
-                            <button class="reject-btn">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                                </svg>
-                                Reject
-                            </button>
-                        </div>
-                    `;
-                    const acceptBtn = li.querySelector(".accept-btn");
-                    const rejectBtn = li.querySelector(".reject-btn");
-                    acceptBtn?.addEventListener("click", async () => {
-                        await acceptRequest(req.requestId, req.senderId);
-                    });
-                    rejectBtn?.addEventListener("click", async () => {
-                        await rejectRequest(req.requestId);
-                    });
-                    messageList.appendChild(li);
+        messageList.innerHTML = "";
+        if (!friendRequests || friendRequests.length === 0) {
+            messageList.textContent = "No pending friend requests.";
+            messageList.style.textAlign = "center";
+        } else {
+            messageList.style.textAlign = "left";
+            friendRequests.forEach((req) => {
+                const li = document.createElement("li");
+                li.className = "message-item";
+                li.innerHTML = `
+                    <img src="${req.avatar}" alt="User" class="msg-avatar" style="width:30px;height:30px;border-radius:50%;object-fit:cover;">
+                    <div class="message-text">${req.text}</div>
+                    <div class="message-actions">
+                        <button class="accept-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                                <path d="M20 6L9 17l-5 5"></path>
+                            </svg>
+                            Accept
+                        </button>
+                        <button class="reject-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="15" y1="9" x2="9" y2="15"></line>
+                                <line x1="9" y1="9" x2="15" y2="15"></line>
+                            </svg>
+                            Reject
+                        </button>
+                    </div>
+                `;
+                const acceptBtn = li.querySelector(".accept-btn");
+                const rejectBtn = li.querySelector(".reject-btn");
+                acceptBtn?.addEventListener("click", async () => {
+                    await acceptRequest(req.requestId, req.senderId);
                 });
-            }
-
-            unreadBadge.textContent = (friendRequests && friendRequests.length) ? friendRequests.length : "0";
-        } catch (error) {
-            console.error("Error rendering friend requests:", error);
+                rejectBtn?.addEventListener("click", async () => {
+                    await rejectRequest(req.requestId);
+                });
+                messageList.appendChild(li);
+            });
         }
+
+        unreadBadge.textContent = (friendRequests && friendRequests.length) ? friendRequests.length : "0";
     }
 
     // Message notification click handler
     document.getElementById("message-notification")?.addEventListener("click", () => {
-        try {
-            const popup = document.getElementById("friend-requests-popup");
-            if (popup) {
-                if (popup.classList.contains("show")) {
-                    popup.classList.remove("show");
-                } else {
-                    popup.classList.add("show");
-                }
-            }
-        } catch (error) {
-            console.error("Error handling message notification click:", error);
-        }
+        const popup = document.getElementById("message-popup");
+        if (popup) popup.style.display = popup.style.display === "block" ? "none" : "block";
     });
 
     // Close message popup when clicking outside
     document.addEventListener("click", (e) => {
-        try {
-            const messageIcon = document.getElementById("message-notification");
-            const messagePopup = document.getElementById("friend-requests-popup");
-            if (messageIcon && messagePopup && !messageIcon.contains(e.target) && !messagePopup.contains(e.target)) {
-                messagePopup.classList.remove("show");
-            }
-        } catch (error) {
-            console.error("Error handling outside click:", error);
+        const messageIcon = document.getElementById("message-notification");
+        const messagePopup = document.getElementById("message-popup");
+        if (messageIcon && messagePopup && !messageIcon.contains(e.target) && !messagePopup.contains(e.target)) {
+            messagePopup.style.display = "none";
         }
     });
 
@@ -745,6 +530,25 @@ document.addEventListener("DOMContentLoaded", async () => {
                     });
 
                     console.log(`Added friend request from ${senderName}`);
+
+                    try {
+                        if (Notification.permission === "granted") {
+                            const notif = new Notification("Friend Request 👥", {
+                                body: `${senderName} sent you a request`,
+                                icon: avatarUrl,
+                                data: { type: 'friend_request', senderId: req.senderId }
+                            });
+
+                            notif.addEventListener('click', () => {
+                                window.focus();
+                                openSpecificChat(req.senderId);
+                                notif.close();
+                            });
+                        }
+                        showTopRightPopup(`${senderName} sent you a friend request`, "info", avatarUrl);
+                    } catch (err) {
+                        console.warn("Error sending friend request notification:", err);
+                    }
                 }
             }
 
@@ -760,26 +564,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Update unseen badge
     function updateUnseenBadge(friendId, count) {
-        try {
-            const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
-            if (!chatLi) return;
+        const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
+        if (!chatLi) return;
 
-            let badge = chatLi.querySelector(".non-seen-msg");
-            if (!badge) {
-                badge = document.createElement("p");
-                badge.className = "non-seen-msg";
-                chatLi.appendChild(badge);
-            }
+        let badge = chatLi.querySelector(".non-seen-msg");
+        if (!badge) {
+            badge = document.createElement("p");
+            badge.className = "non-seen-msg";
+            chatLi.appendChild(badge);
+        }
 
-            if (count > 0) {
-                badge.textContent = count;
-                badge.style.display = "flex";
-            } else {
-                badge.textContent = "";
-                badge.style.display = "none";
-            }
-        } catch (error) {
-            console.error("Error updating unseen badge:", error);
+        if (count > 0) {
+            badge.textContent = count;
+            badge.style.display = "flex";
+        } else {
+            badge.textContent = "";
+            badge.style.display = "none";
         }
     }
 
@@ -809,33 +609,29 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Schedule message deletion
     function scheduleMessageDeletion(messageId, friendId, delay = 30000) {
-        try {
-            if (deletionTimeouts[messageId]) {
-                clearTimeout(deletionTimeouts[messageId]);
-            }
-
-            deletionTimeouts[messageId] = setTimeout(async () => {
-                try {
-                    const { error } = await client
-                        .from("messages")
-                        .update({ deleted_at: new Date().toISOString() })
-                        .eq("id", messageId);
-
-                    if (error) {
-                        console.error("Error deleting message:", error);
-                    } else {
-                        console.log(`Message ${messageId} deleted after timeout`);
-                        updateLastMessageInChatList(friendId);
-                    }
-                } catch (err) {
-                    console.error("Error in scheduled message deletion:", err);
-                } finally {
-                    delete deletionTimeouts[messageId];
-                }
-            }, delay);
-        } catch (error) {
-            console.error("Error scheduling message deletion:", error);
+        if (deletionTimeouts[messageId]) {
+            clearTimeout(deletionTimeouts[messageId]);
         }
+
+        deletionTimeouts[messageId] = setTimeout(async () => {
+            try {
+                const { error } = await client
+                    .from("messages")
+                    .update({ deleted_at: new Date().toISOString() })
+                    .eq("id", messageId);
+
+                if (error) {
+                    console.error("Error deleting message:", error);
+                } else {
+                    console.log(`Message ${messageId} deleted after timeout`);
+                    updateLastMessageInChatList(friendId);
+                }
+            } catch (err) {
+                console.error("Error in scheduled message deletion:", err);
+            } finally {
+                delete deletionTimeouts[messageId];
+            }
+        }, delay);
     }
 
     // Delete seen messages for chat
@@ -932,14 +728,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!chatList) return;
             chatList.innerHTML = "";
 
-            // Use a Set to deduplicate friend IDs
-            const friendIds = [...new Set(friends.map(f =>
-                f.user1_id === currentUserId ? f.user2_id : f.user1_id
-            ))];
+            const friendIds = friends.map(f => (f.user1_id === currentUserId ? f.user2_id : f.user1_id));
 
             const { data: profiles } = await client
                 .from("user_profiles")
-                .select("user_id, user_name, profile_image_url, is_online, bio")
+                .select("user_id, user_name, profile_image_url, is_online")
                 .in("user_id", friendIds);
 
             // Store all friends data for real-time updates
@@ -1010,8 +803,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 li.addEventListener("click", () => {
                     openSpecificChat(friendId, {
                         user_name: friendName,
-                        profile_image_url: avatarUrl,
-                        bio: allFriends.get(friendId)?.bio || ""
+                        profile_image_url: avatarUrl
                     });
 
                     const chatArea = document.querySelector('.chat-area-main');
@@ -1036,46 +828,42 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Enable friend search
     function enableFriendSearch() {
-        try {
-            const searchInput = document.getElementById("search-friends");
-            const chatList = document.querySelector(".chat-list");
-            if (!searchInput || !chatList) return;
+        const searchInput = document.getElementById("search-friends");
+        const chatList = document.querySelector(".chat-list");
+        if (!searchInput || !chatList) return;
 
-            if (searchInput.dataset.hasListener) return;
-            searchInput.dataset.hasListener = "true";
+        if (searchInput.dataset.hasListener) return;
+        searchInput.dataset.hasListener = "true";
 
-            let timer = null;
-            searchInput.addEventListener("input", (e) => {
-                clearTimeout(timer);
-                timer = setTimeout(() => {
-                    const query = searchInput.value.toLowerCase().trim();
-                    const chats = chatList.querySelectorAll(".chat");
-                    chats.forEach(chat => {
-                        const nameEl = chat.querySelector("h4");
-                        const name = nameEl ? nameEl.textContent.toLowerCase() : "";
-                        chat.style.display = name.includes(query) ? "flex" : "none";
-                    });
+        let timer = null;
+        searchInput.addEventListener("input", (e) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                const query = searchInput.value.toLowerCase().trim();
+                const chats = chatList.querySelectorAll(".chat");
+                chats.forEach(chat => {
+                    const nameEl = chat.querySelector("h4");
+                    const name = nameEl ? nameEl.textContent.toLowerCase() : "";
+                    chat.style.display = name.includes(query) ? "flex" : "none";
+                });
 
-                    if (e.key === 'Enter') {
-                        const visibleChats = Array.from(chats).filter(chat =>
-                            chat.style.display !== 'none'
-                        );
+                if (e.key === 'Enter') {
+                    const visibleChats = Array.from(chats).filter(chat =>
+                        chat.style.display !== 'none'
+                    );
 
-                        if (visibleChats.length === 1) {
-                            const friendId = visibleChats[0].getAttribute('data-friend-id');
-                            const friendName = visibleChats[0].querySelector('h4').textContent;
-                            const friendAvatar = visibleChats[0].querySelector('img').src;
-                            openSpecificChat(friendId, {
-                                user_name: friendName,
-                                profile_image_url: friendAvatar
-                            });
-                        }
+                    if (visibleChats.length === 1) {
+                        const friendId = visibleChats[0].getAttribute('data-friend-id');
+                        const friendName = visibleChats[0].querySelector('h4').textContent;
+                        const friendAvatar = visibleChats[0].querySelector('img').src;
+                        openSpecificChat(friendId, {
+                            user_name: friendName,
+                            profile_image_url: friendAvatar
+                        });
                     }
-                }, 120);
-            });
-        } catch (error) {
-            console.error("Error enabling friend search:", error);
-        }
+                }
+            }, 120);
+        });
     }
 
     // Send message
@@ -1166,84 +954,34 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Linkify function to make URLs clickable
-    function linkify(text) {
-        try {
-            // URL pattern to match http/https URLs
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
-
-            // Replace URLs with anchor tags
-            return text.replace(urlRegex, function (url) {
-                // Create the anchor tag
-                return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">${url}</a>`;
-            });
-        } catch (error) {
-            console.error("Error linkifying text:", error);
-            return text;
-        }
-    }
-
     // Render chat messages
     function renderChatMessages(chatBox, msgs, friendAvatar) {
-        try {
-            if (!chatBox) return;
-            chatBox.innerHTML = "";
+        if (!chatBox) return;
+        chatBox.innerHTML = "";
+        msgs.forEach(msg => {
+            const isMe = msg.sender_id === currentUserId;
+            const msgDiv = document.createElement("div");
+            msgDiv.className = `message ${isMe ? "sent" : "received"}`;
+            msgDiv.setAttribute("data-message-id", msg.id);
 
-            // Add line timing animation
-            const animationDelay = 50; // milliseconds between each message
+            const timeStr = msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit"
+            }) : "";
 
-            msgs.forEach((msg, index) => {
-                const isMe = msg.sender_id === currentUserId;
-                const msgDiv = document.createElement("div");
-                msgDiv.className = `message ${isMe ? "sent" : "received"}`;
-                msgDiv.setAttribute("data-message-id", msg.id);
-
-                // Add animation delay for each message
-                msgDiv.style.animationDelay = `${index * animationDelay}ms`;
-
-                const timeStr = msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit"
-                }) : "";
-
-                // Create message bubble with linkified content
-                const msgBubble = document.createElement("div");
-                msgBubble.className = "msg-bubble";
-
-                const msgText = document.createElement("span");
-                msgText.className = "msg-text";
-                // Use innerHTML instead of textContent to render HTML links
-                msgText.innerHTML = linkify(msg.content);
-
-                const msgMeta = document.createElement("div");
-                msgMeta.className = "msg-meta";
-                msgMeta.innerHTML = `
-                    <small class="msg-time">${timeStr}</small>
-                    ${isMe ? `<small class="seen-status">${msg.seen ? "✓✓" : "✓"}</small>` : ""}
-                `;
-
-                msgBubble.appendChild(msgText);
-                msgBubble.appendChild(msgMeta);
-
-                if (!isMe) {
-                    const avatarImg = document.createElement("img");
-                    avatarImg.src = friendAvatar;
-                    avatarImg.className = "msg-avatar";
-                    avatarImg.style.cssText = "width:25px;height:25px;border-radius:50%;margin-right:6px;";
-                    msgDiv.appendChild(avatarImg);
-                }
-
-                msgDiv.appendChild(msgBubble);
-                chatBox.appendChild(msgDiv);
-            });
-
-            // Scroll to bottom after all messages are rendered
-            setTimeout(() => {
-                chatBox.scrollTop = chatBox.scrollHeight;
-            }, msgs.length * animationDelay);
-        } catch (error) {
-            console.error("Error rendering chat messages:", error);
-        }
+            msgDiv.innerHTML = `
+                ${!isMe ? `<img src="${friendAvatar}" class="msg-avatar" style="width:25px;height:25px;border-radius:50%;margin-right:6px;">` : ""}
+                <div class="msg-bubble">
+                    <span class="msg-text">${msg.content}</span>
+                    <div class="msg-meta">
+                        <small class="msg-time">${timeStr}</small>
+                        ${isMe ? `<small class="seen-status">${msg.seen ? "✓✓" : "✓"}</small>` : ""}
+                    </div>
+                </div>
+            `;
+            chatBox.appendChild(msgDiv);
+        });
+        chatBox.scrollTop = chatBox.scrollHeight;
     }
 
     // Send friend request
@@ -1274,15 +1012,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return showToast("You cannot send a request to yourself.", "warning");
             }
 
-            // Check if already friends
-            const alreadyFriends = await isAlreadyFriend(receiverId);
-            if (alreadyFriends) {
-                hideLoading();
-                showToast(`You are already friends with ${username}`, "info");
-                showTopRightPopup(`You are already friends with ${username}`, "info");
-                return;
-            }
-
             const { data: existing, error: existingError } = await client
                 .from("requests")
                 .select("id, status")
@@ -1303,9 +1032,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     return showToast("You have already sent a request.", "info");
                 }
                 if (existing.status === "accepted") {
-                    showToast(`You are already friends with ${username}`, "info");
                     showTopRightPopup(`You are already friends with ${username}`, "info");
-                    return;
+                    return showToast("You are already friends.", "info");
                 }
                 if (existing.status === "rejected") {
                     showTopRightPopup(`This user rejected your request before`, "warning");
@@ -1343,187 +1071,162 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Update message seen status
     function updateMessageSeenStatus(chatBox, messageId) {
-        try {
-            const chatMessage = chatBox.querySelector(`.message[data-message-id="${messageId}"] .seen-status`);
-            if (chatMessage) {
-                chatMessage.textContent = "✓✓";
-            }
-        } catch (error) {
-            console.error("Error updating message seen status:", error);
+        const chatMessage = chatBox.querySelector(`.message[data-message-id="${messageId}"] .seen-status`);
+        if (chatMessage) {
+            chatMessage.textContent = "✓✓";
         }
     }
 
     // Subscribe to messages
     async function subscribeToMessages(friendId, chatBox, oldMessages, friendAvatar, typingIndicator) {
-        try {
-            function upsertMessageAndRender(oldMessagesArr, msgObj) {
-                const idx = oldMessagesArr.findIndex(m => m.id === msgObj.id);
-                if (idx === -1) {
-                    oldMessagesArr.push(msgObj);
-                } else {
-                    oldMessagesArr[idx] = { ...oldMessagesArr[idx], ...msgObj };
-                }
-                renderChatMessages(chatBox, oldMessagesArr, friendAvatar);
+        function upsertMessageAndRender(oldMessagesArr, msgObj) {
+            const idx = oldMessagesArr.findIndex(m => m.id === msgObj.id);
+            if (idx === -1) {
+                oldMessagesArr.push(msgObj);
+            } else {
+                oldMessagesArr[idx] = { ...oldMessagesArr[idx], ...msgObj };
             }
+            renderChatMessages(chatBox, oldMessagesArr, friendAvatar);
+        }
 
-            const userCache = {};
-            async function getUsername(userId) {
-                if (userCache[userId]) return userCache[userId];
-                try {
-                    const { data, error } = await client
-                        .from("user_profiles")
-                        .select("user_name, profile_image_url")
-                        .eq("user_id", userId)
-                        .maybeSingle();
+        const userCache = {};
+        async function getUsername(userId) {
+            if (userCache[userId]) return userCache[userId];
+            try {
+                const { data, error } = await client
+                    .from("user_profiles")
+                    .select("user_name, profile_image_url")
+                    .eq("user_id", userId)
+                    .maybeSingle();
 
-                    if (error) throw error;
-                    const username = data?.user_name || "Someone";
-                    const avatarUrl = data?.profile_image_url || DEFAULT_PROFILE_IMG;
-                    userCache[userId] = { username, avatarUrl };
-                    return { username, avatarUrl };
-                } catch (err) {
-                    console.error("Error fetching username:", err);
-                    return { username: "Someone", avatarUrl: DEFAULT_PROFILE_IMG };
-                }
+                if (error) throw error;
+                const username = data?.user_name || "Someone";
+                const avatarUrl = data?.profile_image_url || DEFAULT_PROFILE_IMG;
+                userCache[userId] = { username, avatarUrl };
+                return { username, avatarUrl };
+            } catch (err) {
+                console.error("Error fetching username:", err);
+                return { username: "Someone", avatarUrl: DEFAULT_PROFILE_IMG };
             }
+        }
 
-            const channelTopic = `chat:${[currentUserId, friendId].sort().join(":")}`;
-            const msgChannel = client.channel(channelTopic);
+        const channelTopic = `chat:${[currentUserId, friendId].sort().join(":")}`;
+        const msgChannel = client.channel(channelTopic);
 
-            msgChannel.subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`Successfully subscribed to ${channelTopic}`);
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error(`Error subscribing to ${channelTopic}:`, err);
-                } else if (status === 'TIMED_OUT') {
-                    console.warn(`Subscription to ${channelTopic} timed out`);
+        msgChannel.on(
+            "postgres_changes",
+            { event: "INSERT", schema: "public", table: "messages" },
+            async payload => {
+                const newMsg = payload.new;
+                const isRelevant =
+                    (newMsg.sender_id === currentUserId && newMsg.receiver_id === friendId) ||
+                    (newMsg.sender_id === friendId && newMsg.receiver_id === currentUserId);
+                if (!isRelevant) return;
+
+                if (processingMessageIds.has(newMsg.id)) {
+                    return;
                 }
-            });
+                processingMessageIds.add(newMsg.id);
 
-            // Fixed binding - listen to all events and filter in callback
-            msgChannel.on(
-                "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "messages"
-                },
-                async payload => {
-                    const { eventType, new: newRecord, old: oldRecord } = payload;
+                upsertMessageAndRender(oldMessages, newMsg);
+                updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
-                    // Check if this message is relevant to this chat
-                    const isRelevant = (newRecord.sender_id === currentUserId && newRecord.receiver_id === friendId) ||
-                        (newRecord.sender_id === friendId && newRecord.receiver_id === currentUserId);
+                if (newMsg.receiver_id === currentUserId) {
+                    if (currentOpenChatId === friendId) {
+                        try {
+                            await client
+                                .from("messages")
+                                .update({ seen: true })
+                                .eq("id", newMsg.id);
 
-                    if (!isRelevant) return;
-
-                    if (eventType === 'INSERT') {
-                        const newMsg = newRecord;
-                        if (processingMessageIds.has(newMsg.id)) {
-                            return;
-                        }
-                        processingMessageIds.add(newMsg.id);
-
-                        upsertMessageAndRender(oldMessages, newMsg);
-                        updateLastMessage(friendId, newMsg.content, newMsg.created_at);
-
-                        if (newMsg.sender_id === friendId) {
-                            if (currentOpenChatId === friendId) {
-                                try {
-                                    await client
-                                        .from("messages")
-                                        .update({ seen: true })
-                                        .eq("id", newMsg.id);
-
-                                    const idx = oldMessages.findIndex(m => m.id === newMsg.id);
-                                    if (idx !== -1) {
-                                        oldMessages[idx].seen = true;
-                                    }
-                                    renderChatMessages(chatBox, oldMessages, friendAvatar);
-
-                                    unseenCounts[newMsg.sender_id] = 0;
-                                    updateUnseenBadge(newMsg.sender_id, 0);
-                                    scheduleMessageDeletion(newMsg.id, friendId);
-                                } catch (err) {
-                                    console.error("Error marking message as seen:", err);
-                                }
-                            } else {
-                                await updateUnseenCountForFriend(friendId);
-
-                                try {
-                                    const { username, avatarUrl } = await getUsername(newMsg.sender_id);
-                                    showTopRightPopup(`New message from ${username}`, "info", avatarUrl);
-
-                                    if (Notification.permission === "granted") {
-                                        const notif = new Notification(`${username}`, {
-                                            body: newMsg.content,
-                                            icon: avatarUrl,
-                                            data: { type: 'message', senderId: newMsg.sender_id, senderName: username }
-                                        });
-
-                                        notif.addEventListener('click', () => {
-                                            window.focus();
-                                            openSpecificChat(newMsg.sender_id);
-                                            notif.close();
-                                        });
-                                    }
-                                } catch (err) { /* ignore */ }
+                            const idx = oldMessages.findIndex(m => m.id === newMsg.id);
+                            if (idx !== -1) {
+                                oldMessages[idx].seen = true;
                             }
+                            renderChatMessages(chatBox, oldMessages, friendAvatar);
+
+                            unseenCounts[newMsg.sender_id] = 0;
+                            updateUnseenBadge(newMsg.sender_id, 0);
+                            scheduleMessageDeletion(newMsg.id, friendId);
+                        } catch (err) {
+                            console.error("Error marking message as seen:", err);
                         }
+                    } else {
+                        await updateUnseenCountForFriend(friendId);
 
-                        setTimeout(() => {
-                            processingMessageIds.delete(newMsg.id);
-                        }, 1000);
-                    } else if (eventType === 'UPDATE') {
-                        const updated = newRecord;
+                        try {
+                            const { username, avatarUrl } = await getUsername(newMsg.sender_id);
+                            showTopRightPopup(`New message from ${username}`, "info", avatarUrl);
 
-                        if (updated.deleted_at) {
-                            if (updated.receiver_id === currentUserId) {
-                                const idx = oldMessages.findIndex(m => m.id === updated.id);
-                                if (idx !== -1) {
-                                    oldMessages.splice(idx, 1);
-                                    renderChatMessages(chatBox, oldMessages, friendAvatar);
-                                }
+                            if (Notification.permission === "granted") {
+                                const notif = new Notification(`${username}`, {
+                                    body: newMsg.content,
+                                    icon: avatarUrl,
+                                    data: { type: 'message', senderId: newMsg.sender_id, senderName: username }
+                                });
+
+                                notif.addEventListener('click', () => {
+                                    window.focus();
+                                    openSpecificChat(newMsg.sender_id);
+                                    notif.close();
+                                });
                             }
-                            updateLastMessageInChatList(updated.sender_id);
-                            updateLastMessageInChatList(updated.receiver_id);
-
-                            if (currentOpenChatId !== updated.sender_id) {
-                                updateUnseenCountForFriend(updated.sender_id);
-                            }
-                            return;
-                        }
-
-                        const idx = oldMessages.findIndex(m => m.id === updated.id);
-                        if (idx !== -1) {
-                            oldMessages[idx] = { ...oldMessages[idx], ...updated };
-                        }
-
-                        if (updated.sender_id === currentUserId && updated.seen === true) {
-                            updateMessageSeenStatus(chatBox, updated.id);
-                        }
-
-                        if (updated.receiver_id === currentUserId && updated.seen === true) {
-                            unseenCounts[updated.sender_id] = 0;
-                            updateUnseenBadge(updated.sender_id, 0);
-                        }
+                        } catch (err) { /* ignore */ }
                     }
                 }
-            );
 
-            // Rest of the function remains the same...
-            const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
-            let typingChannel = client.channel(typingChannelName);
+                setTimeout(() => {
+                    processingMessageIds.delete(newMsg.id);
+                }, 1000);
+            }
+        );
 
-            typingChannel.subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`Successfully subscribed to ${typingChannelName}`);
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error(`Error subscribing to ${typingChannelName}:`, err);
+        msgChannel.on(
+            "postgres_changes",
+            { event: "UPDATE", schema: "public", table: "messages" },
+            payload => {
+                const updated = payload.new;
+                const isRelevant =
+                    (updated.sender_id === currentUserId && updated.receiver_id === friendId) ||
+                    (updated.sender_id === friendId && updated.receiver_id === currentUserId);
+                if (!isRelevant) return;
+
+                if (updated.deleted_at) {
+                    if (updated.receiver_id === currentUserId) {
+                        const idx = oldMessages.findIndex(m => m.id === updated.id);
+                        if (idx !== -1) {
+                            oldMessages.splice(idx, 1);
+                            renderChatMessages(chatBox, oldMessages, friendAvatar);
+                        }
+                    }
+                    updateLastMessageInChatList(updated.sender_id);
+                    updateLastMessageInChatList(updated.receiver_id);
+
+                    if (currentOpenChatId !== updated.sender_id) {
+                        updateUnseenCountForFriend(updated.sender_id);
+                    }
+                    return;
                 }
-            });
 
-            typingChannel.on("broadcast", { event: "typing" }, payload => {
+                const idx = oldMessages.findIndex(m => m.id === updated.id);
+                if (idx !== -1) {
+                    oldMessages[idx] = { ...oldMessages[idx], ...updated };
+                }
+
+                if (updated.sender_id === currentUserId && updated.seen === true) {
+                    updateMessageSeenStatus(chatBox, updated.id);
+                }
+
+                if (updated.receiver_id === currentUserId && updated.seen === true) {
+                    unseenCounts[updated.sender_id] = 0;
+                    updateUnseenBadge(updated.sender_id, 0);
+                }
+            }
+        );
+
+        const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
+        const typingChannel = client.channel(typingChannelName)
+            .on("broadcast", { event: "typing" }, payload => {
                 if (payload.userId === friendId) {
                     typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
                     setTimeout(async () => {
@@ -1541,97 +1244,74 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             });
 
-            const statusChannelName = `user-status-${friendId}`;
-            let statusChannel = client.channel(statusChannelName);
+        if (statusChannelRef) {
+            try { await client.removeChannel(statusChannelRef); } catch (err) { /* ignore */ }
+            statusChannelRef = null;
+        }
 
-            statusChannel.subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`Successfully subscribed to ${statusChannelName}`);
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error(`Error subscribing to ${statusChannelName}:`, err);
-                }
+        statusChannelRef = client.channel("user_status")
+            .on("postgres_changes", {
+                event: "*",
+                schema: "public",
+                table: "user_profiles",
+                filter: `user_id=eq.${friendId}`
+            }, payload => {
+                const onlineTextElt = typingIndicator;
+                if (onlineTextElt) onlineTextElt.textContent = payload.new?.is_online ? "Online" : "Offline";
             });
 
-            statusChannel.on(
-                "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "user_profiles",
-                    filter: `user_id=eq.${friendId}`
-                },
-                payload => {
-                    const { eventType, new: newRecord } = payload;
+        await msgChannel.subscribe();
+        await typingChannel.subscribe();
+        await statusChannelRef.subscribe();
 
-                    if (eventType === 'UPDATE') {
-                        const onlineTextElt = typingIndicator;
-                        if (onlineTextElt) onlineTextElt.textContent = newRecord?.is_online ? "Online" : "Offline";
-
-                        // Update the online status dot in the friends list
-                        updateFriendUI(friendId);
-                    }
-                }
-            );
-
-            // Store channels for cleanup
-            activeChatChannels[friendId] = {
-                msgChannel,
-                typingChannel,
-                statusChannel
-            };
-
-            return { msgChannel, typingChannel, statusChannel };
-        } catch (error) {
-            console.error("Error subscribing to messages:", error);
-            return null;
-        }
+        return { msgChannel, typingChannel, statusChannelRef };
     }
 
     // Open chat
-    async function openChat(friendId, friendName, friendAvatar, friendBio = "", fromNotification = false) {
-        try {
-            currentOpenChatId = friendId;
+    async function openChat(friendId, friendName, friendAvatar, fromNotification = false) {
+        currentOpenChatId = friendId;
 
-            const chatContainer = document.querySelector("div.chat-area-child");
-            const defaultScreen = document.querySelector(".default");
-            const sidebar = document.querySelector(".sidebar");
-            const messageCon = document.getElementById("message-notification");
+        const chatContainer = document.querySelector("div.chat-area-child");
+        const defaultScreen = document.querySelector(".default");
+        const sidebar = document.querySelector(".sidebar");
+        const messageCon = document.getElementById("message-notification");
 
-            if (!chatContainer || !defaultScreen) {
-                console.error("Missing necessary HTML elements for chat.");
-                return;
-            }
+        if (!chatContainer || !defaultScreen) {
+            console.error("Missing necessary HTML elements for chat.");
+            return;
+        }
 
-            defaultScreen.style.display = "none";
+        defaultScreen.style.display = "none";
+        chatContainer.style.display = "flex";
+
+        const chatHeaderName = chatContainer.querySelector("#chat-header-name");
+        const chatHeaderImg = chatContainer.querySelector(".chat-header img");
+        if (chatHeaderName) chatHeaderName.textContent = friendName || "Unknown";
+        if (chatHeaderImg) chatHeaderImg.src = friendAvatar || DEFAULT_PROFILE_IMG;
+
+        // Add click event to chat header to show user modal
+        const chatHeader = chatContainer.querySelector(".chat-header");
+        if (chatHeader) {
+            const newChatHeader = chatHeader.cloneNode(true);
+            chatHeader.parentNode.replaceChild(newChatHeader, chatHeader);
+            newChatHeader.addEventListener("click", () => {
+                showUserModal(friendId, friendName, friendAvatar);
+            });
+        }
+
+        if (window.innerWidth <= 768 || fromNotification) {
+            if (sidebar) sidebar.style.display = "none";
+            if (messageCon) messageCon.style.display = "none";
             chatContainer.style.display = "flex";
+            defaultScreen.style.display = 'none';
+        } else {
+            if (messageCon) messageCon.style.display = "flex";
+            chatContainer.style.display = "flex";
+        }
 
-            const chatHeaderName = chatContainer.querySelector("#chat-header-name");
-            const chatHeaderImg = chatContainer.querySelector(".chat-header img");
-            if (chatHeaderName) chatHeaderName.textContent = friendName || "Unknown";
-            if (chatHeaderImg) chatHeaderImg.src = friendAvatar || DEFAULT_PROFILE_IMG;
+        showLoading("Loading chat...");
 
-            // Add click event to chat header to show user modal
-            const chatHeader = chatContainer.querySelector(".chat-header img");
-            if (chatHeader) {
-                const newChatHeader = chatHeader.cloneNode(true);
-                chatHeader.parentNode.replaceChild(newChatHeader, chatHeader);
-                newChatHeader.addEventListener("click", () => {
-                    showUserModal(friendId, friendName, friendAvatar, friendBio);
-                });
-            }
-
-            if (window.innerWidth <= 768 || fromNotification) {
-                if (sidebar) sidebar.style.display = "none";
-                if (messageCon) messageCon.style.display = "none";
-                chatContainer.style.display = "flex";
-                defaultScreen.style.display = 'none';
-            } else {
-                if (messageCon) messageCon.style.display = "flex";
-                chatContainer.style.display = "flex";
-            }
-
-            showLoading("Loading chat...");
-
+        try {
             const emojiBtn = chatContainer.querySelector("#emoji-btn");
             const emojiPicker = chatContainer.querySelector("#emoji-picker");
             const input = chatContainer.querySelector("input");
@@ -1699,16 +1379,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             inputSafe.addEventListener("input", () => {
                 sendBtnSafe.disabled = !inputSafe.value.trim();
                 try {
-                    if (typingChannel) {
-                        typingChannel.send({
-                            type: "broadcast",
-                            event: "typing",
-                            payload: {
-                                userId: currentUserId,
-                                userName: "You",
-                            },
-                        });
-                    }
+                    client.channel(typingChannelName).send({
+                        type: "broadcast",
+                        event: "typing",
+                        payload: {
+                            userId: currentUserId,
+                            userName: "You",
+                        },
+                    });
                 } catch (err) {
                     console.error('Something went wrong', err);
                 }
@@ -1738,7 +1416,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     currentOpenChatId = null;
                     await deleteSeenMessagesForChat(friendId);
 
-                    document.getElementById('message-notification').classList.remove("hidden");
+                    document.getElementById('message-notification').classList.remove('hidden');
                     if (window.innerWidth <= 768) {
                         if (sidebar) sidebar.style.display = "flex";
                         if (messageCon) messageCon.style.display = "flex";
@@ -1749,14 +1427,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                         defaultScreen.style.display = "flex";
                     }
 
-                    // Use the cleanup function here
-                    await cleanupSubscriptions(msgChannel, typingChannel, statusChan);
-
-                    // Remove from active channels
-                    if (activeChatChannels[friendId]) {
-                        delete activeChatChannels[friendId];
+                    try {
+                        if (msgChannel) await client.removeChannel(msgChannel);
+                        if (typingChannel) await client.removeChannel(typingChannel);
+                        if (statusChan) await client.removeChannel(statusChan);
+                    } catch (err) {
+                        console.warn("Error removing channels:", err);
                     }
-
                     fetchFriends();
                 });
             }
@@ -1770,79 +1447,43 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Submit friend request
     document.querySelector(".submit-friend")?.addEventListener("click", () => {
-        try {
-            const username = document.querySelector(".friend-input")?.value.trim();
-            sendFriendRequest(username);
-        } catch (error) {
-            console.error("Error handling submit friend request:", error);
-        }
+        const username = document.querySelector(".friend-input")?.value.trim();
+        sendFriendRequest(username);
     });
 
     // Update last message
     function updateLastMessage(friendId, content, createdAt) {
-        try {
-            const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
-            if (!chatLi) return;
+        const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
+        if (!chatLi) return;
 
-            const lastMessageEl = chatLi.querySelector(".last-message");
-            const timeEl = chatLi.querySelector(".time");
+        const lastMessageEl = chatLi.querySelector(".last-message");
+        const timeEl = chatLi.querySelector(".time");
 
-            if (lastMessageEl) lastMessageEl.textContent = content;
-            if (timeEl) {
-                const timeStr = new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-                timeEl.textContent = timeStr;
-            }
+        if (lastMessageEl) lastMessageEl.textContent = content;
+        if (timeEl) {
+            const timeStr = new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            timeEl.textContent = timeStr;
+        }
 
-            const chatList = chatLi.parentElement;
-            if (chatList && chatList.firstChild !== chatLi) {
-                chatList.prepend(chatLi);
-            }
-        } catch (error) {
-            console.error("Error updating last message:", error);
+        const chatList = chatLi.parentElement;
+        if (chatList && chatList.firstChild !== chatLi) {
+            chatList.prepend(chatLi);
         }
     }
 
     // Subscribe to global messages
     async function subscribeToGlobalMessages() {
-        try {
-            const channelName = "global-messages";
-            const channel = client.channel(channelName);
+        if (!window._globalMessageChannel) {
+            window._globalMessageChannel = client.channel("global-messages");
 
-            channel.subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`Successfully subscribed to ${channelName}`);
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error(`Error subscribing to ${channelName}:`, err);
-                    // Retry after delay
-                    setTimeout(() => {
-                        console.log(`Retrying subscription to ${channelName}...`);
-                        subscribeToGlobalMessages();
-                    }, 5000);
-                } else if (status === 'TIMED_OUT') {
-                    console.warn(`Subscription to ${channelName} timed out, retrying...`);
-                    setTimeout(() => {
-                        subscribeToGlobalMessages();
-                    }, 3000);
-                }
-            });
-
-            // Fixed binding - use a single filter without complex conditions
-            channel.on(
+            window._globalMessageChannel.on(
                 "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "messages",
-                    filter: `receiver_id=eq.${currentUserId}`
-                },
+                { event: "INSERT", schema: "public", table: "messages" },
                 async payload => {
-                    const { eventType, new: newRecord, old: oldRecord } = payload;
+                    const newMsg = payload.new;
+                    if (!newMsg || !currentUserId) return;
 
-                    if (eventType === 'INSERT') {
-                        // Handle new messages
-                        const newMsg = newRecord;
-                        if (!newMsg || !currentUserId) return;
-
+                    if (newMsg.receiver_id === currentUserId) {
                         const senderId = newMsg.sender_id;
 
                         if (currentOpenChatId !== senderId) {
@@ -1850,7 +1491,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             updateLastMessage(senderId, newMsg.content, newMsg.created_at);
 
                             try {
-                                const { data: senderProfile } = await client
+                                const { data: senderProfile, error } = await client
                                     .from("user_profiles")
                                     .select("user_name, profile_image_url")
                                     .eq("user_id", senderId)
@@ -1878,330 +1519,276 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 console.warn("Error sending message notification:", err);
                             }
                         }
-                    } else if (eventType === 'UPDATE') {
-                        // Handle updated messages
-                        const updatedMsg = newRecord;
-                        if (!updatedMsg || !currentUserId) return;
+                    }
+                }
+            );
 
-                        if (updatedMsg.deleted_at) {
-                            updateLastMessageInChatList(updatedMsg.sender_id);
-                            updateLastMessageInChatList(updatedMsg.receiver_id);
+            window._globalMessageChannel.on(
+                "postgres_changes",
+                { event: "UPDATE", schema: "public", table: "messages" },
+                payload => {
+                    const updatedMsg = payload.new;
+                    if (!updatedMsg || !currentUserId) return;
 
-                            if (currentOpenChatId !== updatedMsg.sender_id) {
-                                updateUnseenCountForFriend(updatedMsg.sender_id);
-                            }
-                            return;
+                    if (updatedMsg.deleted_at) {
+                        updateLastMessageInChatList(updatedMsg.sender_id);
+                        updateLastMessageInChatList(updatedMsg.receiver_id);
+
+                        if (currentOpenChatId !== updatedMsg.sender_id) {
+                            updateUnseenCountForFriend(updatedMsg.sender_id);
                         }
+                        return;
+                    }
 
-                        if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
-                            const senderId = updatedMsg.sender_id;
+                    if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
+                        const senderId = updatedMsg.sender_id;
 
-                            if (currentOpenChatId !== senderId) {
-                                updateUnseenCountForFriend(senderId);
-                            }
+                        if (currentOpenChatId !== senderId) {
+                            updateUnseenCountForFriend(senderId);
                         }
                     }
                 }
             );
 
-            return channel;
-        } catch (error) {
-            console.error("Error subscribing to global messages:", error);
-            return null;
+            try {
+                await window._globalMessageChannel.subscribe();
+                console.log("Subscribed to global-messages channel.");
+            } catch (err) {
+                console.warn("subscribeToGlobalMessages subscribe failed:", err);
+            }
         }
     }
 
     // Subscribe to friend requests
     async function subscribeToFriendRequests() {
-        try {
+        if (!window._friendRequestChannel) {
             const channelName = `friend-requests-${currentUserId}`;
-            const channel = client.channel(channelName);
+            window._friendRequestChannel = client.channel(channelName);
 
-            channel.subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`Successfully subscribed to ${channelName}`);
-                    fetchFriendRequests();
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error(`Error subscribing to ${channelName}:`, err);
-                } else if (status === 'TIMED_OUT') {
-                    console.warn(`Subscription to ${channelName} timed out`);
-                }
-            });
+            console.log("Setting up friend request subscription for user:", currentUserId);
 
-            // Fixed binding - use a single filter
-            channel.on(
+            window._friendRequestChannel.on(
                 "postgres_changes",
                 {
                     event: "*",
                     schema: "public",
                     table: "requests",
-                    filter: `receiver_id=eq.${currentUserId}`
+                    filter: `or(receiver_id=eq.${currentUserId},sender_id=eq.${currentUserId})`
                 },
-                async payload => {
+                payload => {
+                    console.log("Friend request event received:", payload);
+
                     const { eventType, new: newRecord, old: oldRecord } = payload;
 
                     if (eventType === 'INSERT') {
-                        console.log("Friend request event received:", payload);
-                        if (newRecord.status === "pending") {
-                            console.log("New friend request received:", newRecord);
-
-                            try {
-                                const { data: senderProfile } = await client
-                                    .from("user_profiles")
-                                    .select("user_name, profile_image_url")
-                                    .eq("user_id", newRecord.sender_id)
-                                    .maybeSingle();
-
-                                const senderName = senderProfile?.user_name || "Someone";
-                                const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
-
-                                showTopRightPopup(`${senderName} sent you a friend request`, "info", senderAvatar);
-
-                                if (Notification.permission === "granted") {
-                                    const notif = new Notification("Friend Request 👥", {
-                                        body: `${senderName} sent you a request`,
-                                        icon: senderAvatar,
-                                        data: { type: 'friend_request', senderId: newRecord.sender_id }
-                                    });
-
-                                    notif.addEventListener('click', () => {
-                                        window.focus();
-                                        openSpecificChat(newRecord.sender_id);
-                                        notif.close();
-                                    });
-                                }
-                            } catch (err) {
-                                console.error("Error fetching sender profile for notification:", err);
-                            }
-
+                        console.log("New friend request received:", newRecord);
+                        if (newRecord.receiver_id === currentUserId && newRecord.status === "pending") {
+                            showTopRightPopup("You have a new friend request!", "info");
                             fetchFriendRequests();
                         }
                     } else if (eventType === 'UPDATE') {
-                        console.log("Friend request update event received:", payload);
-                        if (newRecord.status === "accepted") {
-                            if (newRecord.sender_id === currentUserId) {
-                                showTopRightPopup("Your friend request was accepted!", "success");
-                            } else {
-                                showTopRightPopup("You accepted a friend request!", "success");
+                        console.log("Friend request updated:", newRecord);
+                        if (newRecord.receiver_id === currentUserId || newRecord.sender_id === currentUserId) {
+                            if (newRecord.status === "accepted") {
+                                if (newRecord.receiver_id === currentUserId) {
+                                    showTopRightPopup("Your friend request was accepted!", "success");
+                                } else {
+                                    showTopRightPopup("You accepted a friend request!", "success");
+                                }
+                                fetchFriends();
+                            } else if (newRecord.status === "rejected") {
+                                if (newRecord.receiver_id === currentUserId) {
+                                    showTopRightPopup("Your friend request was rejected", "warning");
+                                } else {
+                                    showTopRightPopup("You rejected a friend request", "info");
+                                }
                             }
-                            fetchFriends();
-                        } else if (newRecord.status === "rejected") {
-                            if (newRecord.sender_id === currentUserId) {
-                                showTopRightPopup("Your friend request was rejected", "warning");
-                            } else {
-                                showTopRightPopup("You rejected a friend request", "info");
-                            }
+                            fetchFriendRequests();
                         }
-                        fetchFriendRequests();
                     } else if (eventType === 'DELETE') {
-                        console.log("Friend request deletion event received:", payload);
-                        fetchFriendRequests();
+                        console.log("Friend request deleted:", oldRecord);
+                        if (oldRecord.receiver_id === currentUserId || oldRecord.sender_id === currentUserId) {
+                            fetchFriendRequests();
+                        }
                     }
                 }
             );
 
-            return channel;
-        } catch (error) {
-            console.error("Error subscribing to friend requests:", error);
-            return null;
+            try {
+                const status = await window._friendRequestChannel.subscribe((status) => {
+                    console.log("Friend request subscription status:", status);
+
+                    if (status === 'SUBSCRIBED') {
+                        console.log("Successfully subscribed to friend requests");
+                    } else if (status === 'CHANNEL_ERROR') {
+                        console.error("Error subscribing to friend requests");
+                        setTimeout(() => {
+                            console.log("Attempting to resubscribe to friend requests...");
+                            subscribeToFriendRequests();
+                        }, 5000);
+                    }
+                });
+
+                console.log("Friend request subscription status:", status);
+            } catch (err) {
+                console.error("Error setting up friend request subscription:", err);
+            }
+        } else {
+            console.log("Friend request channel already exists");
         }
     }
 
     // Subscribe to friends updates
     async function subscribeToFriendsUpdates() {
-        try {
-            const channelName = "friends-updates";
-            const channel = client.channel(channelName);
+        if (!window._friendsUpdatesChannel) {
+            window._friendsUpdatesChannel = client.channel("friends-updates");
 
-            channel.subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`Successfully subscribed to ${channelName}`);
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error(`Error subscribing to ${channelName}:`, err);
-                } else if (status === 'TIMED_OUT') {
-                    console.warn(`Subscription to ${channelName} timed out`);
-                }
-            });
-
-            // Fixed binding - listen to all events without filter
-            channel.on(
+            window._friendsUpdatesChannel.on(
                 "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "friends"
-                },
+                { event: "*", schema: "public", table: "friends" },
                 payload => {
+                    console.log("Friends update event received:", payload);
+
                     const { eventType, new: newRecord, old: oldRecord } = payload;
 
+                    // Check if this update is relevant to current user
+                    const isRelevant = newRecord && (
+                        newRecord.user1_id === currentUserId ||
+                        newRecord.user2_id === currentUserId
+                    ) || oldRecord && (
+                        oldRecord.user1_id === currentUserId ||
+                        oldRecord.user2_id === currentUserId
+                    );
+
+                    if (!isRelevant) return;
+
                     if (eventType === 'INSERT') {
-                        console.log("Friends insert event received:", payload);
-                        const isRelevant = newRecord && (
-                            newRecord.user1_id === currentUserId ||
-                            newRecord.user2_id === currentUserId
-                        );
-
-                        if (isRelevant) {
-                            console.log("New friend added:", newRecord);
-                            fetchFriends();
-                        }
+                        // New friend added
+                        console.log("New friend added:", newRecord);
+                        fetchFriends();
                     } else if (eventType === 'DELETE') {
-                        console.log("Friends delete event received:", payload);
-                        const isRelevant = oldRecord && (
-                            oldRecord.user1_id === currentUserId ||
-                            oldRecord.user2_id === currentUserId
-                        );
-
-                        if (isRelevant) {
-                            console.log("Friend removed:", oldRecord);
-                            fetchFriends();
-                        }
+                        // Friend removed
+                        console.log("Friend removed:", oldRecord);
+                        fetchFriends();
                     }
                 }
             );
 
-            return channel;
-        } catch (error) {
-            console.error("Error subscribing to friends updates:", error);
-            return null;
+            try {
+                await window._friendsUpdatesChannel.subscribe();
+                console.log("Subscribed to friends updates channel.");
+            } catch (err) {
+                console.warn("subscribeToFriendsUpdates subscribe failed:", err);
+            }
         }
     }
 
     // Subscribe to user profiles updates
     async function subscribeToUserProfilesUpdates() {
-        try {
-            const channelName = "user-profiles-updates";
-            const channel = client.channel(channelName);
+        if (!window._userProfilesUpdatesChannel) {
+            window._userProfilesUpdatesChannel = client.channel("user-profiles-updates");
 
-            channel.subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`Successfully subscribed to ${channelName}`);
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error(`Error subscribing to ${channelName}:`, err);
-                } else if (status === 'TIMED_OUT') {
-                    console.warn(`Subscription to ${channelName} timed out`);
-                }
-            });
-
-            // Fixed binding - listen to all events without filter
-            channel.on(
+            window._userProfilesUpdatesChannel.on(
                 "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "user_profiles"
-                },
+                { event: "UPDATE", schema: "public", table: "user_profiles" },
                 payload => {
-                    const { eventType, new: newRecord } = payload;
+                    console.log("User profile update event received:", payload);
 
-                    if (eventType === 'UPDATE') {
-                        console.log("User profile update event received:", payload);
+                    const { new: newRecord } = payload;
 
-                        // Update friend data in our cache if it's a friend
-                        if (allFriends.has(newRecord.user_id)) {
-                            allFriends.set(newRecord.user_id, {
-                                ...allFriends.get(newRecord.user_id),
-                                ...newRecord
-                            });
+                    // Update friend data in our cache if it's a friend
+                    if (allFriends.has(newRecord.user_id)) {
+                        allFriends.set(newRecord.user_id, {
+                            ...allFriends.get(newRecord.user_id),
+                            ...newRecord
+                        });
 
-                            // Update UI for this friend
-                            updateFriendUI(newRecord.user_id);
-                        }
+                        // Update UI for this friend
+                        updateFriendUI(newRecord.user_id);
+                    }
 
-                        // If current user's profile was updated, refresh avatar
-                        if (newRecord.user_id === currentUserId) {
-                            fetchCurrentUserAvatar();
-                        }
+                    // If current user's profile was updated, refresh avatar
+                    if (newRecord.user_id === currentUserId) {
+                        fetchCurrentUserAvatar();
                     }
                 }
             );
 
-            return channel;
-        } catch (error) {
-            console.error("Error subscribing to user profiles updates:", error);
-            return null;
+            try {
+                await window._userProfilesUpdatesChannel.subscribe();
+                console.log("Subscribed to user profiles updates channel.");
+            } catch (err) {
+                console.warn("subscribeToUserProfilesUpdates subscribe failed:", err);
+            }
         }
     }
 
     // Update friend UI in real-time
     function updateFriendUI(friendId) {
-        try {
-            const friendData = allFriends.get(friendId);
-            if (!friendData) return;
+        const friendData = allFriends.get(friendId);
+        if (!friendData) return;
 
-            const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
-            if (!chatLi) return;
+        const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
+        if (!chatLi) return;
 
-            // Update online status
-            const avatarWrapper = chatLi.querySelector(".avatar-wrapper");
-            if (avatarWrapper) {
-                // Remove existing online dot
-                const existingDot = avatarWrapper.querySelector(".online-dot");
-                if (existingDot) existingDot.remove();
+        // Update online status
+        const avatarWrapper = chatLi.querySelector(".avatar-wrapper");
+        if (avatarWrapper) {
+            // Remove existing online dot
+            const existingDot = avatarWrapper.querySelector(".online-dot");
+            if (existingDot) existingDot.remove();
 
-                // Add online dot if friend is online
-                if (friendData.is_online) {
-                    const onlineDot = document.createElement("span");
-                    onlineDot.className = "online-dot";
-                    avatarWrapper.appendChild(onlineDot);
-                }
+            // Add online dot if friend is online
+            if (friendData.is_online) {
+                const onlineDot = document.createElement("span");
+                onlineDot.className = "online-dot";
+                avatarWrapper.appendChild(onlineDot);
+            }
+        }
+
+        // Update profile image if changed
+        const avatarImg = chatLi.querySelector(".avatar-wrapper img");
+        if (avatarImg && friendData.profile_image_url) {
+            avatarImg.src = friendData.profile_image_url;
+        }
+
+        // Update username if changed
+        const nameEl = chatLi.querySelector("h4");
+        if (nameEl && friendData.user_name) {
+            nameEl.textContent = friendData.user_name;
+        }
+
+        // If this is the currently open chat, update the chat header as well
+        if (currentOpenChatId === friendId) {
+            const chatHeaderName = document.querySelector("#chat-header-name");
+            const chatHeaderImg = document.querySelector(".chat-header img");
+
+            if (chatHeaderName && friendData.user_name) {
+                chatHeaderName.textContent = friendData.user_name;
             }
 
-            // Update profile image if changed
-            const avatarImg = chatLi.querySelector(".avatar-wrapper img");
-            if (avatarImg && friendData.profile_image_url) {
-                avatarImg.src = friendData.profile_image_url;
+            if (chatHeaderImg && friendData.profile_image_url) {
+                chatHeaderImg.src = friendData.profile_image_url;
             }
-
-            // Update username if changed
-            const nameEl = chatLi.querySelector("h4");
-            if (nameEl && friendData.user_name) {
-                nameEl.textContent = friendData.user_name;
-            }
-
-            // If this is the currently open chat, update the chat header as well
-            if (currentOpenChatId === friendId) {
-                const chatHeaderName = document.querySelector("#chat-header-name");
-                const chatHeaderImg = document.querySelector(".chat-header img");
-                const typingIndicator = document.querySelector("#typing-indicator");
-
-                if (chatHeaderName && friendData.user_name) {
-                    chatHeaderName.textContent = friendData.user_name;
-                }
-
-                if (chatHeaderImg && friendData.profile_image_url) {
-                    chatHeaderImg.src = friendData.profile_image_url;
-                }
-
-                if (typingIndicator) {
-                    typingIndicator.textContent = friendData.is_online ? "Online" : "Offline";
-                }
-            }
-        } catch (error) {
-            console.error("Error updating friend UI:", error);
         }
     }
 
     // Handle notification redirect
     function handleNotificationRedirect() {
-        try {
-            if (!currentOpenChatId && notificationData.type === 'message' && notificationData.senderId) {
-                client
-                    .from("user_profiles")
-                    .select("user_name, profile_image_url")
-                    .eq("user_id", notificationData.senderId)
-                    .maybeSingle()
-                    .then(({ data, error }) => {
-                        if (!error && data) {
-                            openChat(notificationData.senderId, data.user_name, data.profile_image_url, "", true);
-                        }
-                    });
-            }
-
-            notificationData = {};
-        } catch (error) {
-            console.error("Error handling notification redirect:", error);
+        if (!currentOpenChatId && notificationData.type === 'message' && notificationData.senderId) {
+            client
+                .from("user_profiles")
+                .select("user_name, profile_image_url")
+                .eq("user_id", notificationData.senderId)
+                .maybeSingle()
+                .then(({ data, error }) => {
+                    if (!error && data) {
+                        openChat(notificationData.senderId, data.user_name, data.profile_image_url, true);
+                    }
+                });
         }
+
+        notificationData = {};
     }
 
     // Profile elements
@@ -2434,385 +2021,278 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Profile pic click handler
     profilePic?.addEventListener("click", async () => {
+        if (!profilePopup) return;
+        profilePopup.classList.remove("hidden");
+
         try {
-            if (!profilePopup) return;
-            showModal("profile-popup");
+            const { data: profile, error } = await client
+                .from("user_profiles")
+                .select("profile_image_url, bio, user_name")
+                .eq("user_id", currentUserId)
+                .limit(1)
+                .maybeSingle();
 
-            try {
-                const { data: profile, error } = await client
-                    .from("user_profiles")
-                    .select("profile_image_url, bio, user_name")
-                    .eq("user_id", currentUserId)
-                    .limit(1)
-                    .maybeSingle();
+            if (error) throw error;
 
-                if (error) throw error;
+            profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
+            bioInput.value = profile?.bio || "";
+            profileUsername.textContent = profile?.user_name || "Unknown User";
+            newUsernameInput.value = profile?.user_name || "";
 
-                profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
-                bioInput.value = profile?.bio || "";
-                profileUsername.textContent = profile?.user_name || "Unknown User";
-                newUsernameInput.value = profile?.user_name || "";
-
-                if (bioCharCountEl) bioCharCountEl.textContent = bioInput.value.length;
-                if (nameCharCountEl) nameCharCountEl.textContent = newUsernameInput.value.length;
-            } catch (err) {
-                console.error("Error loading profile:", err);
-                showToast("Failed to load profile details.", "error");
-            }
-        } catch (error) {
-            console.error("Error handling profile pic click:", error);
+            if (bioCharCountEl) bioCharCountEl.textContent = bioInput.value.length;
+            if (nameCharCountEl) nameCharCountEl.textContent = newUsernameInput.value.length;
+        } catch (err) {
+            console.error("Error loading profile:", err);
+            showToast("Failed to load profile details.", "error");
         }
     });
 
     closeProfile?.addEventListener("click", () => {
-        try {
-            hideModal("profile-popup");
-        } catch (error) {
-            console.error("Error handling close profile click:", error);
-        }
+        profilePopup?.classList.add("hidden");
     });
 
     profileUpload?.addEventListener("change", (e) => {
-        try {
-            const file = e.target.files && e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                    profilePreview.src = ev.target.result;
-                };
-                reader.readAsDataURL(file);
-            }
-        } catch (error) {
-            console.error("Error handling profile upload change:", error);
+        const file = e.target.files && e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                profilePreview.src = ev.target.result;
+            };
+            reader.readAsDataURL(file);
         }
     });
 
     saveProfileBtn?.addEventListener("click", async () => {
+        const originalContent = saveProfileBtn.innerHTML;
+
+        saveProfileBtn.disabled = true;
+        saveProfileBtn.innerHTML = '';
+        saveProfileBtn.appendChild(createLoader());
+
         try {
-            const originalContent = saveProfileBtn.innerHTML;
+            let imageUrl = profilePreview?.src || DEFAULT_PROFILE_IMG;
+            const bio = bioInput?.value.trim() || "";
 
-            saveProfileBtn.disabled = true;
-            saveProfileBtn.innerHTML = '';
-            saveProfileBtn.appendChild(createLoader());
+            const file = profileUpload?.files[0];
+            if (file) {
+                const fileName = `${currentUserId}_${Date.now()}_${file.name}`;
+                const { data, error: uploadError } = await client.storage
+                    .from('avatars')
+                    .upload(fileName, file, {
+                        cacheControl: '3600',
+                        upsert: false
+                    });
 
-            try {
-                let imageUrl = profilePreview?.src || DEFAULT_PROFILE_IMG;
-                const bio = bioInput?.value.trim() || "";
+                if (uploadError) throw uploadError;
 
-                const file = profileUpload?.files[0];
-                if (file) {
-                    const fileName = `${currentUserId}_${Date.now()}_${file.name}`;
-                    const { data, error: uploadError } = await client.storage
-                        .from('avatars')
-                        .upload(fileName, file, {
-                            cacheControl: '3600',
-                            upsert: false
-                        });
-
-                    if (uploadError) throw uploadError;
-
-                    const { data: publicUrlData } = client.storage.from('avatars').getPublicUrl(data.path);
-                    imageUrl = publicUrlData.publicUrl;
-                }
-
-                const { error } = await client
-                    .from("user_profiles")
-                    .update({ profile_image_url: imageUrl, bio })
-                    .eq("user_id", currentUserId);
-
-                if (error) throw error;
-
-                saveProfileBtn.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                        <path d="M20 6L9 17l-5 5"></path>
-                    </svg>
-                    Saved!
-                `;
-
-                showToast("Profile updated successfully!", "success");
-                showTopRightPopup("Profile updated successfully!", "success");
-
-                setTimeout(() => {
-                    saveProfileBtn.disabled = false;
-                    saveProfileBtn.innerHTML = originalContent;
-                    hideModal("profile-popup");
-                }, 1500);
-
-                fetchCurrentUserAvatar();
-                fetchFriends();
-            } catch (err) {
-                console.error("Error updating profile:", err);
-                showToast(`Failed to update profile: ${err.message || err}`, "error");
-
-                saveProfileBtn.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="15" y1="9" x2="9" y2="15"></line>
-                        <line x1="9" y1="9" x2="15" y2="15"></line>
-                    </svg>
-                    Error
-                `;
-
-                setTimeout(() => {
-                    saveProfileBtn.disabled = false;
-                    saveProfileBtn.innerHTML = originalContent;
-                }, 2000);
+                const { data: publicUrlData } = client.storage.from('avatars').getPublicUrl(data.path);
+                imageUrl = publicUrlData.publicUrl;
             }
-        } catch (error) {
-            console.error("Error handling save profile click:", error);
+
+            const { error } = await client
+                .from("user_profiles")
+                .update({ profile_image_url: imageUrl, bio })
+                .eq("user_id", currentUserId);
+
+            if (error) throw error;
+
+            saveProfileBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                    <path d="M20 6L9 17l-5 5"></path>
+                </svg>
+                Saved!
+            `;
+
+            showToast("Profile updated successfully!", "success");
+            showTopRightPopup("Profile updated successfully!", "success");
+
+            setTimeout(() => {
+                saveProfileBtn.disabled = false;
+                saveProfileBtn.innerHTML = originalContent;
+                profilePopup?.classList.add("hidden");
+            }, 1500);
+
+            fetchCurrentUserAvatar();
+            fetchFriends();
+        } catch (err) {
+            console.error("Error updating profile:", err);
+            showToast(`Failed to update profile: ${err.message || err}`, "error");
+
+            saveProfileBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                Error
+            `;
+
+            setTimeout(() => {
+                saveProfileBtn.disabled = false;
+                saveProfileBtn.innerHTML = originalContent;
+            }, 2000);
         }
     });
 
     logoutBtn?.addEventListener("click", async () => {
-        try {
-            showConfirmPopup(
-                "Are you sure you want to logout?",
-                async () => {
-                    showLoading("Logging out...");
-                    try {
-                        await setUserOnlineStatus(false);
-                        await client.auth.signOut();
-                        showToast("Logged out!", "info");
-                        showTopRightPopup("Logged out successfully!", "info");
-                        window.location.href = "signup.html";
-                    } catch (err) {
-                        console.error("Logout error:", err);
-                        showToast("Logout failed.", "error");
-                    } finally {
-                        hideLoading();
-                    }
-                },
-                () => {
+        showConfirmPopup(
+            "Are you sure you want to logout?",
+            async () => {
+                showLoading("Logging out...");
+                try {
+                    await setUserOnlineStatus(false);
+                    await client.auth.signOut();
+                    showToast("Logged out!", "info");
+                    showTopRightPopup("Logged out successfully!", "info");
+                    window.location.href = "signup.html";
+                } catch (err) {
+                    console.error("Logout error:", err);
+                    showToast("Logout failed.", "error");
+                } finally {
+                    hideLoading();
                 }
-            );
-        } catch (error) {
-            console.error("Error handling logout click:", error);
-        }
+            },
+            () => {
+            }
+        );
     });
 
     changeUsernameBtn?.addEventListener("click", () => {
-        try {
-            hideModal("profile-popup");
-            showModal("username-popup");
-        } catch (error) {
-            console.error("Error handling change username click:", error);
-        }
+        profilePopup?.classList.add("hidden");
+        usernamePopup?.classList.remove("hidden");
     });
 
     closeUsername?.addEventListener("click", () => {
-        try {
-            hideModal("username-popup");
-        } catch (error) {
-            console.error("Error handling close username click:", error);
-        }
+        usernamePopup?.classList.add("hidden");
     });
     cancelUsername?.addEventListener("click", () => {
-        try {
-            hideModal("username-popup");
-        } catch (error) {
-            console.error("Error handling cancel username click:", error);
-        }
+        usernamePopup?.classList.add("hidden");
     });
 
     saveUsernameBtn?.addEventListener("click", async () => {
+        const newUsername = newUsernameInput?.value.trim();
+        if (!newUsername) {
+            showToast("Username cannot be empty!", "error");
+            return;
+        }
+
+        const originalContent = saveUsernameBtn.innerHTML;
+
+        saveUsernameBtn.disabled = true;
+        saveUsernameBtn.innerHTML = '';
+        saveUsernameBtn.appendChild(createLoader());
+
         try {
-            const newUsername = newUsernameInput?.value.trim();
-            if (!newUsername) {
-                showToast("Username cannot be empty!", "error");
-                return;
-            }
+            const { error } = await client
+                .from("user_profiles")
+                .update({ user_name: newUsername })
+                .eq("user_id", currentUserId);
 
-            const originalContent = saveUsernameBtn.innerHTML;
+            if (error) throw error;
 
-            saveUsernameBtn.disabled = true;
-            saveUsernameBtn.innerHTML = '';
-            saveUsernameBtn.appendChild(createLoader());
+            saveUsernameBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                    <path d="M20 6L9 17l-5 5"></path>
+                </svg>
+                Saved!
+            `;
 
-            try {
-                const { error } = await client
-                    .from("user_profiles")
-                    .update({ user_name: newUsername })
-                    .eq("user_id", currentUserId);
+            showToast("Username updated!", "success");
+            showTopRightPopup("Username updated successfully!", "success");
+            profileUsername.textContent = newUsername;
 
-                if (error) throw error;
+            setTimeout(() => {
+                saveUsernameBtn.disabled = false;
+                saveUsernameBtn.innerHTML = originalContent;
+                usernamePopup?.classList.add("hidden");
+            }, 1500);
 
-                saveUsernameBtn.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                        <path d="M20 6L9 17l-5 5"></path>
-                    </svg>
-                    Saved!
-                `;
+            fetchFriends();
+        } catch (err) {
+            console.error("Error updating username:", err);
+            showToast(`Failed to update username: ${err.message || err}`, "error");
 
-                showToast("Username updated!", "success");
-                showTopRightPopup("Username updated successfully!", "success");
-                profileUsername.textContent = newUsername;
+            saveUsernameBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                Error
+            `;
 
-                setTimeout(() => {
-                    saveUsernameBtn.disabled = false;
-                    saveUsernameBtn.innerHTML = originalContent;
-                    hideModal("username-popup");
-                }, 1500);
-
-                fetchFriends();
-            } catch (err) {
-                console.error("Error updating username:", err);
-                showToast(`Failed to update username: ${err.message || err}`, "error");
-
-                saveUsernameBtn.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="15" y1="9" x2="9" y2="15"></line>
-                        <line x1="9" y1="9" x2="15" y2="15"></line>
-                    </svg>
-                    Error
-                `;
-
-                setTimeout(() => {
-                    saveUsernameBtn.disabled = false;
-                    saveUsernameBtn.innerHTML = originalContent;
-                }, 2000);
-            }
-        } catch (error) {
-            console.error("Error handling save username click:", error);
+            setTimeout(() => {
+                saveUsernameBtn.disabled = false;
+                saveUsernameBtn.innerHTML = originalContent;
+            }, 2000);
         }
     });
 
     // Show confirm popup
     function showConfirmPopup(message, onConfirm, onCancel) {
-        try {
-            const popup = document.getElementById("notification-popup");
-            const messageEl = document.getElementById("popup-message");
-            const closeBtn = document.getElementById("popup-close");
+        const popup = document.getElementById("notification-popup");
+        const messageEl = document.getElementById("popup-message");
+        const closeBtn = document.getElementById("popup-close");
 
-            if (!popup || !messageEl) return;
+        if (!popup || !messageEl) return;
 
-            const buttonsContainer = document.createElement('div');
-            buttonsContainer.className = 'modal-popup-footer';
-            buttonsContainer.innerHTML = `
-                <button id="popup-confirm" class="modal-btn-confirm">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                        <path d="M20 6L9 17l-5 5"></path>
-                    </svg>
-                    Yes
-                </button>
-                <button id="popup-cancel" class="modal-btn-cancel">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="15" y1="9" x2="9" y2="15"></line>
-                        <line x1="9" y1="9" x2="15" y2="15"></line>
-                    </svg>
-                    No
-                </button>
-            `;
+        const buttonsContainer = document.createElement('div');
+        buttonsContainer.className = 'modal-popup-buttons';
+        buttonsContainer.innerHTML = `
+            <button id="popup-confirm" class="modal-btn-confirm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                    <path d="M20 6L9 17l-5 5"></path>
+                </svg>
+                Yes
+            </button>
+            <button id="popup-cancel" class="modal-btn-cancel">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                No
+            </button>
+        `;
 
-            const existingButtons = popup.querySelector('.modal-popup-footer');
-            if (existingButtons) {
-                existingButtons.remove();
-            }
-
-            messageEl.textContent = message;
-            popup.appendChild(buttonsContainer);
-            popup.classList.remove("hidden", "error", "success", "info");
-            popup.classList.add("show", "confirm");
-
-            const confirmBtn = document.getElementById('popup-confirm');
-            const cancelBtn = document.getElementById('popup-cancel');
-
-            const handleClose = () => {
-                hideModal("notification-popup");
-                buttonsContainer.remove();
-            };
-
-            const newClose = closeBtn.cloneNode(true);
-            closeBtn.parentNode.replaceChild(newClose, closeBtn);
-            newClose.addEventListener('click', () => {
-                handleClose();
-                if (onCancel) onCancel();
-            });
-
-            confirmBtn.addEventListener('click', () => {
-                handleClose();
-                if (onConfirm) onConfirm();
-            });
-
-            cancelBtn.addEventListener('click', () => {
-                handleClose();
-                if (onCancel) onCancel();
-            });
-        } catch (error) {
-            console.error("Error showing confirm popup:", error);
+        const existingButtons = popup.querySelector('.modal-popup-buttons');
+        if (existingButtons) {
+            existingButtons.remove();
         }
-    }
 
-    // User modal function
-    function showUserModal(userId, userName, userAvatar, userBio = "") {
-        try {
-            const modal = document.getElementById("user-modal");
-            if (!modal) return;
+        messageEl.textContent = message;
+        popup.appendChild(buttonsContainer);
+        popup.classList.remove("hidden", "error", "success", "info");
+        popup.classList.add("show", "confirm");
 
-            // Set initial values
-            document.getElementById("user-modal-avatar").src = userAvatar || DEFAULT_PROFILE_IMG;
-            document.getElementById("user-modal-username").textContent = userName || "Unknown User";
-            document.getElementById("user-modal-bio").textContent = userBio || "No bio available.";
-            document.getElementById("user-modal-status").textContent = "Checking status...";
-            document.getElementById("user-modal-status").className = "user-modal-status";
+        const confirmBtn = document.getElementById('popup-confirm');
+        const cancelBtn = document.getElementById('popup-cancel');
 
-            // Fetch and update profile data
-            getUserProfile(userId).then(profile => {
-                if (profile) {
-                    document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
-                    const statusElement = document.getElementById("user-modal-status");
-                    statusElement.textContent = profile.is_online ? "Online" : "Offline";
-                    statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
-                } else {
-                    document.getElementById("user-modal-bio").textContent = "No bio available.";
-                    const statusElement = document.getElementById("user-modal-status");
-                    statusElement.textContent = "Offline";
-                    statusElement.className = "user-modal-status offline";
-                }
-            }).catch(err => {
-                console.error("Error fetching user profile:", err);
-                document.getElementById("user-modal-bio").textContent = "Error loading bio.";
-                const statusElement = document.getElementById("user-modal-status");
-                statusElement.textContent = "Offline";
-                statusElement.className = "user-modal-status offline";
-            });
+        const handleClose = () => {
+            popup.classList.add("hidden");
+            popup.classList.remove('show');
+            buttonsContainer.remove();
+        };
 
-            // Show modal
-            showModal("user-modal");
+        const newClose = closeBtn.cloneNode(true);
+        closeBtn.parentNode.replaceChild(newClose, closeBtn);
+        newClose.addEventListener('click', () => {
+            handleClose();
+            if (onCancel) onCancel();
+        });
 
-            // Add event listeners
-            const closeModal = () => hideModal("user-modal");
-            modal.querySelector(".user-modal-close").addEventListener("click", closeModal);
-            modal.querySelector("#user-modal-close-btn").addEventListener("click", closeModal);
+        confirmBtn.addEventListener('click', () => {
+            handleClose();
+            if (onConfirm) onConfirm();
+        });
 
-            modal.querySelector("#user-modal-message-btn").addEventListener("click", () => {
-                closeModal();
-                openSpecificChat(userId);
-            });
-        } catch (error) {
-            console.error("Error showing user modal:", error);
-        }
-    }
-
-    // Get user profile data
-    async function getUserProfile(userId) {
-        try {
-            const { data, error } = await client
-                .from("user_profiles")
-                .select("user_name, profile_image_url, bio, is_online")
-                .eq("user_id", userId)
-                .maybeSingle();
-
-            if (error) throw error;
-            return data;
-        } catch (err) {
-            console.error("Error fetching user profile:", err);
-            return null;
-        }
+        cancelBtn.addEventListener('click', () => {
+            handleClose();
+            if (onCancel) onCancel();
+        });
     }
 
     // Initialize database schema
@@ -2851,7 +2331,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             const { data, error } = await client
                 .from("user_profiles")
-                .select("user_name, profile_image_url, bio")
+                .select("user_name, profile_image_url")
                 .eq("user_id", userId)
                 .maybeSingle();
 
@@ -2869,75 +2349,62 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Open specific chat
     async function openSpecificChat(userId, profile = null) {
-        try {
-            if (!currentUserId) {
-                const user = await getCurrentUser();
-                if (!user) {
-                    showToast("You must be logged in to open a chat", "error");
-                    return;
-                }
-            }
-
-            if (currentOpenChatId === userId) {
+        if (!currentUserId) {
+            const user = await getCurrentUser();
+            if (!user) {
+                showToast("You must be logged in to open a chat", "error");
                 return;
             }
-
-            let userProfile = profile;
-            if (!userProfile) {
-                userProfile = await getUserProfile(userId);
-                if (!userProfile) {
-                    showToast("User not found", "error");
-                    return;
-                }
-            }
-
-            openChat(userId, userProfile.user_name, userProfile.profile_image_url, userProfile.bio);
-        } catch (error) {
-            console.error("Error opening specific chat:", error);
         }
+
+        if (currentOpenChatId === userId) {
+            return;
+        }
+
+        let userProfile = profile;
+        if (!userProfile) {
+            userProfile = await getUserProfile(userId);
+            if (!userProfile) {
+                showToast("User not found", "error");
+                return;
+            }
+        }
+
+        openChat(userId, userProfile.user_name, userProfile.profile_image_url);
     }
 
     // Generate chat link
     function generateChatLink(friendId) {
-        try {
-            const baseUrl = window.location.origin + window.location.pathname;
-            return `${baseUrl}?chat=${friendId}`;
-        } catch (error) {
-            console.error("Error generating chat link:", error);
-            return "#";
-        }
+        const baseUrl = window.location.origin + window.location.pathname;
+        return `${baseUrl}?chat=${friendId}`;
     }
 
     // Open chat from URL
     function openChatFromUrl() {
-        try {
-            const urlParams = new URLSearchParams(window.location.search);
-            const friendId = urlParams.get('chat');
+        const urlParams = new URLSearchParams(window.location.search);
+        const friendId = urlParams.get('chat');
 
-            if (friendId && currentUserId) {
-                client.from("user_profiles")
-                    .select("user_name, profile_image_url, bio")
-                    .eq("user_id", friendId)
-                    .maybeSingle()
-                    .then(({ data, error }) => {
-                        if (!error && data) {
-                            openSpecificChat(friendId, data);
-                        }
-                    });
-            }
-        } catch (error) {
-            console.error("Error opening chat from URL:", error);
+        if (friendId && currentUserId) {
+            client.from("user_profiles")
+                .select("user_name, profile_image_url")
+                .eq("user_id", friendId)
+                .maybeSingle()
+                .then(({ data, error }) => {
+                    if (!error && data) {
+                        openSpecificChat(friendId, data);
+                    }
+                });
         }
     }
 
     // Global function to open chat with user
     window.openChatWithUser = async function (userId) {
-        try {
-            if (!currentUserId) return;
+        if (!currentUserId) return;
 
+        try {
             const { data: profile, error } = await client
                 .from("user_profiles")
-                .select("user_name, profile_image_url, bio")
+                .select("user_name, profile_image_url")
                 .eq("user_id", userId)
                 .maybeSingle();
 
@@ -2949,7 +2416,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 showToast("User not found", "error");
             }
         } catch (err) {
-            console.error("Error opening chat with user:", err);
+            console.error("Error opening chat:", err);
             showToast("Failed to open chat", "error");
         }
     };
@@ -2969,10 +2436,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            // Use a Set to deduplicate friend IDs
-            const friendIds = [...new Set(friends.map(f =>
+            const friendIds = friends.map(f =>
                 f.user1_id === currentUserId ? f.user2_id : f.user1_id
-            ))];
+            );
 
             const { data: profiles, error: profilesError } = await client
                 .from("user_profiles")
@@ -3020,115 +2486,63 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Render recent chats
     function renderRecentChats(chats) {
-        try {
-            const recentChatsContainer = document.getElementById('recent-chats');
-            if (!recentChatsContainer) return;
+        const recentChatsContainer = document.getElementById('recent-chats');
+        if (!recentChatsContainer) return;
 
-            recentChatsContainer.innerHTML = '';
+        recentChatsContainer.innerHTML = '';
 
-            if (chats.length === 0) {
-                recentChatsContainer.innerHTML = '<p class="no-recent-chats">No recent chats</p>';
-                return;
-            }
-
-            chats.forEach(chat => {
-                const chatElement = document.createElement('div');
-                chatElement.className = 'recent-chat';
-
-                const timeStr = chat.last_message_time
-                    ? new Date(chat.last_message_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    : '';
-
-                chatElement.innerHTML = `
-                    <div class="recent-chat-avatar">
-                        <img src="${chat.avatar_url || DEFAULT_PROFILE_IMG}" alt="${chat.user_name}">
-                        ${chat.is_online ? '<span class="online-dot"></span>' : ''}
-                    </div>
-                    <div class="recent-chat-info">
-                        <div class="recent-chat-name">${chat.user_name}</div>
-                        <div class="recent-chat-message">${chat.last_message}</div>
-                    </div>
-                    <div class="recent-chat-time">${timeStr}</div>
-                `;
-
-                chatElement.addEventListener('click', () => {
-                    openSpecificChat(chat.user_id, {
-                        user_name: chat.user_name,
-                        profile_image_url: chat.avatar_url
-                    });
-                });
-
-                recentChatsContainer.appendChild(chatElement);
-            });
-        } catch (error) {
-            console.error("Error rendering recent chats:", error);
+        if (chats.length === 0) {
+            recentChatsContainer.innerHTML = '<p class="no-recent-chats">No recent chats</p>';
+            return;
         }
+
+        chats.forEach(chat => {
+            const chatElement = document.createElement('div');
+            chatElement.className = 'recent-chat';
+
+            const timeStr = chat.last_message_time
+                ? new Date(chat.last_message_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                : '';
+
+            chatElement.innerHTML = `
+                <div class="recent-chat-avatar">
+                    <img src="${chat.avatar_url || DEFAULT_PROFILE_IMG}" alt="${chat.user_name}">
+                    ${chat.is_online ? '<span class="online-dot"></span>' : ''}
+                </div>
+                <div class="recent-chat-info">
+                    <div class="recent-chat-name">${chat.user_name}</div>
+                    <div class="recent-chat-message">${chat.last_message}</div>
+                </div>
+                <div class="recent-chat-time">${timeStr}</div>
+            `;
+
+            chatElement.addEventListener('click', () => {
+                openSpecificChat(chat.user_id, {
+                    user_name: chat.user_name,
+                    profile_image_url: chat.avatar_url
+                });
+            });
+
+            recentChatsContainer.appendChild(chatElement);
+        });
     }
 
-    // Add friend button
-    document.querySelector(".addFriends")?.addEventListener("click", () => {
-        try {
-            showModal("friendModal");
-        } catch (error) {
-            console.error("Error handling add friends click:", error);
-        }
-    });
-
-    // Close friend modal
-    document.querySelector("#friendModal .close")?.addEventListener("click", () => {
-        try {
-            hideModal("friendModal");
-        } catch (error) {
-            console.error("Error handling close friend modal click:", error);
-        }
-    });
-
-    // Close friend requests popup
-    document.querySelector("#friend-requests-popup .popup-close")?.addEventListener("click", () => {
-        try {
-            document.getElementById("friend-requests-popup").classList.remove("show");
-        } catch (error) {
-            console.error("Error handling close friend requests popup click:", error);
-        }
-    });
-
     // Initialize app
-    try {
-        const me = await getCurrentUser();
-        if (me) {
-            await initializeDatabaseSchema();
-            await fetchFriends();
-            await fetchFriendRequests();
+    const me = await getCurrentUser();
+    if (me) {
+        await initializeDatabaseSchema();
+        await fetchFriends();
+        await fetchFriendRequests();
+        await subscribeToGlobalMessages();
+        await subscribeToFriendRequests();
+        await subscribeToFriendsUpdates();
+        await subscribeToUserProfilesUpdates();
+        await fetchRecentChats();
 
-            // Set up real-time subscriptions with retry logic
-            const setupSubscriptions = async () => {
-                try {
-                    // Clean up any existing subscriptions
-                    await subscriptionManager.unsubscribeAll();
-
-                    await subscribeToGlobalMessages();
-                    await subscribeToFriendRequests();
-                    await subscribeToFriendsUpdates();
-                    await subscribeToUserProfilesUpdates();
-
-                    console.log("All subscriptions set up successfully");
-                } catch (error) {
-                    console.error("Error setting up subscriptions:", error);
-                    setTimeout(setupSubscriptions, 5000);
-                }
-            };
-
-            await setupSubscriptions();
-            await fetchRecentChats();
-
-            if (Object.keys(notificationData).length > 0) {
-                handleNotificationRedirect();
-            }
-
-            openChatFromUrl();
+        if (Object.keys(notificationData).length > 0) {
+            handleNotificationRedirect();
         }
-    } catch (error) {
-        console.error("Error initializing app:", error);
-        showToast("Failed to initialize application. Please refresh the page.", "error");
+
+        openChatFromUrl();
     }
 });
