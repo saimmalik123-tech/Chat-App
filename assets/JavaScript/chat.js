@@ -3069,7 +3069,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!existingUser) {
                 const { error: createUserError } = await client
                     .from("private_users")
-                    .insert([{ id: AI_ASSISTANT_ID }]);
+                    .insert([{
+                        id: AI_ASSISTANT_ID,
+                        name: AI_ASSISTANT_USERNAME  // Fixed: Added the required name field
+                    }]);
 
                 if (createUserError) {
                     console.error("Error creating AI assistant in private_users:", createUserError);
