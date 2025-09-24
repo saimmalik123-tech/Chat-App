@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const AI_ASSISTANT_USERNAME = "AI_Assistant";
     const AI_ASSISTANT_BIO = "I'm your AI assistant! Feel free to ask me anything.";
     const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.png"; // Make sure to add this image
-    const OPENROUTER_API_KEY = "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";
+    const OPENROUTER_API_KEY = "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";
     // Fixed: Use a proper UUID format for the AI assistant ID
     const AI_ASSISTANT_ID = "00000000-0000-0000-0000-000000000001"; // Valid UUID for AI assistant
 
