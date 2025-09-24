@@ -2888,4 +2888,315 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.error("Error handling notification redirect:", error);
         }
     }
+
+    // Add these constants at the top with other constants
+    const AI_ASSISTANT_USERNAME = "AI_Assistant";
+    const AI_ASSISTANT_BIO = "I'm your AI assistant! Feel free to ask me anything.";
+    const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.png"; // Make sure to add this image
+    const OPENROUTER_API_KEY = "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";
+
+    // Add this function to create the AI assistant user if it doesn't exist
+    async function ensureAIAssistantExists() {
+        try {
+            // Check if AI assistant already exists
+            const { data: existingAssistant, error: fetchError } = await client
+                .from("user_profiles")
+                .select("user_id")
+                .eq("user_name", AI_ASSISTANT_USERNAME)
+                .maybeSingle();
+
+            if (fetchError) {
+                console.error("Error checking AI assistant:", fetchError);
+                return null;
+            }
+
+            // If AI assistant doesn't exist, create it
+            if (!existingAssistant) {
+                const assistantId = generateUUID();
+                const { data: newAssistant, error: insertError } = await client
+                    .from("user_profiles")
+                    .insert([{
+                        user_id: assistantId,
+                        user_name: AI_ASSISTANT_USERNAME,
+                        bio: AI_ASSISTANT_BIO,
+                        profile_image_url: AI_ASSISTANT_AVATAR,
+                        is_online: true
+                    }])
+                    .select()
+                    .single();
+
+                if (insertError) {
+                    console.error("Error creating AI assistant:", insertError);
+                    return null;
+                }
+
+                return newAssistant.user_id;
+            }
+
+            return existingAssistant.user_id;
+        } catch (err) {
+            console.error("Error ensuring AI assistant exists:", err);
+            return null;
+        }
+    }
+
+    // Add this function to add AI assistant as a friend
+    async function addAIAssistantAsFriend() {
+        if (!currentUserId) return;
+
+        try {
+            // Ensure AI assistant exists
+            const assistantUserId = await ensureAIAssistantExists();
+            if (!assistantUserId) {
+                console.error("Failed to ensure AI assistant exists");
+                return;
+            }
+
+            // Check if already friends
+            const alreadyFriends = await isAlreadyFriend(assistantUserId);
+            if (alreadyFriends) {
+                console.log("AI assistant is already a friend");
+                return;
+            }
+
+            // Add the AI assistant as a friend
+            const { error } = await client
+                .from("friends")
+                .insert([{
+                    user1_id: currentUserId,
+                    user2_id: assistantUserId
+                }]);
+
+            if (error) {
+                console.error("Error adding AI assistant as friend:", error);
+            } else {
+                console.log("AI assistant added as friend");
+                // Refresh the friends list
+                fetchFriends();
+
+                // Send a welcome message from the AI assistant
+                setTimeout(async () => {
+                    try {
+                        await insertMessage(
+                            assistantUserId,
+                            currentUserId,
+                            "Hello! I'm your AI assistant. I'm here to help you with anything you need. How can I assist you today?"
+                        );
+                    } catch (err) {
+                        console.error("Error sending welcome message:", err);
+                    }
+                }, 1000);
+            }
+        } catch (err) {
+            console.error("Error in addAIAssistantAsFriend:", err);
+        }
+    }
+
+    // Add this function to generate UUID
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    // Add this function to insert messages (used for AI responses)
+    async function insertMessage(senderId, receiverId, content) {
+        try {
+            const { error } = await client.from("messages").insert([{
+                sender_id: senderId,
+                receiver_id: receiverId,
+                content
+            }]);
+            if (error) {
+                console.error("Error inserting message:", error);
+                return false;
+            }
+            return true;
+        } catch (err) {
+            console.error("insertMessage error:", err);
+            return false;
+        }
+    }
+
+    // Add this function to call OpenRouter API
+    async function callOpenRouterAPI(message) {
+        try {
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": window.location.origin,
+                    "X-Title": "Chat App" // 
+                },
+                body: JSON.stringify({
+                    model: "openai/gpt-3.5-turbo",
+                    messages: [
+                        { role: "system", content: "You are a helpful AI assistant in a chat app. Keep your responses friendly, concise, and helpful." },
+                        { role: "user", content: message }
+                    ]
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return data.choices[0].message.content;
+        } catch (error) {
+            console.error("Error calling OpenRouter API:", error);
+            return "I'm sorry, I'm having trouble responding right now. Please try again later.";
+        }
+    }
+
+    // Add this function to handle AI responses
+    async function handleAIResponse(userMessage, friendId) {
+        try {
+            // Get AI assistant user ID
+            const { data: assistant, error: fetchError } = await client
+                .from("user_profiles")
+                .select("user_id")
+                .eq("user_name", AI_ASSISTANT_USERNAME)
+                .maybeSingle();
+
+            if (fetchError || !assistant) {
+                console.error("Error fetching AI assistant:", fetchError);
+                return;
+            }
+
+            // Check if the friend is the AI assistant
+            if (friendId === assistant.user_id) {
+                // Show typing indicator
+                const typingIndicator = document.querySelector("#typing-indicator");
+                if (typingIndicator) {
+                    typingIndicator.textContent = "AI is typing...";
+                }
+
+                // Call OpenRouter API
+                const aiResponse = await callOpenRouterAPI(userMessage);
+
+                // Insert AI response as a message
+                await insertMessage(assistant.user_id, currentUserId, aiResponse);
+
+                // Reset typing indicator
+                if (typingIndicator) {
+                    typingIndicator.textContent = "Online";
+                }
+            }
+        } catch (error) {
+            console.error("Error handling AI response:", error);
+        }
+    }
+
+    // Modify the getCurrentUser function to add AI assistant as friend
+    async function getCurrentUser() {
+        try {
+            const { data: { user }, error } = await client.auth.getUser();
+            if (error || !user) {
+                showToast("User not logged in", "error");
+                window.location.href = 'signup.html';
+                return null;
+            }
+            currentUserId = user.id;
+            console.log("Current user ID:", currentUserId);
+            await setUserOnlineStatus(true);
+
+            // Add AI assistant as friend for new users
+            await addAIAssistantAsFriend();
+
+            // Check if we need to show admin friend request popup
+            await checkAndShowAdminRequestPopup();
+
+            return user;
+        } catch (err) {
+            console.error("getCurrentUser error:", err);
+            showToast("Failed to get current user.", "error");
+            return null;
+        }
+    }
+
+    // Modify the handleSend function in openChat to handle AI responses
+    async function handleSend() {
+        const content = inputSafe.value.trim();
+        if (!content) return;
+
+        // Send the user's message
+        await sendMessage(friendId, content);
+        inputSafe.value = "";
+        sendBtnSafe.disabled = true;
+
+        // Check if this is a message to the AI assistant
+        const { data: assistant, error: fetchError } = await client
+            .from("user_profiles")
+            .select("user_id")
+            .eq("user_name", AI_ASSISTANT_USERNAME)
+            .maybeSingle();
+
+        if (!fetchError && assistant && friendId === assistant.user_id) {
+            // Handle AI response
+            handleAIResponse(content, friendId);
+        }
+    }
+
+    // Modify the sendMessage function to handle AI messages differently
+    async function sendMessage(friendId, content) {
+        if (!content || !content.trim()) return;
+        try {
+            // Check if this is a message to the AI assistant
+            const { data: assistant, error: fetchError } = await client
+                .from("user_profiles")
+                .select("user_id")
+                .eq("user_name", AI_ASSISTANT_USERNAME)
+                .maybeSingle();
+
+            // If sending to AI assistant, we don't need to store it in the database
+            // since we'll handle the response separately
+            if (!fetchError && assistant && friendId === assistant.user_id) {
+                // Show the message in the UI immediately
+                const chatBox = document.querySelector(".messages");
+                if (chatBox) {
+                    const msgDiv = document.createElement("div");
+                    msgDiv.className = "message sent";
+
+                    const timeStr = new Date().toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit"
+                    });
+
+                    msgDiv.innerHTML = `
+                    <div class="msg-bubble">
+                        <span class="msg-text">${linkify(content)}</span>
+                        <div class="msg-meta">
+                            <small class="msg-time">${timeStr}</small>
+                            <small class="seen-status">✓</small>
+                        </div>
+                    </div>
+                `;
+
+                    chatBox.appendChild(msgDiv);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+                return;
+            }
+
+            // For regular users, store the message in the database
+            const { error } = await client.from("messages").insert([{
+                sender_id: currentUserId,
+                receiver_id: friendId,
+                content
+            }]);
+            if (error) {
+                console.error("Error sending message:", error);
+                showToast("Message failed to send. Please try again.", "error");
+            } else {
+                updateLastMessage(friendId, content, new Date().toISOString());
+            }
+        } catch (err) {
+            console.error("sendMessage error:", err);
+            showToast("Message failed to send. Please try again.", "error");
+        }
+    }
 });
