@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const AI_ASSISTANT_USERNAME = "AI_Assistant";
     const AI_ASSISTANT_BIO = "I'm your AI assistant! Feel free to ask me anything.";
     const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.png"; // Make sure to add this image
-    const OPENROUTER_API_KEY = "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";
+    const OPENROUTER_API_KEY = "ssk-or-v1-cf68557ef0c69b7ddc702b7fa5384667c4e754464459470b0bbe55a44e8ddd6c";
     // Fixed: Use a proper UUID format for the AI assistant ID
     const AI_ASSISTANT_ID = "00000000-0000-0000-0000-000000000001"; // Valid UUID for AI assistant
 
@@ -3264,7 +3264,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 throw new Error("Invalid OpenRouter API key");
             }
 
-            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            const response = await fetch("https://openrouter.ai/api/v1", {
                 method: "POST",
                 headers: {
                     "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
