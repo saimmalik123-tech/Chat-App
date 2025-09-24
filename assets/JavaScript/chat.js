@@ -5,7 +5,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const AI_ASSISTANT_BIO = "I'm your AI assistant! Feel free to ask me anything.";
     const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.png"; // Make sure to add this image
     const OPENROUTER_API_KEY = "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";
-    const AI_ASSISTANT_ID = "ai-assistant-fixed-id"; // Fixed ID for AI assistant
+    // Fixed: Use a proper UUID format for the AI assistant ID
+    const AI_ASSISTANT_ID = "00000000-0000-0000-0000-000000000001"; // Valid UUID for AI assistant
 
     const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
     const ADMIN_USERNAME = "Saim_Malik88";
@@ -334,23 +335,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Check if user is already a friend
     async function isAlreadyFriend(userId) {
-        // Special case for AI assistant
-        if (userId === AI_ASSISTANT_ID) {
-            // Check if we've already added the AI assistant as a friend
-            const { data, error } = await client
-                .from("friends")
-                .select("*")
-                .or(`and(user1_id.eq.${currentUserId},user2_id.eq.${userId}),and(user1_id.eq.${userId},user2_id.eq.${currentUserId})`)
-                .maybeSingle();
-
-            if (error) {
-                console.error("Error checking friendship status:", error);
-                return false;
-            }
-
-            return !!data;
-        }
-
         if (!currentUserId || !userId) return false;
 
         try {
