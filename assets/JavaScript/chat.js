@@ -8,10 +8,14 @@ document.head.appendChild(link);
 
 // Initialize when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
-    // Realtime connection monitoring
-    client.realtime.onOpen(() => console.log("Realtime connection opened"));
-    client.realtime.onClose(() => console.warn("Realtime connection closed"));
-    client.realtime.onError((e) => console.error("Realtime error:", e));
+    // Realtime connection monitoring - Updated for current Supabase API
+    const { data: { subscription } } = client.realtime.channel('system').on('system', { event: 'connected' }, () => {
+        console.log("Realtime connection opened");
+    }).on('system', { event: 'disconnected' }, () => {
+        console.warn("Realtime connection closed");
+    }).on('system', { event: 'error' }, (e) => {
+        console.error("Realtime error:", e);
+    }).subscribe();
 
     // User modal function
     function showUserModal(userId, userName, userAvatar) {
@@ -470,14 +474,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Message notification click handler
     document.getElementById("message-notification")?.addEventListener("click", () => {
         const popup = document.getElementById("friend-requests-popup");
-        popup.style.display = 'block';
+        popup.style.visibility = 'visible';
     });
 
     document.addEventListener("click", (e) => {
         const messageIcon = document.getElementById("message-notification");
         const messagePopup = document.getElementById("friend-requests-popup");
         if (messageIcon && messagePopup && !messageIcon.contains(e.target) && !messagePopup.contains(e.target)) {
-            messagePopup.style.display = "none";
+            messagePopup.style.visibility = "visible";
         }
     });
 
@@ -1567,23 +1571,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Ensure Realtime connection
     async function ensureRealtimeConnection() {
-        if (!client.realtime.connected) {
-            console.log("Connecting to Realtime...");
-            return new Promise((resolve) => {
-                const timeout = setTimeout(() => {
-                    console.warn("Realtime connection timeout");
-                    resolve();
-                }, 5000);
-
-                client.realtime.onOpen(() => {
-                    clearTimeout(timeout);
-                    console.log("Realtime connected");
-                    resolve();
-                });
-
-                client.realtime.connect();
-            });
-        }
+        // For the current Supabase client, we don't need to explicitly connect
+        // The connection is established automatically when we subscribe to channels
+        console.log("Realtime connection will be established automatically");
         return Promise.resolve();
     }
 
