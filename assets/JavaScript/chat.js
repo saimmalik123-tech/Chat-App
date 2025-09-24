@@ -1892,16 +1892,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                 channel.on(
                     "postgres_changes",
                     {
-                        event: "INSERT",
+                        event: "*",
                         schema: "public",
                         table: "requests",
                         filter: `receiver_id=eq.${currentUserId}`
                     },
                     async payload => {
                         console.log("Friend request event received:", payload);
-                        const newRecord = payload.new;
+                        const { eventType, new: newRecord, old: oldRecord } = payload;
 
-                        if (newRecord.status === "pending") {
+                        if (eventType === 'INSERT' && newRecord.status === "pending") {
                             console.log("New friend request received:", newRecord);
 
                             // Get sender details for notification
@@ -1936,57 +1936,34 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                             // Refresh friend requests list
                             fetchFriendRequests();
-                        }
-                    }
-                );
+                        } else if (eventType === 'UPDATE') {
+                            console.log("Friend request updated:", newRecord);
 
-                channel.on(
-                    "postgres_changes",
-                    {
-                        event: "UPDATE",
-                        schema: "public",
-                        table: "requests",
-                        filter: `receiver_id=eq.${currentUserId}`
-                    },
-                    async payload => {
-                        console.log("Friend request update event received:", payload);
-                        const newRecord = payload.new;
-
-                        if (newRecord.status === "accepted") {
-                            // If this user accepted a request
-                            if (newRecord.sender_id === currentUserId) {
-                                showTopRightPopup("Your friend request was accepted!", "success");
-                            } else {
-                                // If this user received an accepted request
-                                showTopRightPopup("You accepted a friend request!", "success");
+                            if (newRecord.status === "accepted") {
+                                // If this user accepted a request
+                                if (newRecord.sender_id === currentUserId) {
+                                    showTopRightPopup("Your friend request was accepted!", "success");
+                                } else {
+                                    // If this user received an accepted request
+                                    showTopRightPopup("You accepted a friend request!", "success");
+                                }
+                                // Refresh friends list
+                                fetchFriends();
+                            } else if (newRecord.status === "rejected") {
+                                if (newRecord.sender_id === currentUserId) {
+                                    showTopRightPopup("Your friend request was rejected", "warning");
+                                } else {
+                                    showTopRightPopup("You rejected a friend request", "info");
+                                }
                             }
-                            // Refresh friends list
-                            fetchFriends();
-                        } else if (newRecord.status === "rejected") {
-                            if (newRecord.sender_id === currentUserId) {
-                                showTopRightPopup("Your friend request was rejected", "warning");
-                            } else {
-                                showTopRightPopup("You rejected a friend request", "info");
-                            }
+
+                            // Refresh friend requests list
+                            fetchFriendRequests();
+                        } else if (eventType === 'DELETE') {
+                            console.log("Friend request deleted:", oldRecord);
+                            // Refresh friend requests list
+                            fetchFriendRequests();
                         }
-
-                        // Refresh friend requests list
-                        fetchFriendRequests();
-                    }
-                );
-
-                channel.on(
-                    "postgres_changes",
-                    {
-                        event: "DELETE",
-                        schema: "public",
-                        table: "requests",
-                        filter: `receiver_id=eq.${currentUserId}`
-                    },
-                    payload => {
-                        console.log("Friend request delete event received:", payload);
-                        // Refresh friend requests list
-                        fetchFriendRequests();
                     }
                 );
             } catch (err) {
@@ -2024,45 +2001,32 @@ document.addEventListener("DOMContentLoaded", async () => {
                 channel.on(
                     "postgres_changes",
                     {
-                        event: "INSERT",
+                        event: "*",
                         schema: "public",
                         table: "friends"
                     },
                     payload => {
-                        console.log("Friends insert event received:", payload);
-                        const newRecord = payload.new;
+                        console.log("Friends update event received:", payload);
+
+                        const { eventType, new: newRecord, old: oldRecord } = payload;
 
                         // Check if this update is relevant to current user
                         const isRelevant = newRecord && (
                             newRecord.user1_id === currentUserId ||
                             newRecord.user2_id === currentUserId
-                        );
-
-                        if (isRelevant) {
-                            console.log("New friend added:", newRecord);
-                            fetchFriends();
-                        }
-                    }
-                );
-
-                channel.on(
-                    "postgres_changes",
-                    {
-                        event: "DELETE",
-                        schema: "public",
-                        table: "friends"
-                    },
-                    payload => {
-                        console.log("Friends delete event received:", payload);
-                        const oldRecord = payload.old;
-
-                        // Check if this update is relevant to current user
-                        const isRelevant = oldRecord && (
+                        ) || oldRecord && (
                             oldRecord.user1_id === currentUserId ||
                             oldRecord.user2_id === currentUserId
                         );
 
-                        if (isRelevant) {
+                        if (!isRelevant) return;
+
+                        if (eventType === 'INSERT') {
+                            // New friend added
+                            console.log("New friend added:", newRecord);
+                            fetchFriends();
+                        } else if (eventType === 'DELETE') {
+                            // Friend removed
                             console.log("Friend removed:", oldRecord);
                             fetchFriends();
                         }
@@ -2109,7 +2073,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     },
                     payload => {
                         console.log("User profile update event received:", payload);
-                        const newRecord = payload.new;
+
+                        const { new: newRecord } = payload;
 
                         // Update friend data in our cache if it's a friend
                         if (allFriends.has(newRecord.user_id)) {
@@ -3143,20 +3108,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             openChatFromUrl();
-
-            // Set up a periodic check for subscription health
-            setInterval(async () => {
-                console.log("Checking subscription health...");
-                try {
-                    // Check if we have active subscriptions
-                    if (subscriptionManager.channels.size === 0) {
-                        console.warn("No active subscriptions found, reinitializing...");
-                        await setupSubscriptions();
-                    }
-                } catch (error) {
-                    console.error("Error checking subscription health:", error);
-                }
-            }, 30000); // Check every 30 seconds
         }
     } catch (error) {
         console.error("Error initializing app:", error);
