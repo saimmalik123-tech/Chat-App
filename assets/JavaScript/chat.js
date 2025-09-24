@@ -1,8 +1,6 @@
 import { client } from "../../supabase.js";
 
-// Initialize when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
-    // Constants
     const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
     const ADMIN_USERNAME = "Saim_Malik88";
     const ADMIN_REQUEST_KEY = "adminRequestShown"; // localStorage key
