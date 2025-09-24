@@ -3092,15 +3092,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!currentUserId) return;
 
         try {
-            // Ensure AI assistant exists
-            const assistantUserId = await ensureAIAssistantExists();
-            if (!assistantUserId) {
-                console.error("Failed to ensure AI assistant exists");
-                return;
-            }
-
             // Check if already friends
-            const alreadyFriends = await isAlreadyFriend(assistantUserId);
+            const alreadyFriends = await isAlreadyFriend(AI_ASSISTANT_ID);
             if (alreadyFriends) {
                 console.log("AI assistant is already a friend");
                 return;
@@ -3111,7 +3104,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .from("friends")
                 .insert([{
                     user1_id: currentUserId,
-                    user2_id: assistantUserId
+                    user2_id: AI_ASSISTANT_ID
                 }]);
 
             if (error) {
@@ -3125,7 +3118,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 setTimeout(async () => {
                     try {
                         await insertMessage(
-                            assistantUserId,
+                            AI_ASSISTANT_ID,
                             currentUserId,
                             "Hello! I'm your AI assistant. I'm here to help you with anything you need. How can I assist you today?"
                         );
@@ -3142,11 +3135,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Add this function to insert messages (used for AI responses)
     async function insertMessage(senderId, receiverId, content) {
         try {
+            // Special handling for AI assistant messages
+            if (senderId === AI_ASSISTANT_ID) {
+                const { error } = await client.from("messages").insert([{
+                    sender_id: senderId,
+                    receiver_id: receiverId,
+                    content
+                }]);
+
+                if (error) {
+                    console.error("Error inserting AI message:", error);
+                    return false;
+                }
+                return true;
+            }
+
+            // Regular user messages
             const { error } = await client.from("messages").insert([{
                 sender_id: senderId,
                 receiver_id: receiverId,
                 content
             }]);
+
             if (error) {
                 console.error("Error inserting message:", error);
                 return false;
@@ -3205,15 +3215,21 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const aiResponse = await callOpenRouterAPI(userMessage);
 
                 // Insert AI response as a message
-                await insertMessage(AI_ASSISTANT_ID, currentUserId, aiResponse);
+                const success = await insertMessage(AI_ASSISTANT_ID, currentUserId, aiResponse);
 
-                // Reset typing indicator
-                if (typingIndicator) {
-                    typingIndicator.textContent = "Online";
+                if (success) {
+                    // Reset typing indicator
+                    if (typingIndicator) {
+                        typingIndicator.textContent = "Online";
+                    }
+                } else {
+                    console.error("Failed to insert AI response");
+                    showToast("Failed to send AI response", "error");
                 }
             }
         } catch (error) {
             console.error("Error handling AI response:", error);
+            showToast("Error processing AI response", "error");
         }
     }
 });
