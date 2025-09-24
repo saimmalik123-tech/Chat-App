@@ -319,6 +319,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.log("Current user ID:", currentUserId);
             await setUserOnlineStatus(true);
 
+            // Initialize AI assistant BEFORE adding as friend
+            await ensureAIAssistantExists();
+
             // Add AI assistant as friend for new users
             await addAIAssistantAsFriend();
 
@@ -1033,6 +1036,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.error("Error sending message:", error);
                 showToast("Message failed to send. Please try again.", "error");
             } else {
+                // Only update the last message for this specific friend
                 updateLastMessage(friendId, content, new Date().toISOString());
             }
         } catch (err) {
@@ -3078,7 +3082,32 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Add this function to ensure AI assistant exists
     async function ensureAIAssistantExists() {
         try {
-            // Check if AI assistant profile exists
+            // First, check if AI assistant exists in private_users
+            const { data: existingUser, error: userError } = await client
+                .from("private_users")
+                .select("id")
+                .eq("id", AI_ASSISTANT_ID)
+                .maybeSingle();
+
+            if (userError) {
+                console.error("Error checking private_users:", userError);
+                return false;
+            }
+
+            // If AI assistant doesn't exist in private_users, create it
+            if (!existingUser) {
+                const { error: createUserError } = await client
+                    .from("private_users")
+                    .insert([{ id: AI_ASSISTANT_ID }]);
+
+                if (createUserError) {
+                    console.error("Error creating AI assistant in private_users:", createUserError);
+                    return false;
+                }
+                console.log("AI assistant created in private_users");
+            }
+
+            // Now check and create/update the profile in user_profiles
             const { data: existingProfile, error: fetchError } = await client
                 .from("user_profiles")
                 .select("user_id")
@@ -3090,7 +3119,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return false;
             }
 
-            // If profile doesn't exist, create it
             if (!existingProfile) {
                 const { error: insertError } = await client
                     .from("user_profiles")
@@ -3106,9 +3134,24 @@ document.addEventListener("DOMContentLoaded", async () => {
                     console.error("Error creating AI assistant profile:", insertError);
                     return false;
                 }
-
                 console.log("AI assistant profile created successfully");
-                return true;
+            } else {
+                // Update the existing profile
+                const { error: updateError } = await client
+                    .from("user_profiles")
+                    .update({
+                        user_name: AI_ASSISTANT_USERNAME,
+                        profile_image_url: AI_ASSISTANT_AVATAR,
+                        bio: AI_ASSISTANT_BIO,
+                        is_online: true
+                    })
+                    .eq("user_id", AI_ASSISTANT_ID);
+
+                if (updateError) {
+                    console.error("Error updating AI assistant profile:", updateError);
+                    return false;
+                }
+                console.log("AI assistant profile updated successfully");
             }
 
             return true;
@@ -3216,6 +3259,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Add this function to call OpenRouter API
     async function callOpenRouterAPI(message) {
         try {
+            // Verify API key is present
+            if (!OPENROUTER_API_KEY || OPENROUTER_API_KEY === "sk-or-v1-...") {
+                throw new Error("Invalid OpenRouter API key");
+            }
+
             const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
                 method: "POST",
                 headers: {
@@ -3234,7 +3282,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
 
             if (!response.ok) {
-                throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
+                const errorData = await response.json();
+                console.error("OpenRouter API error:", errorData);
+                throw new Error(`OpenRouter API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
             }
 
             const data = await response.json();
