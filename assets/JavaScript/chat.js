@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const AI_ASSISTANT_USERNAME = "AI_Assistant";
     const AI_ASSISTANT_BIO = "I'm your AI assistant! Feel free to ask me anything.";
     const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.png"; // Make sure to add this image
-    const OPENROUTER_API_KEY = "ssk-or-v1-cf68557ef0c69b7ddc702b7fa5384667c4e754464459470b0bbe55a44e8ddd6c";
+    const OPENROUTER_API_KEY = "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";
     // Fixed: Use a proper UUID format for the AI assistant ID
     const AI_ASSISTANT_ID = "00000000-0000-0000-0000-000000000001"; // Valid UUID for AI assistant
 
@@ -997,36 +997,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function sendMessage(friendId, content) {
         if (!content || !content.trim()) return;
         try {
-            // Check if this is a message to the AI assistant
-            if (friendId === AI_ASSISTANT_ID) {
-                // Show the message in the UI immediately
-                const chatBox = document.querySelector(".messages");
-                if (chatBox) {
-                    const msgDiv = document.createElement("div");
-                    msgDiv.className = "message sent";
-
-                    const timeStr = new Date().toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit"
-                    });
-
-                    msgDiv.innerHTML = `
-                        <div class="msg-bubble">
-                            <span class="msg-text">${linkify(content)}</span>
-                            <div class="msg-meta">
-                                <small class="msg-time">${timeStr}</small>
-                                <small class="seen-status">✓</small>
-                            </div>
-                        </div>
-                    `;
-
-                    chatBox.appendChild(msgDiv);
-                    chatBox.scrollTop = chatBox.scrollHeight;
-                }
-                return;
-            }
-
-            // For regular users, store the message in the database
+            // For all users (including AI assistant), store the message in the database
             const { error } = await client.from("messages").insert([{
                 sender_id: currentUserId,
                 receiver_id: friendId,
@@ -1347,7 +1318,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const username = document.querySelector(".friend-input")?.value.trim();
             sendFriendRequest(username);
         } catch (error) {
-            console.error("Error handling submit friend request:", error);
+            console.error("Error handling submit friend request click:", error);
         }
     });
 
@@ -3264,7 +3235,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 throw new Error("Invalid OpenRouter API key");
             }
 
-            const response = await fetch("https://openrouter.ai/api/v1", {
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
                 method: "POST",
                 headers: {
                     "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
