@@ -462,16 +462,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Message notification click handler
     document.getElementById("message-notification")?.addEventListener("click", () => {
-        const popup = document.getElementById("message-popup");
-        if (popup) popup.style.display = popup.style.display === "block" ? "none" : "block";
+        const popup = document.getElementById("friend-requests-popup");
+        popup.style.visibility = 'visible';
     });
 
-    // Close message popup when clicking outside
     document.addEventListener("click", (e) => {
         const messageIcon = document.getElementById("message-notification");
-        const messagePopup = document.getElementById("message-popup");
+        const messagePopup = document.getElementById("friend-requests-popup");
         if (messageIcon && messagePopup && !messageIcon.contains(e.target) && !messagePopup.contains(e.target)) {
-            messagePopup.style.display = "none";
+            messagePopup.style.visibility = "visible";
         }
     });
 
