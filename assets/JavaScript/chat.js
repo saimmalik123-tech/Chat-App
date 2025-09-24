@@ -8,6 +8,11 @@ document.head.appendChild(link);
 
 // Initialize when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
+    // Realtime connection monitoring
+    client.realtime.onOpen(() => console.log("Realtime connection opened"));
+    client.realtime.onClose(() => console.warn("Realtime connection closed"));
+    client.realtime.onError((e) => console.error("Realtime error:", e));
+
     // User modal function
     function showUserModal(userId, userName, userAvatar) {
         let modal = document.getElementById("user-modal");
@@ -318,6 +323,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     let deletionTimeouts = {};
     let processingMessageIds = new Set();
     let allFriends = new Map(); // Store all friends data for real-time updates
+    let friendRequestSubscriptionRetries = 0;
+    const maxFriendRequestSubscriptionRetries = 3;
 
     // Get current user
     async function getCurrentUser() {
@@ -1558,82 +1565,133 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Subscribe to friend requests
-    async function subscribeToFriendRequests() {
-        if (!window._friendRequestChannel) {
-            const channelName = `friend-requests-${currentUserId}`;
-            window._friendRequestChannel = client.channel(channelName);
+    // Ensure Realtime connection
+    async function ensureRealtimeConnection() {
+        if (!client.realtime.connected) {
+            console.log("Connecting to Realtime...");
+            return new Promise((resolve) => {
+                const timeout = setTimeout(() => {
+                    console.warn("Realtime connection timeout");
+                    resolve();
+                }, 5000);
 
-            console.log("Setting up friend request subscription for user:", currentUserId);
-
-            window._friendRequestChannel.on(
-                "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "requests",
-                    filter: `or(receiver_id=eq.${currentUserId},sender_id=eq.${currentUserId})`
-                },
-                payload => {
-                    console.log("Friend request event received:", payload);
-
-                    const { eventType, new: newRecord, old: oldRecord } = payload;
-
-                    if (eventType === 'INSERT') {
-                        console.log("New friend request received:", newRecord);
-                        if (newRecord.receiver_id === currentUserId && newRecord.status === "pending") {
-                            showTopRightPopup("You have a new friend request!", "info");
-                            fetchFriendRequests();
-                        }
-                    } else if (eventType === 'UPDATE') {
-                        console.log("Friend request updated:", newRecord);
-                        if (newRecord.receiver_id === currentUserId || newRecord.sender_id === currentUserId) {
-                            if (newRecord.status === "accepted") {
-                                if (newRecord.receiver_id === currentUserId) {
-                                    showTopRightPopup("Your friend request was accepted!", "success");
-                                } else {
-                                    showTopRightPopup("You accepted a friend request!", "success");
-                                }
-                                fetchFriends();
-                            } else if (newRecord.status === "rejected") {
-                                if (newRecord.receiver_id === currentUserId) {
-                                    showTopRightPopup("Your friend request was rejected", "warning");
-                                } else {
-                                    showTopRightPopup("You rejected a friend request", "info");
-                                }
-                            }
-                            fetchFriendRequests();
-                        }
-                    } else if (eventType === 'DELETE') {
-                        console.log("Friend request deleted:", oldRecord);
-                        if (oldRecord.receiver_id === currentUserId || oldRecord.sender_id === currentUserId) {
-                            fetchFriendRequests();
-                        }
-                    }
-                }
-            );
-
-            try {
-                const status = await window._friendRequestChannel.subscribe((status) => {
-                    console.log("Friend request subscription status:", status);
-
-                    if (status === 'SUBSCRIBED') {
-                        console.log("Successfully subscribed to friend requests");
-                    } else if (status === 'CHANNEL_ERROR') {
-                        console.error("Error subscribing to friend requests");
-                        setTimeout(() => {
-                            console.log("Attempting to resubscribe to friend requests...");
-                            subscribeToFriendRequests();
-                        }, 5000);
-                    }
+                client.realtime.onOpen(() => {
+                    clearTimeout(timeout);
+                    console.log("Realtime connected");
+                    resolve();
                 });
 
-                console.log("Friend request subscription status:", status);
+                client.realtime.connect();
+            });
+        }
+        return Promise.resolve();
+    }
+
+    // Subscribe to friend requests
+    async function subscribeToFriendRequests() {
+        if (!currentUserId) {
+            console.warn("Cannot subscribe to friend requests: currentUserId not set");
+            return;
+        }
+
+        // Remove existing channel if it exists
+        if (window._friendRequestChannel) {
+            try {
+                await client.removeChannel(window._friendRequestChannel);
+                console.log("Removed existing friend request channel");
             } catch (err) {
-                console.error("Error setting up friend request subscription:", err);
+                console.warn("Error removing existing friend request channel:", err);
             }
-        } else {
-            console.log("Friend request channel already exists");
+            window._friendRequestChannel = null;
+        }
+
+        const channelName = `friend-requests-${currentUserId}`;
+        window._friendRequestChannel = client.channel(channelName);
+
+        console.log("Setting up friend request subscription for user:", currentUserId);
+
+        window._friendRequestChannel.on(
+            "postgres_changes",
+            {
+                event: "*",
+                schema: "public",
+                table: "requests",
+                filter: `or(receiver_id=eq.${currentUserId},sender_id=eq.${currentUserId})`
+            },
+            payload => {
+                console.log("Friend request event received:", payload);
+
+                const { eventType, new: newRecord, old: oldRecord } = payload;
+
+                if (eventType === 'INSERT') {
+                    console.log("New friend request received:", newRecord);
+                    if (newRecord.receiver_id === currentUserId && newRecord.status === "pending") {
+                        showTopRightPopup("You have a new friend request!", "info");
+                        fetchFriendRequests();
+                    }
+                } else if (eventType === 'UPDATE') {
+                    console.log("Friend request updated:", newRecord);
+                    if (newRecord.receiver_id === currentUserId || newRecord.sender_id === currentUserId) {
+                        if (newRecord.status === "accepted") {
+                            if (newRecord.receiver_id === currentUserId) {
+                                showTopRightPopup("Your friend request was accepted!", "success");
+                            } else {
+                                showTopRightPopup("You accepted a friend request!", "success");
+                            }
+                            fetchFriends();
+                        } else if (newRecord.status === "rejected") {
+                            if (newRecord.receiver_id === currentUserId) {
+                                showTopRightPopup("Your friend request was rejected", "warning");
+                            } else {
+                                showTopRightPopup("You rejected a friend request", "info");
+                            }
+                        }
+                        fetchFriendRequests();
+                    }
+                } else if (eventType === 'DELETE') {
+                    console.log("Friend request deleted:", oldRecord);
+                    if (oldRecord.receiver_id === currentUserId || oldRecord.sender_id === currentUserId) {
+                        fetchFriendRequests();
+                    }
+                }
+            }
+        );
+
+        try {
+            const status = await window._friendRequestChannel.subscribe((status) => {
+                console.log("Friend request subscription status:", status);
+
+                if (status === 'SUBSCRIBED') {
+                    console.log("Successfully subscribed to friend requests");
+                    friendRequestSubscriptionRetries = 0; // Reset retry counter
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error("Error subscribing to friend requests");
+                    // Retry after delay
+                    if (friendRequestSubscriptionRetries < maxFriendRequestSubscriptionRetries) {
+                        friendRequestSubscriptionRetries++;
+                        setTimeout(() => {
+                            console.log(`Retrying friend request subscription (${friendRequestSubscriptionRetries}/${maxFriendRequestSubscriptionRetries})...`);
+                            subscribeToFriendRequests();
+                        }, 5000);
+                    } else {
+                        console.error("Max retries reached for friend request subscription");
+                    }
+                }
+            });
+
+            console.log("Friend request subscription status:", status);
+        } catch (err) {
+            console.error("Error setting up friend request subscription:", err.message || err);
+            // Retry if we haven't reached max retries
+            if (friendRequestSubscriptionRetries < maxFriendRequestSubscriptionRetries) {
+                friendRequestSubscriptionRetries++;
+                setTimeout(() => {
+                    console.log(`Retrying friend request subscription (${friendRequestSubscriptionRetries}/${maxFriendRequestSubscriptionRetries})...`);
+                    subscribeToFriendRequests();
+                }, 5000);
+            } else {
+                console.error("Max retries reached for friend request subscription");
+            }
         }
     }
 
@@ -2529,6 +2587,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Initialize app
     const me = await getCurrentUser();
     if (me) {
+        await ensureRealtimeConnection();
         await initializeDatabaseSchema();
         await fetchFriends();
         await fetchFriendRequests();
