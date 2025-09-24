@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let deletionTimeouts = {};
     let processingMessageIds = new Set();
     let allFriends = new Map(); // Store all friends data for real-time updates
+    let activeChatChannels = {}; // Store active chat channels for cleanup
 
     // Subscription Manager
     const subscriptionManager = {
@@ -92,8 +93,45 @@ document.addEventListener("DOMContentLoaded", async () => {
                 this.unsubscribe(channelName)
             );
             return Promise.all(promises);
+        },
+
+        // Add cleanup method
+        async cleanup() {
+            console.log(`Cleaning up ${this.channels.size} subscriptions`);
+            await this.unsubscribeAll();
         }
     };
+
+    // Cleanup function for chat subscriptions
+    async function cleanupSubscriptions(msgChannel, typingChannel, statusChannel) {
+        try {
+            if (msgChannel) await client.removeChannel(msgChannel);
+            if (typingChannel) await client.removeChannel(typingChannel);
+            if (statusChannel) await client.removeChannel(statusChannel);
+            console.log("Successfully cleaned up chat subscriptions");
+        } catch (err) {
+            console.warn("Error removing channels:", err);
+        }
+    }
+
+    // Global cleanup function for all subscriptions
+    async function cleanupAllSubscriptions() {
+        try {
+            // Clean up all channels in the subscription manager
+            await subscriptionManager.cleanup();
+
+            // Clean up any active chat channels
+            for (const friendId in activeChatChannels) {
+                const { msgChannel, typingChannel, statusChannel } = activeChatChannels[friendId];
+                await cleanupSubscriptions(msgChannel, typingChannel, statusChannel);
+            }
+            activeChatChannels = {};
+
+            console.log("Successfully cleaned up all subscriptions");
+        } catch (err) {
+            console.warn("Error cleaning up subscriptions:", err);
+        }
+    }
 
     // Show modal with animation
     function showModal(modalId) {
@@ -559,9 +597,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.error("Error updating online status:", err);
         }
     }
-    window.addEventListener('beforeunload', () => {
+
+    // Handle page unload
+    window.addEventListener('beforeunload', async () => {
         setUserOnlineStatus(false);
         Object.values(deletionTimeouts).forEach(timeoutId => clearTimeout(timeoutId));
+        await cleanupAllSubscriptions();
     });
 
     // Render friend requests
@@ -1532,6 +1573,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             );
 
+            // Store channels for cleanup
+            activeChatChannels[friendId] = {
+                msgChannel,
+                typingChannel,
+                statusChannel
+            };
+
             return { msgChannel, typingChannel, statusChannel };
         } catch (error) {
             console.error("Error subscribing to messages:", error);
@@ -1701,13 +1749,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                         defaultScreen.style.display = "flex";
                     }
 
-                    try {
-                        if (msgChannel) await client.removeChannel(msgChannel);
-                        if (typingChannel) await client.removeChannel(typingChannel);
-                        if (statusChan) await client.removeChannel(statusChan);
-                    } catch (err) {
-                        console.warn("Error removing channels:", err);
+                    // Use the cleanup function here
+                    await cleanupSubscriptions(msgChannel, typingChannel, statusChan);
+
+                    // Remove from active channels
+                    if (activeChatChannels[friendId]) {
+                        delete activeChatChannels[friendId];
                     }
+
                     fetchFriends();
                 });
             }
@@ -1767,12 +1816,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                     // Retry after delay
                     setTimeout(() => {
                         console.log(`Retrying subscription to ${channelName}...`);
-                        subscribeToGlobalMessages(); // Or whatever function
+                        subscribeToGlobalMessages();
                     }, 5000);
                 } else if (status === 'TIMED_OUT') {
                     console.warn(`Subscription to ${channelName} timed out, retrying...`);
                     setTimeout(() => {
-                        subscribeToGlobalMessages(); // Or whatever function
+                        subscribeToGlobalMessages();
                     }, 3000);
                 }
             });
@@ -1957,15 +2006,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             return null;
         }
     }
+
     // Subscribe to friends updates
     async function subscribeToFriendsUpdates() {
         try {
             const channelName = "friends-updates";
-
-            // Create a simple channel without complex config
             const channel = client.channel(channelName);
 
-            // Set up subscription with better error handling
             channel.subscribe((status, err) => {
                 if (status === 'SUBSCRIBED') {
                     console.log(`Successfully subscribed to ${channelName}`);
@@ -1976,62 +2023,42 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             });
 
-            // Set up postgres changes listener with proper error handling
-            try {
-                // Listen for new friend relationships
-                channel.on(
-                    "postgres_changes",
-                    {
-                        event: "INSERT",
-                        schema: "public",
-                        table: "friends"
-                    },
-                    payload => {
-                        console.log("Friends insert event received:", payload);
-                        const newRecord = payload.new;
+            // Fixed binding - listen to all events without filter
+            channel.on(
+                "postgres_changes",
+                {
+                    event: "*",
+                    schema: "public",
+                    table: "friends"
+                },
+                payload => {
+                    const { eventType, new: newRecord, old: oldRecord } = payload;
 
-                        // Check if this update is relevant to current user
+                    if (eventType === 'INSERT') {
+                        console.log("Friends insert event received:", payload);
                         const isRelevant = newRecord && (
                             newRecord.user1_id === currentUserId ||
                             newRecord.user2_id === currentUserId
                         );
 
                         if (isRelevant) {
-                            // New friend added
                             console.log("New friend added:", newRecord);
                             fetchFriends();
                         }
-                    }
-                );
-
-                // Listen for friend relationship deletions
-                channel.on(
-                    "postgres_changes",
-                    {
-                        event: "DELETE",
-                        schema: "public",
-                        table: "friends"
-                    },
-                    payload => {
+                    } else if (eventType === 'DELETE') {
                         console.log("Friends delete event received:", payload);
-                        const oldRecord = payload.old;
-
-                        // Check if this update is relevant to current user
                         const isRelevant = oldRecord && (
                             oldRecord.user1_id === currentUserId ||
                             oldRecord.user2_id === currentUserId
                         );
 
                         if (isRelevant) {
-                            // Friend removed
                             console.log("Friend removed:", oldRecord);
                             fetchFriends();
                         }
                     }
-                );
-            } catch (err) {
-                console.error("Error setting up postgres changes listener:", err);
-            }
+                }
+            );
 
             return channel;
         } catch (error) {
