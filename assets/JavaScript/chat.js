@@ -470,14 +470,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Message notification click handler
     document.getElementById("message-notification")?.addEventListener("click", () => {
         const popup = document.getElementById("friend-requests-popup");
-        popup.style.visibility = 'visible';
+        popup.style.disabled = 'block';
     });
 
     document.addEventListener("click", (e) => {
         const messageIcon = document.getElementById("message-notification");
         const messagePopup = document.getElementById("friend-requests-popup");
         if (messageIcon && messagePopup && !messageIcon.contains(e.target) && !messagePopup.contains(e.target)) {
-            messagePopup.style.visibility = "visible";
+            messagePopup.style.display = "block";
         }
     });
 

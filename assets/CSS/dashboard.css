@@ -1067,7 +1067,7 @@ emoji-picker {
   overflow: auto;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.16);
   z-index: 1000;
-  visibility: visible;
+  display: none;
   transform: translateY(-10px);
   transition: opacity var(--animation-duration) var(--animation-timing),
     visibility var(--animation-duration) var(--animation-timing),
