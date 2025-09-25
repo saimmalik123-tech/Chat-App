@@ -1949,6 +1949,55 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Check and fix database schema
+    async function checkAndFixDatabaseSchema() {
+        try {
+            console.log("Checking database schema...");
+
+            const { data: columns, error: columnsError } = await client
+                .from("information_schema.table_constraints")
+                .select("*")
+                .eq("table_name", "messages")
+                .eq("constraint_type", "FOREIGN KEY");
+
+            if (columnsError) {
+                console.error("Error checking table constraints:", columnsError);
+                return false;
+            }
+
+            console.log("Table constraints:", columns);
+
+            if (!columns || columns.length === 0) {
+                console.log("No foreign key constraints found, adding them...");
+
+                const { error: senderError } = await client.rpc('exec_sql', {
+                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id);`
+                });
+
+                if (senderError) {
+                    console.error("Error adding sender foreign key constraint:", senderError);
+                    return false;
+                }
+
+                const { error: receiverError } = await client.rpc('exec_sql', {
+                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id);`
+                });
+
+                if (receiverError) {
+                    console.error("Error adding receiver foreign key constraint:", receiverError);
+                    return false;
+                }
+
+                console.log("Foreign key constraints added successfully");
+            }
+
+            return true;
+        } catch (err) {
+            console.error("Error checking database schema:", err);
+            return false;
+        }
+    }
+
     // Get user profile for chat
     async function getUserProfileForChat(userId) {
         if (userId === AI_ASSISTANT_ID) {
@@ -2235,6 +2284,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
         const me = await getCurrentUser();
         if (me) {
+            await checkAndFixDatabaseSchema();  // Add this line
             await initializeDatabaseSchema();
             await fetchFriends();
             await fetchFriendRequests();
@@ -3085,7 +3135,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (userError) {
                 console.error("Error checking users table:", userError);
-                return false;
+                throw userError;
             }
 
             // If AI assistant doesn't exist in users table, create it
@@ -3101,7 +3151,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 if (createUserError) {
                     console.error("Error creating AI assistant in users table:", createUserError);
-                    return false;
+                    throw createUserError;
                 }
                 console.log("AI assistant created in users table");
             } else {
@@ -3117,7 +3167,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (fetchError) {
                 console.error("Error checking AI assistant profile:", fetchError);
-                return false;
+                throw fetchError;
             }
 
             // If profile doesn't exist, create it
@@ -3135,7 +3185,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 if (insertError) {
                     console.error("Error creating AI assistant profile:", insertError);
-                    return false;
+                    throw insertError;
                 }
                 console.log("AI assistant profile created successfully");
             } else {
@@ -3153,7 +3203,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 if (updateError) {
                     console.error("Error updating AI assistant profile:", updateError);
-                    return false;
+                    throw updateError;
                 }
                 console.log("AI assistant profile updated successfully");
             }
@@ -3477,55 +3527,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             } else {
                 showToast("Message failed to send. Please try again.", "error");
             }
-        }
-    }
-
-    // Check and fix database schema
-    async function checkAndFixDatabaseSchema() {
-        try {
-            console.log("Checking database schema...");
-
-            const { data: columns, error: columnsError } = await client
-                .from("information_schema.table_constraints")
-                .select("*")
-                .eq("table_name", "messages")
-                .eq("constraint_type", "FOREIGN KEY");
-
-            if (columnsError) {
-                console.error("Error checking table constraints:", columnsError);
-                return false;
-            }
-
-            console.log("Table constraints:", columns);
-
-            if (!columns || columns.length === 0) {
-                console.log("No foreign key constraints found, adding them...");
-
-                const { error: senderError } = await client.rpc('exec_sql', {
-                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id);`
-                });
-
-                if (senderError) {
-                    console.error("Error adding sender foreign key constraint:", senderError);
-                    return false;
-                }
-
-                const { error: receiverError } = await client.rpc('exec_sql', {
-                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id);`
-                });
-
-                if (receiverError) {
-                    console.error("Error adding receiver foreign key constraint:", receiverError);
-                    return false;
-                }
-
-                console.log("Foreign key constraints added successfully");
-            }
-
-            return true;
-        } catch (err) {
-            console.error("Error checking database schema:", err);
-            return false;
         }
     }
 });
