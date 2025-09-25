@@ -194,19 +194,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             // Special handling for AI assistant
             if (userId === AI_ASSISTANT_ID) {
-                const { error: insertError } = await client
-                    .from("users")
-                    .insert([{
-                        id: AI_ASSISTANT_ID,
-                        name: AI_ASSISTANT_USERNAME,
-                        email: AI_ASSISTANT_EMAIL
-                    }]);
-
-                if (insertError) {
-                    console.error("Error creating AI assistant in users table:", insertError);
-                    throw insertError;
+                const success = await initializeAIAssistant();
+                if (!success) {
+                    throw new Error("Failed to initialize AI assistant");
                 }
-                console.log(`AI assistant ${userId} created successfully`);
                 return true;
             }
 
@@ -299,14 +290,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             // If direct insert fails, try the regular approach
             console.log("Direct insert failed, trying regular approach...");
 
-            // Ensure AI assistant exists if needed
-            if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
-                const aiExists = await initializeAIAssistant();
-                if (!aiExists) {
-                    throw new Error("Failed to ensure AI assistant exists");
-                }
-            }
-
             // Ensure both users exist
             await ensureUserExists(senderId);
             await ensureUserExists(receiverId);
@@ -336,16 +319,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!content || !content.trim()) return;
 
         try {
-            // Ensure current user exists
+            // Ensure both users exist in the users table
             await ensureUserExists(currentUserId);
-
-            // Ensure AI assistant exists if needed
-            if (friendId === AI_ASSISTANT_ID) {
-                await initializeAIAssistant();
-            } else {
-                // Ensure receiver exists
-                await ensureUserExists(friendId);
-            }
+            await ensureUserExists(friendId);
 
             // Try to insert the message using direct approach
             const success = await insertMessageDirect(currentUserId, friendId, content);
