@@ -3,7 +3,7 @@ import { client } from "../../supabase.js";
 document.addEventListener("DOMContentLoaded", async () => {
     const AI_ASSISTANT_USERNAME = "AI_Assistant";
     const AI_ASSISTANT_BIO = "I'm your AI assistant! Feel free to ask me anything.";
-    const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.png";
+    const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.jpg";
     const GEMINI_API_KEY = "AIzaSyCVqoPntSjTMdrbkhaulp2jhE_i7vootUk";
     const AI_ASSISTANT_ID = "00000000-0000-0000-0000-000000000001";
     const AI_ASSISTANT_EMAIL = "ai-assistant@chatapp.com";
