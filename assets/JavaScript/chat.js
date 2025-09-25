@@ -997,6 +997,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function sendMessage(friendId, content) {
         if (!content || !content.trim()) return;
         try {
+            // If the receiver is the AI assistant, ensure it exists in the database
+            if (friendId === AI_ASSISTANT_ID) {
+                const aiExists = await ensureAIAssistantExists();
+                if (!aiExists) {
+                    showToast("Failed to initialize AI assistant. Please try again.", "error");
+                    return;
+                }
+            }
+
             // For all users (including AI assistant), store the message in the database
             const { error } = await client.from("messages").insert([{
                 sender_id: currentUserId,
@@ -3062,11 +3071,35 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (userError) {
                 console.error("Error checking private_users:", userError);
-                return false;
-            }
+                // Try to check in a table named "users"
+                const { data: existingInUsers, error: usersError } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", AI_ASSISTANT_ID)
+                    .maybeSingle();
 
-            // If AI assistant doesn't exist in private_users, create it
-            if (!existingUser) {
+                if (usersError) {
+                    console.error("Error checking users table:", usersError);
+                    return false;
+                }
+
+                if (!existingInUsers) {
+                    // Create in users table
+                    const { error: createUserError } = await client
+                        .from("users")
+                        .insert([{
+                            id: AI_ASSISTANT_ID,
+                            name: AI_ASSISTANT_USERNAME
+                        }]);
+
+                    if (createUserError) {
+                        console.error("Error creating AI assistant in users table:", createUserError);
+                        return false;
+                    }
+                    console.log("AI assistant created in users table");
+                }
+            } else if (!existingUser) {
+                // Create in private_users
                 const { error: createUserError } = await client
                     .from("private_users")
                     .insert([{
@@ -3190,29 +3223,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Add this function to insert messages (used for AI responses)
     async function insertMessage(senderId, receiverId, content) {
         try {
-            // Special handling for AI assistant messages
-            if (senderId === AI_ASSISTANT_ID) {
-                // First ensure AI assistant exists in user_profiles
+            // If either the sender or receiver is the AI assistant, ensure it exists
+            if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
                 const aiExists = await ensureAIAssistantExists();
                 if (!aiExists) {
                     console.error("Failed to ensure AI assistant exists");
                     return false;
                 }
-
-                const { error } = await client.from("messages").insert([{
-                    sender_id: senderId,
-                    receiver_id: receiverId,
-                    content
-                }]);
-
-                if (error) {
-                    console.error("Error inserting AI message:", error);
-                    return false;
-                }
-                return true;
             }
 
-            // Regular user messages
             const { error } = await client.from("messages").insert([{
                 sender_id: senderId,
                 receiver_id: receiverId,
