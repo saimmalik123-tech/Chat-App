@@ -23,6 +23,31 @@ document.addEventListener("DOMContentLoaded", async () => {
     let processingMessageIds = new Set();
     let allFriends = new Map();
 
+    // Helper function for retrying database operations
+    async function withRetry(fn, maxRetries = 3, initialDelay = 500) {
+        let lastError;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                return await fn();
+            } catch (error) {
+                lastError = error;
+                console.log(`Attempt ${attempt} failed:`, error.message);
+
+                if (attempt === maxRetries) {
+                    break;
+                }
+
+                // Exponential backoff with jitter
+                const delay = initialDelay * Math.pow(2, attempt - 1) + Math.random() * 200;
+                console.log(`Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+
+        throw lastError;
+    }
+
     // Show modal with animation
     function showModal(modalId) {
         try {
@@ -2976,6 +3001,76 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Enhanced user existence check with automatic creation
+    async function ensureUserExists(userId) {
+        return withRetry(async () => {
+            // Check if user exists
+            const { data: existingUser, error: checkError } = await client
+                .from("users")
+                .select("id")
+                .eq("id", userId)
+                .maybeSingle();
+
+            if (checkError) {
+                console.error("Error checking user existence:", checkError);
+                throw checkError;
+            }
+
+            if (existingUser) {
+                return true;
+            }
+
+            // User doesn't exist, try to create them
+            console.log(`User ${userId} not found, attempting to create...`);
+
+            // Get user profile information
+            const { data: profile, error: profileError } = await client
+                .from("user_profiles")
+                .select("user_name")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            if (profileError) {
+                console.error("Error fetching user profile:", profileError);
+                throw profileError;
+            }
+
+            if (!profile) {
+                console.error("User profile not found for:", userId);
+                throw new Error("User profile not found");
+            }
+
+            // Create the user
+            const { error: insertError } = await client
+                .from("users")
+                .insert([{
+                    id: userId,
+                    name: profile.user_name || "User",
+                    email: `${userId}@placeholder.com`
+                }]);
+
+            if (insertError) {
+                console.error("Error creating user:", insertError);
+                throw insertError;
+            }
+
+            // Verify the user was actually created
+            const { data: verifyUser, error: verifyError } = await client
+                .from("users")
+                .select("id")
+                .eq("id", userId)
+                .maybeSingle();
+
+            if (verifyError || !verifyUser) {
+                console.error("User creation verification failed");
+                throw new Error("User creation verification failed");
+            }
+
+            console.log(`User ${userId} created successfully`);
+            return true;
+        });
+    }
+
     // Ensure AI assistant exists
     async function ensureAIAssistantExists() {
         try {
@@ -3135,76 +3230,67 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Insert message with proper transaction handling
+    // Enhanced insertMessage function with transaction-like behavior and retry
     async function insertMessage(senderId, receiverId, content) {
         try {
-            // Ensure AI assistant exists if needed
-            if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
-                const aiExists = await ensureAIAssistantExists();
-                if (!aiExists) {
-                    console.error("Failed to ensure AI assistant exists");
-                    return false;
+            // Use a transaction-like approach with retries
+            return await withRetry(async () => {
+                // Ensure AI assistant exists if needed
+                if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
+                    const aiExists = await ensureAIAssistantExists();
+                    if (!aiExists) {
+                        throw new Error("Failed to ensure AI assistant exists");
+                    }
                 }
-            }
 
-            // Verify both users exist in the users table
-            const senderExists = await userExistsInUsersTable(senderId);
-            if (!senderExists) {
-                console.error("Sender not found in users table:", senderId);
-                return false;
-            }
+                // Ensure sender exists
+                const senderExists = await ensureUserExists(senderId);
+                if (!senderExists) {
+                    throw new Error("Sender does not exist in users table");
+                }
 
-            const receiverExists = await userExistsInUsersTable(receiverId);
-            if (!receiverExists) {
-                console.error("Receiver not found in users table:", receiverId);
+                // Ensure receiver exists
+                const receiverExists = await ensureUserExists(receiverId);
+                if (!receiverExists) {
+                    throw new Error("Receiver does not exist in users table");
+                }
 
-                // Try to add the receiver to the users table
-                const { data: profile } = await client
-                    .from("user_profiles")
-                    .select("user_name")
-                    .eq("user_id", receiverId)
+                console.log("Inserting message into database...");
+                const { error } = await client.from("messages").insert([{
+                    sender_id: senderId,
+                    receiver_id: receiverId,
+                    content
+                }]);
+
+                if (error) {
+                    console.error("Error inserting message:", error);
+                    throw error;
+                }
+
+                console.log("Message inserted successfully");
+                return true;
+            });
+        } catch (err) {
+            console.error("insertMessage error after retries:", err);
+            if (err.code === '23503') {
+                console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
+                console.error("Sender ID:", senderId, "Receiver ID:", receiverId);
+
+                // Diagnostic check
+                const { data: diagnosticSender } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", senderId)
                     .maybeSingle();
 
-                if (profile) {
-                    const { error: insertError } = await client
-                        .from("users")
-                        .insert([{
-                            id: receiverId,
-                            name: profile.user_name || "User",
-                            email: `${receiverId}@placeholder.com`
-                        }]);
+                const { data: diagnosticReceiver } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", receiverId)
+                    .maybeSingle();
 
-                    if (insertError) {
-                        console.error("Failed to add receiver to users table:", insertError);
-                        return false;
-                    }
-
-                    console.log("Added receiver to users table");
-                } else {
-                    console.error("Receiver profile not found");
-                    return false;
-                }
+                console.error("Diagnostic - Sender exists:", !!diagnosticSender, "Receiver exists:", !!diagnosticReceiver);
             }
-
-            console.log("Inserting message into database...");
-            const { error } = await client.from("messages").insert([{
-                sender_id: senderId,
-                receiver_id: receiverId,
-                content
-            }]);
-
-            if (error) {
-                console.error("Error inserting message:", error);
-                if (error.code === '23503') {
-                    console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
-                    console.error("Sender ID:", senderId, "Receiver ID:", receiverId);
-                }
-                return false;
-            }
-            console.log("Message inserted successfully");
-            return true;
-        } catch (err) {
-            console.error("insertMessage error:", err);
             return false;
         }
     }
@@ -3293,117 +3379,92 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Enhanced sendMessage function with transaction handling
+    // Enhanced sendMessage function with transaction-like behavior and retry
     async function sendMessage(friendId, content) {
         if (!content || !content.trim()) return;
 
         try {
-            // Ensure current user exists in users table
-            await ensureCurrentUserInUsersTable();
-
-            // If sending to AI assistant, ensure it exists
-            if (friendId === AI_ASSISTANT_ID) {
-                console.log("Sending message to AI assistant, ensuring it exists...");
-                const aiExists = await ensureAIAssistantExists();
-                if (!aiExists) {
-                    console.error("Failed to initialize AI assistant");
-                    showToast("Failed to initialize AI assistant. Please try again.", "error");
-                    return;
+            // Use a transaction-like approach with retries
+            await withRetry(async () => {
+                // Ensure current user exists
+                const currentUserExists = await ensureUserExists(currentUserId);
+                if (!currentUserExists) {
+                    throw new Error("Current user does not exist in users table");
                 }
-                console.log("AI assistant initialized successfully");
-            } else {
-                // For regular users, ensure they exist in the users table
-                const receiverExists = await userExistsInUsersTable(friendId);
-                if (!receiverExists) {
-                    console.warn("Receiver not found in users table, attempting to add...");
 
-                    // Get the receiver's profile information
-                    const { data: profile, error: profileError } = await client
-                        .from("user_profiles")
-                        .select("user_name")
-                        .eq("user_id", friendId)
-                        .maybeSingle();
-
-                    if (profileError) {
-                        console.error("Error fetching receiver profile:", profileError);
-                        showToast("Failed to find user information. Please try again.", "error");
-                        return;
+                // Ensure AI assistant exists if needed
+                if (friendId === AI_ASSISTANT_ID) {
+                    console.log("Sending message to AI assistant, ensuring it exists...");
+                    const aiExists = await ensureAIAssistantExists();
+                    if (!aiExists) {
+                        throw new Error("Failed to initialize AI assistant");
                     }
-
-                    if (profile) {
-                        // Create the user in the users table
-                        const { error: insertError } = await client
-                            .from("users")
-                            .insert([{
-                                id: friendId,
-                                name: profile.user_name || "User",
-                                email: `${friendId}@placeholder.com`
-                            }]);
-
-                        if (insertError) {
-                            console.error("Error adding receiver to users table:", insertError);
-                            showToast("Failed to create user record. Please try again.", "error");
-                            return;
-                        }
-
-                        console.log("Added receiver to users table");
-                    } else {
-                        console.error("Receiver profile not found");
-                        showToast("User not found. Please try again.", "error");
-                        return;
-                    }
-                }
-            }
-
-            // Double-check that both users exist before inserting the message
-            const senderExists = await userExistsInUsersTable(currentUserId);
-            const receiverExists = await userExistsInUsersTable(friendId);
-
-            if (!senderExists || !receiverExists) {
-                console.error("Pre-insert check failed: Sender exists:", senderExists, "Receiver exists:", receiverExists);
-                showToast("Failed to send message. User records not found. Please try again.", "error");
-                return;
-            }
-
-            console.log("Inserting message into database...");
-            const { error } = await client.from("messages").insert([{
-                sender_id: currentUserId,
-                receiver_id: friendId,
-                content
-            }]);
-
-            if (error) {
-                console.error("Error sending message:", error);
-                if (error.code === '23503') {
-                    console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
-                    console.error("Sender ID:", currentUserId, "Receiver ID:", friendId);
-
-                    // Check the actual state of the database
-                    const { data: senderCheck } = await client
-                        .from("users")
-                        .select("id")
-                        .eq("id", currentUserId)
-                        .maybeSingle();
-
-                    const { data: receiverCheck } = await client
-                        .from("users")
-                        .select("id")
-                        .eq("id", friendId)
-                        .maybeSingle();
-
-                    console.error("Database check - Sender exists:", !!senderCheck, "Receiver exists:", !!receiverCheck);
-
-                    showToast("Message failed to send: User not found in database. Please try again.", "error");
+                    console.log("AI assistant initialized successfully");
                 } else {
-                    showToast("Message failed to send. Please try again.", "error");
+                    // Ensure receiver exists
+                    const receiverExists = await ensureUserExists(friendId);
+                    if (!receiverExists) {
+                        throw new Error("Receiver does not exist in users table");
+                    }
                 }
-            } else {
+
+                // Final verification before inserting message
+                const { data: senderCheck, error: senderCheckError } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", currentUserId)
+                    .maybeSingle();
+
+                const { data: receiverCheck, error: receiverCheckError } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", friendId)
+                    .maybeSingle();
+
+                if (senderCheckError || receiverCheckError || !senderCheck || !receiverCheck) {
+                    throw new Error("Final verification failed - user records not found");
+                }
+
+                console.log("Inserting message into database...");
+                const { error } = await client.from("messages").insert([{
+                    sender_id: currentUserId,
+                    receiver_id: friendId,
+                    content
+                }]);
+
+                if (error) {
+                    console.error("Error sending message:", error);
+                    throw error;
+                }
+
                 console.log("Message sent successfully");
                 updateLastMessage(friendId, content, new Date().toISOString());
-            }
+            });
         } catch (err) {
-            console.error("sendMessage error:", err);
-            showToast("Message failed to send. Please try again.", "error");
+            console.error("sendMessage error after retries:", err);
+            if (err.code === '23503') {
+                console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
+                console.error("Sender ID:", currentUserId, "Receiver ID:", friendId);
+
+                // Diagnostic check
+                const { data: diagnosticSender } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", currentUserId)
+                    .maybeSingle();
+
+                const { data: diagnosticReceiver } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", friendId)
+                    .maybeSingle();
+
+                console.error("Diagnostic - Sender exists:", !!diagnosticSender, "Receiver exists:", !!diagnosticReceiver);
+
+                showToast("Message failed to send: Database inconsistency detected. Please try again.", "error");
+            } else {
+                showToast("Message failed to send. Please try again.", "error");
+            }
         }
     }
 
