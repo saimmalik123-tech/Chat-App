@@ -283,6 +283,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                     throw new Error("Receiver does not exist in users table");
                 }
 
+                // Double-check both users exist right before inserting
+                const { data: senderCheck } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", senderId)
+                    .maybeSingle();
+
+                const { data: receiverCheck } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", receiverId)
+                    .maybeSingle();
+
+                if (!senderCheck || !receiverCheck) {
+                    throw new Error("One or both users do not exist in users table");
+                }
+
                 console.log("Inserting message into database...");
                 const { error } = await client.from("messages").insert([{
                     sender_id: senderId,
@@ -304,72 +321,260 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
                 console.error("Sender ID:", senderId, "Receiver ID:", receiverId);
 
-                // Diagnostic check
-                const { data: diagnosticSender } = await client
-                    .from("users")
-                    .select("id")
-                    .eq("id", senderId)
-                    .maybeSingle();
+                // Try a more direct approach - check if users exist and create them if needed
+                try {
+                    // Check and create sender if needed
+                    const { data: senderCheck } = await client
+                        .from("users")
+                        .select("id")
+                        .eq("id", senderId)
+                        .maybeSingle();
 
-                const { data: diagnosticReceiver } = await client
-                    .from("users")
-                    .select("id")
-                    .eq("id", receiverId)
-                    .maybeSingle();
-
-                console.error("Diagnostic - Sender exists:", !!diagnosticSender, "Receiver exists:", !!diagnosticReceiver);
-
-                // If sender doesn't exist, try to create it and retry
-                if (!diagnosticSender) {
-                    console.log("Sender not found, attempting to create...");
-                    try {
-                        await ensureUserExists(senderId);
-                        // Retry the message insertion
-                        console.log("Retrying message insertion after creating sender...");
-                        const { error: retryError } = await client.from("messages").insert([{
-                            sender_id: senderId,
-                            receiver_id: receiverId,
-                            content
-                        }]);
-
-                        if (retryError) {
-                            console.error("Retry failed:", retryError);
-                            return false;
+                    if (!senderCheck) {
+                        console.log("Sender not found, creating...");
+                        if (senderId === AI_ASSISTANT_ID) {
+                            await client
+                                .from("users")
+                                .insert([{
+                                    id: AI_ASSISTANT_ID,
+                                    name: AI_ASSISTANT_USERNAME,
+                                    email: AI_ASSISTANT_EMAIL
+                                }]);
                         } else {
-                            console.log("Message inserted successfully on retry");
-                            return true;
+                            // Get user profile for regular users
+                            const { data: profile } = await client
+                                .from("user_profiles")
+                                .select("user_name")
+                                .eq("user_id", senderId)
+                                .maybeSingle();
+
+                            if (profile) {
+                                await client
+                                    .from("users")
+                                    .insert([{
+                                        id: senderId,
+                                        name: profile.user_name || "User",
+                                        email: `${senderId}@placeholder.com`
+                                    }]);
+                            } else {
+                                throw new Error("Cannot create sender - profile not found");
+                            }
                         }
-                    } catch (retryErr) {
-                        console.error("Error during retry for sender:", retryErr);
                     }
-                }
 
-                // If receiver doesn't exist, try to create it and retry
-                if (!diagnosticReceiver) {
-                    console.log("Receiver not found, attempting to create...");
-                    try {
-                        await ensureUserExists(receiverId);
-                        // Retry the message insertion
-                        console.log("Retrying message insertion after creating receiver...");
-                        const { error: retryError } = await client.from("messages").insert([{
-                            sender_id: senderId,
-                            receiver_id: receiverId,
-                            content
-                        }]);
+                    // Check and create receiver if needed
+                    const { data: receiverCheck } = await client
+                        .from("users")
+                        .select("id")
+                        .eq("id", receiverId)
+                        .maybeSingle();
 
-                        if (retryError) {
-                            console.error("Retry failed:", retryError);
-                            return false;
+                    if (!receiverCheck) {
+                        console.log("Receiver not found, creating...");
+                        if (receiverId === AI_ASSISTANT_ID) {
+                            await client
+                                .from("users")
+                                .insert([{
+                                    id: AI_ASSISTANT_ID,
+                                    name: AI_ASSISTANT_USERNAME,
+                                    email: AI_ASSISTANT_EMAIL
+                                }]);
                         } else {
-                            console.log("Message inserted successfully on retry");
-                            return true;
+                            // Get user profile for regular users
+                            const { data: profile } = await client
+                                .from("user_profiles")
+                                .select("user_name")
+                                .eq("user_id", receiverId)
+                                .maybeSingle();
+
+                            if (profile) {
+                                await client
+                                    .from("users")
+                                    .insert([{
+                                        id: receiverId,
+                                        name: profile.user_name || "User",
+                                        email: `${receiverId}@placeholder.com`
+                                    }]);
+                            } else {
+                                throw new Error("Cannot create receiver - profile not found");
+                            }
                         }
-                    } catch (retryErr) {
-                        console.error("Error during retry for receiver:", retryErr);
                     }
+
+                    // Now try to insert the message again
+                    console.log("Retrying message insertion after creating users...");
+                    const { error: retryError } = await client.from("messages").insert([{
+                        sender_id: senderId,
+                        receiver_id: receiverId,
+                        content
+                    }]);
+
+                    if (retryError) {
+                        console.error("Retry failed:", retryError);
+                        return false;
+                    } else {
+                        console.log("Message inserted successfully on retry");
+                        return true;
+                    }
+                } catch (retryErr) {
+                    console.error("Error during retry:", retryErr);
+                    return false;
                 }
             }
             return false;
+        }
+    }
+
+    // Enhanced sendMessage function with transaction-like behavior and retry
+    async function sendMessage(friendId, content) {
+        if (!content || !content.trim()) return;
+
+        try {
+            // Use a transaction-like approach with retries
+            await withRetry(async () => {
+                // Ensure current user exists
+                const currentUserExists = await ensureUserExists(currentUserId);
+                if (!currentUserExists) {
+                    throw new Error("Current user does not exist in users table");
+                }
+
+                // Ensure AI assistant exists if needed
+                if (friendId === AI_ASSISTANT_ID) {
+                    console.log("Sending message to AI assistant, ensuring it exists...");
+                    const aiExists = await initializeAIAssistant();
+                    if (!aiExists) {
+                        throw new Error("Failed to initialize AI assistant");
+                    }
+                    console.log("AI assistant initialized successfully");
+                } else {
+                    // Ensure receiver exists
+                    const receiverExists = await ensureUserExists(friendId);
+                    if (!receiverExists) {
+                        throw new Error("Receiver does not exist in users table");
+                    }
+                }
+
+                // Double-check both users exist right before inserting
+                const { data: senderCheck } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", currentUserId)
+                    .maybeSingle();
+
+                const { data: receiverCheck } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", friendId)
+                    .maybeSingle();
+
+                if (!senderCheck || !receiverCheck) {
+                    throw new Error("One or both users do not exist in users table");
+                }
+
+                console.log("Inserting message into database...");
+                const { error } = await client.from("messages").insert([{
+                    sender_id: currentUserId,
+                    receiver_id: friendId,
+                    content
+                }]);
+
+                if (error) {
+                    console.error("Error sending message:", error);
+                    throw error;
+                }
+
+                console.log("Message sent successfully");
+                updateLastMessage(friendId, content, new Date().toISOString());
+            });
+        } catch (err) {
+            console.error("sendMessage error after retries:", err);
+            if (err.code === '23503') {
+                console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
+                console.error("Sender ID:", currentUserId, "Receiver ID:", friendId);
+
+                // Try a more direct approach - check if users exist and create them if needed
+                try {
+                    // Check and create sender if needed
+                    const { data: senderCheck } = await client
+                        .from("users")
+                        .select("id")
+                        .eq("id", currentUserId)
+                        .maybeSingle();
+
+                    if (!senderCheck) {
+                        console.log("Current user not found in users table, creating...");
+                        const { data: { user } } = await client.auth.getUser();
+
+                        await client
+                            .from("users")
+                            .insert([{
+                                id: currentUserId,
+                                name: user.user_metadata?.full_name || user.email?.split('@')[0] || "User",
+                                email: user.email || `${currentUserId}@placeholder.com`
+                            }]);
+                    }
+
+                    // Check and create receiver if needed
+                    const { data: receiverCheck } = await client
+                        .from("users")
+                        .select("id")
+                        .eq("id", friendId)
+                        .maybeSingle();
+
+                    if (!receiverCheck) {
+                        console.log("Receiver not found, creating...");
+                        if (friendId === AI_ASSISTANT_ID) {
+                            await client
+                                .from("users")
+                                .insert([{
+                                    id: AI_ASSISTANT_ID,
+                                    name: AI_ASSISTANT_USERNAME,
+                                    email: AI_ASSISTANT_EMAIL
+                                }]);
+                        } else {
+                            // Get user profile for regular users
+                            const { data: profile } = await client
+                                .from("user_profiles")
+                                .select("user_name")
+                                .eq("user_id", friendId)
+                                .maybeSingle();
+
+                            if (profile) {
+                                await client
+                                    .from("users")
+                                    .insert([{
+                                        id: friendId,
+                                        name: profile.user_name || "User",
+                                        email: `${friendId}@placeholder.com`
+                                    }]);
+                            } else {
+                                throw new Error("Cannot create receiver - profile not found");
+                            }
+                        }
+                    }
+
+                    // Now try to send the message again
+                    console.log("Retrying message sending after creating users...");
+                    const { error: retryError } = await client.from("messages").insert([{
+                        sender_id: currentUserId,
+                        receiver_id: friendId,
+                        content
+                    }]);
+
+                    if (retryError) {
+                        console.error("Retry failed:", retryError);
+                        showToast("Message failed to send: Database inconsistency detected. Please try again.", "error");
+                    } else {
+                        console.log("Message sent successfully on retry");
+                        updateLastMessage(friendId, content, new Date().toISOString());
+                    }
+                } catch (retryErr) {
+                    console.error("Error during retry:", retryErr);
+                    showToast("Message failed to send. Please try again.", "error");
+                }
+            } else {
+                showToast("Message failed to send. Please try again.", "error");
+            }
         }
     }
 
