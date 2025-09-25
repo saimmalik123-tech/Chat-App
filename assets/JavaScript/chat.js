@@ -120,7 +120,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             overlay.classList.remove('show');
-            setTimeout(() => overlay.classList.add('hidden'), 300);
+            setTimeout(() => overlay.classList.add("hidden"), 300);
         } catch (error) {
             console.error("Error hiding loading overlay:", error);
         }
@@ -990,123 +990,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         } catch (error) {
             console.error("Error enabling friend search:", error);
-        }
-    }
-
-    // Send message
-    async function sendMessage(friendId, content) {
-        if (!content || !content.trim()) return;
-        try {
-            // If the receiver is the AI assistant, ensure it exists in the database
-            if (friendId === AI_ASSISTANT_ID) {
-                const aiExists = await ensureAIAssistantExists();
-                if (!aiExists) {
-                    showToast("Failed to initialize AI assistant. Please try again.", "error");
-                    return;
-                }
-            }
-
-            // For all users (including AI assistant), store the message in the database
-            const { error } = await client.from("messages").insert([{
-                sender_id: currentUserId,
-                receiver_id: friendId,
-                content
-            }]);
-            if (error) {
-                console.error("Error sending message:", error);
-                showToast("Message failed to send. Please try again.", "error");
-            } else {
-                // Only update the last message for this specific friend
-                updateLastMessage(friendId, content, new Date().toISOString());
-            }
-        } catch (err) {
-            console.error("sendMessage error:", err);
-            showToast("Message failed to send. Please try again.", "error");
-        }
-    }
-
-    // Mark messages as seen
-    async function markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar) {
-        if (!currentUserId) return;
-        try {
-            const { data: unseenMessages, error: fetchError } = await client
-                .from("messages")
-                .select("*")
-                .eq("receiver_id", currentUserId)
-                .eq("sender_id", friendId)
-                .eq("seen", false)
-                .is('deleted_at', null);
-
-            if (fetchError) {
-                console.error("Error fetching unseen messages:", fetchError);
-                return;
-            }
-
-            if (!unseenMessages || unseenMessages.length === 0) {
-                return;
-            }
-
-            const { error: updateError } = await client
-                .from("messages")
-                .update({ seen: true })
-                .eq("receiver_id", currentUserId)
-                .eq("sender_id", friendId)
-                .eq("seen", false);
-
-            if (updateError) {
-                console.error("Error marking messages as seen:", updateError);
-            } else {
-                unseenCounts[friendId] = 0;
-                updateUnseenBadge(friendId, 0);
-
-                unseenMessages.forEach(msg => {
-                    const idx = oldMessages.findIndex(m => m.id === msg.id);
-                    if (idx !== -1) oldMessages[idx].seen = true;
-                    scheduleMessageDeletion(msg.id, friendId);
-                });
-                renderChatMessages(chatBox, oldMessages, friendAvatar);
-            }
-        } catch (err) {
-            console.error("markMessagesAsSeen error:", err);
-        }
-    }
-
-    // Fetch messages
-    async function fetchMessages(friendId) {
-        try {
-            // Special handling for AI assistant
-            if (friendId === AI_ASSISTANT_ID) {
-                // For AI assistant, we'll fetch messages from the database
-                const { data, error } = await client
-                    .from("messages")
-                    .select("*")
-                    .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
-                    .is('deleted_at', null)
-                    .order("created_at", { ascending: true });
-
-                if (error) {
-                    console.error("Error fetching messages:", error);
-                    return [];
-                }
-                return data || [];
-            }
-
-            // For regular users
-            const { data, error } = await client
-                .from("messages")
-                .select("*")
-                .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
-                .is('deleted_at', null)
-                .order("created_at", { ascending: true });
-
-            if (error) {
-                console.error("Error fetching messages:", error);
-                return [];
-            }
-            return data || [];
-        } catch (err) {
-            console.error("fetchMessages error:", err);
-            return [];
         }
     }
 
@@ -3063,7 +2946,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function ensureAIAssistantExists() {
         try {
             console.log("Ensuring AI assistant exists in the database...");
-            
+
             // First, check if AI assistant exists in the users table
             const { data: existingUser, error: userError } = await client
                 .from("users")
@@ -3077,6 +2960,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             if (!existingUser) {
+                console.log("AI assistant not found in users table, creating...");
                 // Create in users table
                 const { error: createUserError } = await client
                     .from("users")
@@ -3090,6 +2974,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     return false;
                 }
                 console.log("AI assistant created in users table");
+            } else {
+                console.log("AI assistant already exists in users table");
             }
 
             // Now check and create/update the profile in user_profiles
@@ -3105,6 +2991,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             if (!existingProfile) {
+                console.log("AI assistant profile not found, creating...");
                 const { error: insertError } = await client
                     .from("user_profiles")
                     .insert({
@@ -3121,6 +3008,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
                 console.log("AI assistant profile created successfully");
             } else {
+                console.log("AI assistant profile already exists, updating...");
                 // Update the existing profile
                 const { error: updateError } = await client
                     .from("user_profiles")
@@ -3137,6 +3025,29 @@ document.addEventListener("DOMContentLoaded", async () => {
                     return false;
                 }
                 console.log("AI assistant profile updated successfully");
+            }
+
+            // Final check to ensure the AI assistant exists in both tables
+            const { data: finalUserCheck, error: finalUserError } = await client
+                .from("users")
+                .select("id")
+                .eq("id", AI_ASSISTANT_ID)
+                .maybeSingle();
+
+            if (finalUserError || !finalUserCheck) {
+                console.error("Final check failed: AI assistant not found in users table");
+                return false;
+            }
+
+            const { data: finalProfileCheck, error: finalProfileError } = await client
+                .from("user_profiles")
+                .select("user_id")
+                .eq("user_id", AI_ASSISTANT_ID)
+                .maybeSingle();
+
+            if (finalProfileError || !finalProfileCheck) {
+                console.error("Final check failed: AI assistant profile not found");
+                return false;
             }
 
             console.log("AI assistant exists in the database");
@@ -3295,6 +3206,190 @@ document.addEventListener("DOMContentLoaded", async () => {
         } catch (error) {
             console.error("Error handling AI response:", error);
             showToast("Error processing AI response", "error");
+        }
+    }
+
+    // Add this function to check if a user exists in the users table
+    async function userExistsInUsersTable(userId) {
+        try {
+            const { data, error } = await client
+                .from("users")
+                .select("id")
+                .eq("id", userId)
+                .maybeSingle();
+
+            if (error) {
+                console.error("Error checking if user exists in users table:", error);
+                return false;
+            }
+
+            return !!data;
+        } catch (err) {
+            console.error("Error in userExistsInUsersTable:", err);
+            return false;
+        }
+    }
+
+    // Enhanced sendMessage function
+    async function sendMessage(friendId, content) {
+        if (!content || !content.trim()) return;
+        try {
+            // Check if the sender exists in the users table
+            const senderExists = await userExistsInUsersTable(currentUserId);
+            if (!senderExists) {
+                console.error("Current user not found in users table");
+                showToast("Your user account is not properly set up. Please log in again.", "error");
+                return;
+            }
+
+            // If the receiver is the AI assistant, ensure it exists in the database
+            if (friendId === AI_ASSISTANT_ID) {
+                console.log("Sending message to AI assistant, ensuring it exists...");
+                const aiExists = await ensureAIAssistantExists();
+                if (!aiExists) {
+                    console.error("Failed to initialize AI assistant");
+                    showToast("Failed to initialize AI assistant. Please try again.", "error");
+                    return;
+                }
+                console.log("AI assistant initialized successfully");
+            } else {
+                // Check if the receiver exists in the users table
+                const receiverExists = await userExistsInUsersTable(friendId);
+                if (!receiverExists) {
+                    console.error("Receiver not found in users table");
+                    showToast("The user you're trying to message doesn't exist. Please try again.", "error");
+                    return;
+                }
+            }
+
+            // For all users (including AI assistant), store the message in the database
+            console.log("Inserting message into database...");
+            const { error } = await client.from("messages").insert([{
+                sender_id: currentUserId,
+                receiver_id: friendId,
+                content
+            }]);
+            if (error) {
+                console.error("Error sending message:", error);
+                if (error.code === '23503') {
+                    // Foreign key constraint violation
+                    console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
+                    showToast("Message failed to send: User not found. Please try again.", "error");
+                } else {
+                    showToast("Message failed to send. Please try again.", "error");
+                }
+            } else {
+                console.log("Message sent successfully");
+                // Only update the last message for this specific friend
+                updateLastMessage(friendId, content, new Date().toISOString());
+            }
+        } catch (err) {
+            console.error("sendMessage error:", err);
+            showToast("Message failed to send. Please try again.", "error");
+        }
+    }
+
+    // Enhanced insertMessage function
+    async function insertMessage(senderId, receiverId, content) {
+        try {
+            // Check if both sender and receiver exist in the users table
+            const senderExists = await userExistsInUsersTable(senderId);
+            if (!senderExists) {
+                console.error("Sender not found in users table:", senderId);
+                return false;
+            }
+
+            const receiverExists = await userExistsInUsersTable(receiverId);
+            if (!receiverExists) {
+                console.error("Receiver not found in users table:", receiverId);
+                return false;
+            }
+
+            // If either the sender or receiver is the AI assistant, ensure it exists
+            if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
+                console.log("Inserting message involving AI assistant, ensuring it exists...");
+                const aiExists = await ensureAIAssistantExists();
+                if (!aiExists) {
+                    console.error("Failed to ensure AI assistant exists");
+                    return false;
+                }
+                console.log("AI assistant exists");
+            }
+
+            console.log("Inserting message into database...");
+            const { error } = await client.from("messages").insert([{
+                sender_id: senderId,
+                receiver_id: receiverId,
+                content
+            }]);
+
+            if (error) {
+                console.error("Error inserting message:", error);
+                if (error.code === '23503') {
+                    // Foreign key constraint violation
+                    console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
+                    console.error("Sender ID:", senderId, "Receiver ID:", receiverId);
+                }
+                return false;
+            }
+            console.log("Message inserted successfully");
+            return true;
+        } catch (err) {
+            console.error("insertMessage error:", err);
+            return false;
+        }
+    }
+
+    // Add a function to check and fix database schema issues
+    async function checkAndFixDatabaseSchema() {
+        try {
+            console.log("Checking database schema...");
+
+            // Check if messages table has foreign key constraints
+            const { data: columns, error: columnsError } = await client
+                .from("information_schema.table_constraints")
+                .select("*")
+                .eq("table_name", "messages")
+                .eq("constraint_type", "FOREIGN KEY");
+
+            if (columnsError) {
+                console.error("Error checking table constraints:", columnsError);
+                return false;
+            }
+
+            console.log("Table constraints:", columns);
+
+            // If there are no foreign key constraints, we need to add them
+            if (!columns || columns.length === 0) {
+                console.log("No foreign key constraints found, adding them...");
+
+                // Add foreign key constraint for sender_id
+                const { error: senderError } = await client.rpc('exec_sql', {
+                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id);`
+                });
+
+                if (senderError) {
+                    console.error("Error adding sender foreign key constraint:", senderError);
+                    return false;
+                }
+
+                // Add foreign key constraint for receiver_id
+                const { error: receiverError } = await client.rpc('exec_sql', {
+                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id);`
+                });
+
+                if (receiverError) {
+                    console.error("Error adding receiver foreign key constraint:", receiverError);
+                    return false;
+                }
+
+                console.log("Foreign key constraints added successfully");
+            }
+
+            return true;
+        } catch (err) {
+            console.error("Error checking database schema:", err);
+            return false;
         }
     }
 });
