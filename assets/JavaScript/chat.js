@@ -52,6 +52,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Initialize AI assistant
     async function initializeAIAssistant() {
         if (aiAssistantInitialized) return true;
+         showLoading("SetUp Assistant...");
 
         try {
             console.log("Initializing AI assistant...");
@@ -167,6 +168,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         } catch (err) {
             console.error("Error initializing AI assistant:", err);
             return false;
+        } finally{
+            hideLoading();
         }
     }
 
@@ -332,6 +335,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (me) {
             // Initialize AI assistant BEFORE any other operations
             await initializeAIAssistant();
+
+            await ensureCurrentUserInUsersTable();
 
             await checkAndFixDatabaseSchema();
             await initializeDatabaseSchema();
