@@ -3,7 +3,7 @@ import { client } from "../../supabase.js";
 document.addEventListener("DOMContentLoaded", async () => {
     const AI_ASSISTANT_USERNAME = "AI_Assistant";
     const AI_ASSISTANT_BIO = "I'm your AI assistant! Feel free to ask me anything.";
-    const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.jpg";
+    const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.png";
     const GEMINI_API_KEY = "AIzaSyCVqoPntSjTMdrbkhaulp2jhE_i7vootUk";
     const AI_ASSISTANT_ID = "00000000-0000-0000-0000-000000000001";
     const AI_ASSISTANT_EMAIL = "ai-assistant@chatapp.com";
@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let deletionTimeouts = {};
     let processingMessageIds = new Set();
     let allFriends = new Map();
+    let aiAssistantInitialized = false; // Flag to track initialization
 
     // Helper function for retrying database operations
     async function withRetry(fn, maxRetries = 3, initialDelay = 500) {
@@ -46,6 +47,651 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         throw lastError;
+    }
+
+    // Initialize AI assistant with proper error handling
+    async function initializeAIAssistant() {
+        if (aiAssistantInitialized) return true; // Skip if already initialized
+
+        try {
+            console.log("Initializing AI assistant...");
+
+            // Check if AI assistant exists in users table
+            const { data: existingUser, error: userError } = await client
+                .from("users")
+                .select("id")
+                .eq("id", AI_ASSISTANT_ID)
+                .maybeSingle();
+
+            if (userError) {
+                console.error("Error checking users table:", userError);
+                throw userError;
+            }
+
+            // If AI assistant doesn't exist in users table, create it
+            if (!existingUser) {
+                console.log("AI assistant not found in users table, creating...");
+                const { error: createUserError } = await client
+                    .from("users")
+                    .insert([{
+                        id: AI_ASSISTANT_ID,
+                        name: AI_ASSISTANT_USERNAME,
+                        email: AI_ASSISTANT_EMAIL
+                    }]);
+
+                if (createUserError) {
+                    console.error("Error creating AI assistant in users table:", createUserError);
+                    throw createUserError;
+                }
+                console.log("AI assistant created in users table");
+            } else {
+                console.log("AI assistant already exists in users table");
+            }
+
+            // Check if AI assistant profile exists
+            const { data: existingProfile, error: fetchError } = await client
+                .from("user_profiles")
+                .select("user_id")
+                .eq("user_id", AI_ASSISTANT_ID)
+                .maybeSingle();
+
+            if (fetchError) {
+                console.error("Error checking AI assistant profile:", fetchError);
+                throw fetchError;
+            }
+
+            // If profile doesn't exist, create it
+            if (!existingProfile) {
+                console.log("AI assistant profile not found, creating...");
+                const { error: insertError } = await client
+                    .from("user_profiles")
+                    .insert({
+                        user_id: AI_ASSISTANT_ID,
+                        user_name: AI_ASSISTANT_USERNAME,
+                        profile_image_url: AI_ASSISTANT_AVATAR,
+                        bio: AI_ASSISTANT_BIO,
+                        is_online: true
+                    });
+
+                if (insertError) {
+                    console.error("Error creating AI assistant profile:", insertError);
+                    throw insertError;
+                }
+                console.log("AI assistant profile created successfully");
+            } else {
+                // Update existing profile
+                console.log("AI assistant profile already exists, updating...");
+                const { error: updateError } = await client
+                    .from("user_profiles")
+                    .update({
+                        user_name: AI_ASSISTANT_USERNAME,
+                        profile_image_url: AI_ASSISTANT_AVATAR,
+                        bio: AI_ASSISTANT_BIO,
+                        is_online: true
+                    })
+                    .eq("user_id", AI_ASSISTANT_ID);
+
+                if (updateError) {
+                    console.error("Error updating AI assistant profile:", updateError);
+                    throw updateError;
+                }
+                console.log("AI assistant profile updated successfully");
+            }
+
+            // Final verification - check both tables again
+            const { data: finalUserCheck, error: finalUserError } = await client
+                .from("users")
+                .select("id")
+                .eq("id", AI_ASSISTANT_ID)
+                .maybeSingle();
+
+            if (finalUserError || !finalUserCheck) {
+                console.error("Final check failed: AI assistant not found in users table");
+                return false;
+            }
+
+            const { data: finalProfileCheck, error: finalProfileError } = await client
+                .from("user_profiles")
+                .select("user_id")
+                .eq("user_id", AI_ASSISTANT_ID)
+                .maybeSingle();
+
+            if (finalProfileError || !finalProfileCheck) {
+                console.error("Final check failed: AI assistant profile not found");
+                return false;
+            }
+
+            console.log("AI assistant initialized successfully");
+            aiAssistantInitialized = true; // Set flag to true
+            return true;
+        } catch (err) {
+            console.error("Error initializing AI assistant:", err);
+            return false;
+        }
+    }
+
+    // Ensure user exists in users table
+    async function ensureUserExists(userId) {
+        return withRetry(async () => {
+            // Check if user exists
+            const { data: existingUser, error: checkError } = await client
+                .from("users")
+                .select("id")
+                .eq("id", userId)
+                .maybeSingle();
+
+            if (checkError) {
+                console.error("Error checking user existence:", checkError);
+                throw checkError;
+            }
+
+            if (existingUser) {
+                return true;
+            }
+
+            // User doesn't exist, try to create them
+            console.log(`User ${userId} not found, attempting to create...`);
+
+            // Get user profile information
+            const { data: profile, error: profileError } = await client
+                .from("user_profiles")
+                .select("user_name")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            if (profileError) {
+                console.error("Error fetching user profile:", profileError);
+                throw profileError;
+            }
+
+            if (!profile) {
+                console.error("User profile not found for:", userId);
+                throw new Error("User profile not found");
+            }
+
+            // Create the user
+            const { error: insertError } = await client
+                .from("users")
+                .insert([{
+                    id: userId,
+                    name: profile.user_name || "User",
+                    email: `${userId}@placeholder.com`
+                }]);
+
+            if (insertError) {
+                console.error("Error creating user:", insertError);
+                throw insertError;
+            }
+
+            // Verify the user was actually created
+            const { data: verifyUser, error: verifyError } = await client
+                .from("users")
+                .select("id")
+                .eq("id", userId)
+                .maybeSingle();
+
+            if (verifyError || !verifyUser) {
+                console.error("User creation verification failed");
+                throw new Error("User creation verification failed");
+            }
+
+            console.log(`User ${userId} created successfully`);
+            return true;
+        });
+    }
+
+    // Enhanced insertMessage function with transaction-like behavior and retry
+    async function insertMessage(senderId, receiverId, content) {
+        try {
+            // Use a transaction-like approach with retries
+            return await withRetry(async () => {
+                // Ensure AI assistant exists if needed
+                if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
+                    const aiExists = await initializeAIAssistant();
+                    if (!aiExists) {
+                        throw new Error("Failed to ensure AI assistant exists");
+                    }
+                }
+
+                // Ensure sender exists
+                const senderExists = await ensureUserExists(senderId);
+                if (!senderExists) {
+                    throw new Error("Sender does not exist in users table");
+                }
+
+                // Ensure receiver exists
+                const receiverExists = await ensureUserExists(receiverId);
+                if (!receiverExists) {
+                    throw new Error("Receiver does not exist in users table");
+                }
+
+                console.log("Inserting message into database...");
+                const { error } = await client.from("messages").insert([{
+                    sender_id: senderId,
+                    receiver_id: receiverId,
+                    content
+                }]);
+
+                if (error) {
+                    console.error("Error inserting message:", error);
+                    throw error;
+                }
+
+                console.log("Message inserted successfully");
+                return true;
+            });
+        } catch (err) {
+            console.error("insertMessage error after retries:", err);
+            if (err.code === '23503') {
+                console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
+                console.error("Sender ID:", senderId, "Receiver ID:", receiverId);
+
+                // Diagnostic check
+                const { data: diagnosticSender } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", senderId)
+                    .maybeSingle();
+
+                const { data: diagnosticReceiver } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", receiverId)
+                    .maybeSingle();
+
+                console.error("Diagnostic - Sender exists:", !!diagnosticSender, "Receiver exists:", !!diagnosticReceiver);
+
+                // If receiver doesn't exist, try to create it and retry
+                if (!diagnosticReceiver) {
+                    console.log("Receiver not found, attempting to create...");
+                    try {
+                        await ensureUserExists(receiverId);
+                        // Retry the message insertion
+                        console.log("Retrying message insertion after creating receiver...");
+                        const { error: retryError } = await client.from("messages").insert([{
+                            sender_id: senderId,
+                            receiver_id: receiverId,
+                            content
+                        }]);
+
+                        if (retryError) {
+                            console.error("Retry failed:", retryError);
+                            return false;
+                        } else {
+                            console.log("Message inserted successfully on retry");
+                            return true;
+                        }
+                    } catch (retryErr) {
+                        console.error("Error during retry:", retryErr);
+                        return false;
+                    }
+                }
+            }
+            return false;
+        }
+    }
+
+    // Enhanced sendMessage function with transaction-like behavior and retry
+    async function sendMessage(friendId, content) {
+        if (!content || !content.trim()) return;
+
+        try {
+            // Use a transaction-like approach with retries
+            await withRetry(async () => {
+                // Ensure current user exists
+                const currentUserExists = await ensureUserExists(currentUserId);
+                if (!currentUserExists) {
+                    throw new Error("Current user does not exist in users table");
+                }
+
+                // Ensure AI assistant exists if needed
+                if (friendId === AI_ASSISTANT_ID) {
+                    console.log("Sending message to AI assistant, ensuring it exists...");
+                    const aiExists = await initializeAIAssistant();
+                    if (!aiExists) {
+                        throw new Error("Failed to initialize AI assistant");
+                    }
+                    console.log("AI assistant initialized successfully");
+                } else {
+                    // Ensure receiver exists
+                    const receiverExists = await ensureUserExists(friendId);
+                    if (!receiverExists) {
+                        throw new Error("Receiver does not exist in users table");
+                    }
+                }
+
+                // Final verification before inserting message
+                const { data: senderCheck, error: senderCheckError } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", currentUserId)
+                    .maybeSingle();
+
+                const { data: receiverCheck, error: receiverCheckError } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", friendId)
+                    .maybeSingle();
+
+                if (senderCheckError || receiverCheckError || !senderCheck || !receiverCheck) {
+                    throw new Error("Final verification failed - user records not found");
+                }
+
+                console.log("Inserting message into database...");
+                const { error } = await client.from("messages").insert([{
+                    sender_id: currentUserId,
+                    receiver_id: friendId,
+                    content
+                }]);
+
+                if (error) {
+                    console.error("Error sending message:", error);
+                    throw error;
+                }
+
+                console.log("Message sent successfully");
+                updateLastMessage(friendId, content, new Date().toISOString());
+            });
+        } catch (err) {
+            console.error("sendMessage error after retries:", err);
+            if (err.code === '23503') {
+                console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
+                console.error("Sender ID:", currentUserId, "Receiver ID:", friendId);
+
+                // Diagnostic check
+                const { data: diagnosticSender } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", currentUserId)
+                    .maybeSingle();
+
+                const { data: diagnosticReceiver } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", friendId)
+                    .maybeSingle();
+
+                console.error("Diagnostic - Sender exists:", !!diagnosticSender, "Receiver exists:", !!diagnosticReceiver);
+
+                showToast("Message failed to send: Database inconsistency detected. Please try again.", "error");
+            } else {
+                showToast("Message failed to send. Please try again.", "error");
+            }
+        }
+    }
+
+    // Initialize app with proper AI assistant setup
+    try {
+        const me = await getCurrentUser();
+        if (me) {
+            // Initialize AI assistant BEFORE any other operations
+            await initializeAIAssistant();
+
+            await checkAndFixDatabaseSchema();
+            await initializeDatabaseSchema();
+            await fetchFriends();
+            await fetchFriendRequests();
+
+            const setupRealtimeSubscriptions = async () => {
+                try {
+                    const globalMessagesChannel = client.channel('global-messages');
+
+                    globalMessagesChannel
+                        .on('postgres_changes', {
+                            event: 'INSERT',
+                            schema: 'public',
+                            table: 'messages',
+                            filter: `receiver_id=eq.${currentUserId}`
+                        }, async (payload) => {
+                            const newMsg = payload.new;
+                            if (!newMsg || !currentUserId) return;
+
+                            const senderId = newMsg.sender_id;
+
+                            if (currentOpenChatId !== senderId) {
+                                updateUnseenCountForFriend(senderId);
+                                updateLastMessage(senderId, newMsg.content, newMsg.created_at);
+
+                                try {
+                                    let senderName, senderAvatar;
+
+                                    if (senderId === AI_ASSISTANT_ID) {
+                                        senderName = AI_ASSISTANT_USERNAME;
+                                        senderAvatar = AI_ASSISTANT_AVATAR;
+                                    } else {
+                                        const { data: senderProfile } = await client
+                                            .from("user_profiles")
+                                            .select("user_name, profile_image_url")
+                                            .eq("user_id", senderId)
+                                            .maybeSingle();
+
+                                        senderName = senderProfile?.user_name || "New Message";
+                                        senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
+                                    }
+
+                                    showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
+
+                                    if (Notification.permission === "granted") {
+                                        const notif = new Notification(senderName, {
+                                            body: newMsg.content,
+                                            icon: senderAvatar,
+                                            data: { type: 'message', senderId, senderName }
+                                        });
+
+                                        notif.addEventListener('click', () => {
+                                            window.focus();
+                                            openSpecificChat(senderId);
+                                            notif.close();
+                                        });
+                                    }
+                                } catch (err) {
+                                    console.warn("Error sending message notification:", err);
+                                }
+                            }
+                        })
+                        .on('postgres_changes', {
+                            event: 'UPDATE',
+                            schema: 'public',
+                            table: 'messages',
+                            filter: `receiver_id=eq.${currentUserId}`
+                        }, (payload) => {
+                            const updatedMsg = payload.new;
+                            if (!updatedMsg || !currentUserId) return;
+
+                            if (updatedMsg.deleted_at) {
+                                updateLastMessageInChatList(updatedMsg.sender_id);
+                                updateLastMessageInChatList(updatedMsg.receiver_id);
+
+                                if (currentOpenChatId !== updatedMsg.sender_id) {
+                                    updateUnseenCountForFriend(updatedMsg.sender_id);
+                                }
+                                return;
+                            }
+
+                            if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
+                                const senderId = updatedMsg.sender_id;
+
+                                if (currentOpenChatId !== senderId) {
+                                    updateUnseenCountForFriend(senderId);
+                                }
+                            }
+                        })
+                        .subscribe((status, err) => {
+                            if (status === 'SUBSCRIBED') {
+                                console.log('Successfully subscribed to global messages');
+                            } else if (status === 'CHANNEL_ERROR') {
+                                console.error('Error subscribing to global messages:', err);
+                            }
+                        });
+
+                    const friendRequestsChannel = client.channel(`friend-requests-${currentUserId}`);
+
+                    friendRequestsChannel
+                        .on('postgres_changes', {
+                            event: '*',
+                            schema: 'public',
+                            table: 'requests',
+                            filter: `receiver_id=eq.${currentUserId}`
+                        }, async (payload) => {
+                            console.log("Friend request event received:", payload);
+                            const { eventType, new: newRecord, old: oldRecord } = payload;
+
+                            if (eventType === 'INSERT' && newRecord.status === "pending") {
+                                console.log("New friend request received:", newRecord);
+
+                                try {
+                                    const { data: senderProfile } = await client
+                                        .from("user_profiles")
+                                        .select("user_name, profile_image_url")
+                                        .eq("user_id", newRecord.sender_id)
+                                        .maybeSingle();
+
+                                    const senderName = senderProfile?.user_name || "Someone";
+                                    const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
+
+                                    showTopRightPopup(`${senderName} sent you a friend request`, "info", senderAvatar);
+
+                                    if (Notification.permission === "granted") {
+                                        const notif = new Notification("Friend Request 👥", {
+                                            body: `${senderName} sent you a request`,
+                                            icon: senderAvatar,
+                                            data: { type: 'friend_request', senderId: newRecord.sender_id }
+                                        });
+
+                                        notif.addEventListener('click', () => {
+                                            window.focus();
+                                            openSpecificChat(newRecord.sender_id);
+                                            notif.close();
+                                        });
+                                    }
+                                } catch (err) {
+                                    console.error("Error fetching sender profile for notification:", err);
+                                }
+
+                                fetchFriendRequests();
+                            } else if (eventType === 'UPDATE') {
+                                console.log("Friend request updated:", newRecord);
+
+                                if (newRecord.status === "accepted") {
+                                    if (newRecord.sender_id === currentUserId) {
+                                        showTopRightPopup("Your friend request was accepted!", "success");
+                                    } else {
+                                        showTopRightPopup("You accepted a friend request!", "success");
+                                    }
+                                    fetchFriends();
+                                } else if (newRecord.status === "rejected") {
+                                    if (newRecord.sender_id === currentUserId) {
+                                        showTopRightPopup("Your friend request was rejected", "warning");
+                                    } else {
+                                        showTopRightPopup("You rejected a friend request", "info");
+                                    }
+                                }
+
+                                fetchFriendRequests();
+                            } else if (eventType === 'DELETE') {
+                                console.log("Friend request deleted:", oldRecord);
+                                fetchFriendRequests();
+                            }
+                        })
+                        .subscribe((status, err) => {
+                            if (status === 'SUBSCRIBED') {
+                                console.log('Successfully subscribed to friend requests');
+                                fetchFriendRequests();
+                            } else if (status === 'CHANNEL_ERROR') {
+                                console.error('Error subscribing to friend requests:', err);
+                            }
+                        });
+
+                    const friendsUpdatesChannel = client.channel('friends-updates');
+
+                    friendsUpdatesChannel
+                        .on('postgres_changes', {
+                            event: '*',
+                            schema: 'public',
+                            table: 'friends'
+                        }, (payload) => {
+                            console.log("Friends update event received:", payload);
+
+                            const { eventType, new: newRecord, old: oldRecord } = payload;
+
+                            const isRelevant = newRecord && (
+                                newRecord.user1_id === currentUserId ||
+                                newRecord.user2_id === currentUserId
+                            ) || oldRecord && (
+                                oldRecord.user1_id === currentUserId ||
+                                oldRecord.user2_id === currentUserId
+                            );
+
+                            if (!isRelevant) return;
+
+                            if (eventType === 'INSERT') {
+                                console.log("New friend added:", newRecord);
+                                fetchFriends();
+                            } else if (eventType === 'DELETE') {
+                                console.log("Friend removed:", oldRecord);
+                                fetchFriends();
+                            }
+                        })
+                        .subscribe((status, err) => {
+                            if (status === 'SUBSCRIBED') {
+                                console.log('Successfully subscribed to friends updates');
+                            } else if (status === 'CHANNEL_ERROR') {
+                                console.error('Error subscribing to friends updates:', err);
+                            }
+                        });
+
+                    const userProfilesUpdatesChannel = client.channel('user-profiles-updates');
+
+                    userProfilesUpdatesChannel
+                        .on('postgres_changes', {
+                            event: 'UPDATE',
+                            schema: 'public',
+                            table: 'user_profiles'
+                        }, (payload) => {
+                            console.log("User profile update event received:", payload);
+
+                            const { new: newRecord } = payload;
+
+                            if (allFriends.has(newRecord.user_id)) {
+                                allFriends.set(newRecord.user_id, {
+                                    ...allFriends.get(newRecord.user_id),
+                                    ...newRecord
+                                });
+
+                                updateFriendUI(newRecord.user_id);
+                            }
+
+                            if (newRecord.user_id === currentUserId) {
+                                fetchCurrentUserAvatar();
+                            }
+                        })
+                        .subscribe((status, err) => {
+                            if (status === 'SUBSCRIBED') {
+                                console.log('Successfully subscribed to user profiles updates');
+                            } else if (status === 'CHANNEL_ERROR') {
+                                console.error('Error subscribing to user profiles updates:', err);
+                            }
+                        });
+
+                    console.log("All real-time subscriptions set up successfully");
+                } catch (error) {
+                    console.error("Error setting up real-time subscriptions:", error);
+                    setTimeout(setupRealtimeSubscriptions, 5000);
+                }
+            };
+
+            await setupRealtimeSubscriptions();
+            await fetchRecentChats();
+
+            if (Object.keys(notificationData).length > 0) {
+                handleNotificationRedirect();
+            }
+
+            openChatFromUrl();
+        }
+    } catch (error) {
+        console.error("Error initializing app:", error);
+        showToast("Failed to initialize application. Please refresh the page.", "error");
     }
 
     // Show modal with animation
@@ -2280,277 +2926,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // Initialize app
-    try {
-        const me = await getCurrentUser();
-        if (me) {
-            await checkAndFixDatabaseSchema();  // Add this line
-            await initializeDatabaseSchema();
-            await fetchFriends();
-            await fetchFriendRequests();
-
-            const setupRealtimeSubscriptions = async () => {
-                try {
-                    const globalMessagesChannel = client.channel('global-messages');
-
-                    globalMessagesChannel
-                        .on('postgres_changes', {
-                            event: 'INSERT',
-                            schema: 'public',
-                            table: 'messages',
-                            filter: `receiver_id=eq.${currentUserId}`
-                        }, async (payload) => {
-                            const newMsg = payload.new;
-                            if (!newMsg || !currentUserId) return;
-
-                            const senderId = newMsg.sender_id;
-
-                            if (currentOpenChatId !== senderId) {
-                                updateUnseenCountForFriend(senderId);
-                                updateLastMessage(senderId, newMsg.content, newMsg.created_at);
-
-                                try {
-                                    let senderName, senderAvatar;
-
-                                    if (senderId === AI_ASSISTANT_ID) {
-                                        senderName = AI_ASSISTANT_USERNAME;
-                                        senderAvatar = AI_ASSISTANT_AVATAR;
-                                    } else {
-                                        const { data: senderProfile } = await client
-                                            .from("user_profiles")
-                                            .select("user_name, profile_image_url")
-                                            .eq("user_id", senderId)
-                                            .maybeSingle();
-
-                                        senderName = senderProfile?.user_name || "New Message";
-                                        senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
-                                    }
-
-                                    showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
-
-                                    if (Notification.permission === "granted") {
-                                        const notif = new Notification(senderName, {
-                                            body: newMsg.content,
-                                            icon: senderAvatar,
-                                            data: { type: 'message', senderId, senderName }
-                                        });
-
-                                        notif.addEventListener('click', () => {
-                                            window.focus();
-                                            openSpecificChat(senderId);
-                                            notif.close();
-                                        });
-                                    }
-                                } catch (err) {
-                                    console.warn("Error sending message notification:", err);
-                                }
-                            }
-                        })
-                        .on('postgres_changes', {
-                            event: 'UPDATE',
-                            schema: 'public',
-                            table: 'messages',
-                            filter: `receiver_id=eq.${currentUserId}`
-                        }, (payload) => {
-                            const updatedMsg = payload.new;
-                            if (!updatedMsg || !currentUserId) return;
-
-                            if (updatedMsg.deleted_at) {
-                                updateLastMessageInChatList(updatedMsg.sender_id);
-                                updateLastMessageInChatList(updatedMsg.receiver_id);
-
-                                if (currentOpenChatId !== updatedMsg.sender_id) {
-                                    updateUnseenCountForFriend(updatedMsg.sender_id);
-                                }
-                                return;
-                            }
-
-                            if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
-                                const senderId = updatedMsg.sender_id;
-
-                                if (currentOpenChatId !== senderId) {
-                                    updateUnseenCountForFriend(senderId);
-                                }
-                            }
-                        })
-                        .subscribe((status, err) => {
-                            if (status === 'SUBSCRIBED') {
-                                console.log('Successfully subscribed to global messages');
-                            } else if (status === 'CHANNEL_ERROR') {
-                                console.error('Error subscribing to global messages:', err);
-                            }
-                        });
-
-                    const friendRequestsChannel = client.channel(`friend-requests-${currentUserId}`);
-
-                    friendRequestsChannel
-                        .on('postgres_changes', {
-                            event: '*',
-                            schema: 'public',
-                            table: 'requests',
-                            filter: `receiver_id=eq.${currentUserId}`
-                        }, async (payload) => {
-                            console.log("Friend request event received:", payload);
-                            const { eventType, new: newRecord, old: oldRecord } = payload;
-
-                            if (eventType === 'INSERT' && newRecord.status === "pending") {
-                                console.log("New friend request received:", newRecord);
-
-                                try {
-                                    const { data: senderProfile } = await client
-                                        .from("user_profiles")
-                                        .select("user_name, profile_image_url")
-                                        .eq("user_id", newRecord.sender_id)
-                                        .maybeSingle();
-
-                                    const senderName = senderProfile?.user_name || "Someone";
-                                    const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
-
-                                    showTopRightPopup(`${senderName} sent you a friend request`, "info", senderAvatar);
-
-                                    if (Notification.permission === "granted") {
-                                        const notif = new Notification("Friend Request 👥", {
-                                            body: `${senderName} sent you a request`,
-                                            icon: senderAvatar,
-                                            data: { type: 'friend_request', senderId: newRecord.sender_id }
-                                        });
-
-                                        notif.addEventListener('click', () => {
-                                            window.focus();
-                                            openSpecificChat(newRecord.sender_id);
-                                            notif.close();
-                                        });
-                                    }
-                                } catch (err) {
-                                    console.error("Error fetching sender profile for notification:", err);
-                                }
-
-                                fetchFriendRequests();
-                            } else if (eventType === 'UPDATE') {
-                                console.log("Friend request updated:", newRecord);
-
-                                if (newRecord.status === "accepted") {
-                                    if (newRecord.sender_id === currentUserId) {
-                                        showTopRightPopup("Your friend request was accepted!", "success");
-                                    } else {
-                                        showTopRightPopup("You accepted a friend request!", "success");
-                                    }
-                                    fetchFriends();
-                                } else if (newRecord.status === "rejected") {
-                                    if (newRecord.sender_id === currentUserId) {
-                                        showTopRightPopup("Your friend request was rejected", "warning");
-                                    } else {
-                                        showTopRightPopup("You rejected a friend request", "info");
-                                    }
-                                }
-
-                                fetchFriendRequests();
-                            } else if (eventType === 'DELETE') {
-                                console.log("Friend request deleted:", oldRecord);
-                                fetchFriendRequests();
-                            }
-                        })
-                        .subscribe((status, err) => {
-                            if (status === 'SUBSCRIBED') {
-                                console.log('Successfully subscribed to friend requests');
-                                fetchFriendRequests();
-                            } else if (status === 'CHANNEL_ERROR') {
-                                console.error('Error subscribing to friend requests:', err);
-                            }
-                        });
-
-                    const friendsUpdatesChannel = client.channel('friends-updates');
-
-                    friendsUpdatesChannel
-                        .on('postgres_changes', {
-                            event: '*',
-                            schema: 'public',
-                            table: 'friends'
-                        }, (payload) => {
-                            console.log("Friends update event received:", payload);
-
-                            const { eventType, new: newRecord, old: oldRecord } = payload;
-
-                            const isRelevant = newRecord && (
-                                newRecord.user1_id === currentUserId ||
-                                newRecord.user2_id === currentUserId
-                            ) || oldRecord && (
-                                oldRecord.user1_id === currentUserId ||
-                                oldRecord.user2_id === currentUserId
-                            );
-
-                            if (!isRelevant) return;
-
-                            if (eventType === 'INSERT') {
-                                console.log("New friend added:", newRecord);
-                                fetchFriends();
-                            } else if (eventType === 'DELETE') {
-                                console.log("Friend removed:", oldRecord);
-                                fetchFriends();
-                            }
-                        })
-                        .subscribe((status, err) => {
-                            if (status === 'SUBSCRIBED') {
-                                console.log('Successfully subscribed to friends updates');
-                            } else if (status === 'CHANNEL_ERROR') {
-                                console.error('Error subscribing to friends updates:', err);
-                            }
-                        });
-
-                    const userProfilesUpdatesChannel = client.channel('user-profiles-updates');
-
-                    userProfilesUpdatesChannel
-                        .on('postgres_changes', {
-                            event: 'UPDATE',
-                            schema: 'public',
-                            table: 'user_profiles'
-                        }, (payload) => {
-                            console.log("User profile update event received:", payload);
-
-                            const { new: newRecord } = payload;
-
-                            if (allFriends.has(newRecord.user_id)) {
-                                allFriends.set(newRecord.user_id, {
-                                    ...allFriends.get(newRecord.user_id),
-                                    ...newRecord
-                                });
-
-                                updateFriendUI(newRecord.user_id);
-                            }
-
-                            if (newRecord.user_id === currentUserId) {
-                                fetchCurrentUserAvatar();
-                            }
-                        })
-                        .subscribe((status, err) => {
-                            if (status === 'SUBSCRIBED') {
-                                console.log('Successfully subscribed to user profiles updates');
-                            } else if (status === 'CHANNEL_ERROR') {
-                                console.error('Error subscribing to user profiles updates:', err);
-                            }
-                        });
-
-                    console.log("All real-time subscriptions set up successfully");
-                } catch (error) {
-                    console.error("Error setting up real-time subscriptions:", error);
-                    setTimeout(setupRealtimeSubscriptions, 5000);
-                }
-            };
-
-            await setupRealtimeSubscriptions();
-            await fetchRecentChats();
-
-            if (Object.keys(notificationData).length > 0) {
-                handleNotificationRedirect();
-            }
-
-            openChatFromUrl();
-        }
-    } catch (error) {
-        console.error("Error initializing app:", error);
-        showToast("Failed to initialize application. Please refresh the page.", "error");
-    }
-
     // Open chat function
     async function openChat(friendId, friendName, friendAvatar, fromNotification = false) {
         try {
@@ -3051,194 +3426,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Enhanced user existence check with automatic creation
-    async function ensureUserExists(userId) {
-        return withRetry(async () => {
-            // Check if user exists
-            const { data: existingUser, error: checkError } = await client
-                .from("users")
-                .select("id")
-                .eq("id", userId)
-                .maybeSingle();
-
-            if (checkError) {
-                console.error("Error checking user existence:", checkError);
-                throw checkError;
-            }
-
-            if (existingUser) {
-                return true;
-            }
-
-            // User doesn't exist, try to create them
-            console.log(`User ${userId} not found, attempting to create...`);
-
-            // Get user profile information
-            const { data: profile, error: profileError } = await client
-                .from("user_profiles")
-                .select("user_name")
-                .eq("user_id", userId)
-                .maybeSingle();
-
-            if (profileError) {
-                console.error("Error fetching user profile:", profileError);
-                throw profileError;
-            }
-
-            if (!profile) {
-                console.error("User profile not found for:", userId);
-                throw new Error("User profile not found");
-            }
-
-            // Create the user
-            const { error: insertError } = await client
-                .from("users")
-                .insert([{
-                    id: userId,
-                    name: profile.user_name || "User",
-                    email: `${userId}@placeholder.com`
-                }]);
-
-            if (insertError) {
-                console.error("Error creating user:", insertError);
-                throw insertError;
-            }
-
-            // Verify the user was actually created
-            const { data: verifyUser, error: verifyError } = await client
-                .from("users")
-                .select("id")
-                .eq("id", userId)
-                .maybeSingle();
-
-            if (verifyError || !verifyUser) {
-                console.error("User creation verification failed");
-                throw new Error("User creation verification failed");
-            }
-
-            console.log(`User ${userId} created successfully`);
-            return true;
-        });
-    }
-
-    // Initialize AI assistant
-    async function initializeAIAssistant() {
-        try {
-            console.log("Initializing AI assistant...");
-
-            // Check if AI assistant exists in users table
-            const { data: existingUser, error: userError } = await client
-                .from("users")
-                .select("id")
-                .eq("id", AI_ASSISTANT_ID)
-                .maybeSingle();
-
-            if (userError) {
-                console.error("Error checking users table:", userError);
-                throw userError;
-            }
-
-            // If AI assistant doesn't exist in users table, create it
-            if (!existingUser) {
-                console.log("AI assistant not found in users table, creating...");
-                const { error: createUserError } = await client
-                    .from("users")
-                    .insert([{
-                        id: AI_ASSISTANT_ID,
-                        name: AI_ASSISTANT_USERNAME,
-                        email: AI_ASSISTANT_EMAIL
-                    }]);
-
-                if (createUserError) {
-                    console.error("Error creating AI assistant in users table:", createUserError);
-                    throw createUserError;
-                }
-                console.log("AI assistant created in users table");
-            } else {
-                console.log("AI assistant already exists in users table");
-            }
-
-            // Check if AI assistant profile exists
-            const { data: existingProfile, error: fetchError } = await client
-                .from("user_profiles")
-                .select("user_id")
-                .eq("user_id", AI_ASSISTANT_ID)
-                .maybeSingle();
-
-            if (fetchError) {
-                console.error("Error checking AI assistant profile:", fetchError);
-                throw fetchError;
-            }
-
-            // If profile doesn't exist, create it
-            if (!existingProfile) {
-                console.log("AI assistant profile not found, creating...");
-                const { error: insertError } = await client
-                    .from("user_profiles")
-                    .insert({
-                        user_id: AI_ASSISTANT_ID,
-                        user_name: AI_ASSISTANT_USERNAME,
-                        profile_image_url: AI_ASSISTANT_AVATAR,
-                        bio: AI_ASSISTANT_BIO,
-                        is_online: true
-                    });
-
-                if (insertError) {
-                    console.error("Error creating AI assistant profile:", insertError);
-                    throw insertError;
-                }
-                console.log("AI assistant profile created successfully");
-            } else {
-                // Update existing profile
-                console.log("AI assistant profile already exists, updating...");
-                const { error: updateError } = await client
-                    .from("user_profiles")
-                    .update({
-                        user_name: AI_ASSISTANT_USERNAME,
-                        profile_image_url: AI_ASSISTANT_AVATAR,
-                        bio: AI_ASSISTANT_BIO,
-                        is_online: true
-                    })
-                    .eq("user_id", AI_ASSISTANT_ID);
-
-                if (updateError) {
-                    console.error("Error updating AI assistant profile:", updateError);
-                    throw updateError;
-                }
-                console.log("AI assistant profile updated successfully");
-            }
-
-            // Final verification - check both tables again
-            const { data: finalUserCheck, error: finalUserError } = await client
-                .from("users")
-                .select("id")
-                .eq("id", AI_ASSISTANT_ID)
-                .maybeSingle();
-
-            if (finalUserError || !finalUserCheck) {
-                console.error("Final check failed: AI assistant not found in users table");
-                return false;
-            }
-
-            const { data: finalProfileCheck, error: finalProfileError } = await client
-                .from("user_profiles")
-                .select("user_id")
-                .eq("user_id", AI_ASSISTANT_ID)
-                .maybeSingle();
-
-            if (finalProfileError || !finalProfileCheck) {
-                console.error("Final check failed: AI assistant profile not found");
-                return false;
-            }
-
-            console.log("AI assistant initialized successfully");
-            return true;
-        } catch (err) {
-            console.error("Error initializing AI assistant:", err);
-            return false;
-        }
-    }
-
     // Ensure AI assistant exists (deprecated, use initializeAIAssistant instead)
     async function ensureAIAssistantExists() {
         return await initializeAIAssistant();
@@ -3289,71 +3476,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         } catch (err) {
             console.error("Error in addAIAssistantAsFriend:", err);
-        }
-    }
-
-    // Enhanced insertMessage function with transaction-like behavior and retry
-    async function insertMessage(senderId, receiverId, content) {
-        try {
-            // Use a transaction-like approach with retries
-            return await withRetry(async () => {
-                // Ensure AI assistant exists if needed
-                if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
-                    const aiExists = await initializeAIAssistant();
-                    if (!aiExists) {
-                        throw new Error("Failed to ensure AI assistant exists");
-                    }
-                }
-
-                // Ensure sender exists
-                const senderExists = await ensureUserExists(senderId);
-                if (!senderExists) {
-                    throw new Error("Sender does not exist in users table");
-                }
-
-                // Ensure receiver exists
-                const receiverExists = await ensureUserExists(receiverId);
-                if (!receiverExists) {
-                    throw new Error("Receiver does not exist in users table");
-                }
-
-                console.log("Inserting message into database...");
-                const { error } = await client.from("messages").insert([{
-                    sender_id: senderId,
-                    receiver_id: receiverId,
-                    content
-                }]);
-
-                if (error) {
-                    console.error("Error inserting message:", error);
-                    throw error;
-                }
-
-                console.log("Message inserted successfully");
-                return true;
-            });
-        } catch (err) {
-            console.error("insertMessage error after retries:", err);
-            if (err.code === '23503') {
-                console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
-                console.error("Sender ID:", senderId, "Receiver ID:", receiverId);
-
-                // Diagnostic check
-                const { data: diagnosticSender } = await client
-                    .from("users")
-                    .select("id")
-                    .eq("id", senderId)
-                    .maybeSingle();
-
-                const { data: diagnosticReceiver } = await client
-                    .from("users")
-                    .select("id")
-                    .eq("id", receiverId)
-                    .maybeSingle();
-
-                console.error("Diagnostic - Sender exists:", !!diagnosticSender, "Receiver exists:", !!diagnosticReceiver);
-            }
-            return false;
         }
     }
 
@@ -3438,95 +3560,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         } catch (err) {
             console.error("Error in userExistsInUsersTable:", err);
             return false;
-        }
-    }
-
-    // Enhanced sendMessage function with transaction-like behavior and retry
-    async function sendMessage(friendId, content) {
-        if (!content || !content.trim()) return;
-
-        try {
-            // Use a transaction-like approach with retries
-            await withRetry(async () => {
-                // Ensure current user exists
-                const currentUserExists = await ensureUserExists(currentUserId);
-                if (!currentUserExists) {
-                    throw new Error("Current user does not exist in users table");
-                }
-
-                // Ensure AI assistant exists if needed
-                if (friendId === AI_ASSISTANT_ID) {
-                    console.log("Sending message to AI assistant, ensuring it exists...");
-                    const aiExists = await initializeAIAssistant();
-                    if (!aiExists) {
-                        throw new Error("Failed to initialize AI assistant");
-                    }
-                    console.log("AI assistant initialized successfully");
-                } else {
-                    // Ensure receiver exists
-                    const receiverExists = await ensureUserExists(friendId);
-                    if (!receiverExists) {
-                        throw new Error("Receiver does not exist in users table");
-                    }
-                }
-
-                // Final verification before inserting message
-                const { data: senderCheck, error: senderCheckError } = await client
-                    .from("users")
-                    .select("id")
-                    .eq("id", currentUserId)
-                    .maybeSingle();
-
-                const { data: receiverCheck, error: receiverCheckError } = await client
-                    .from("users")
-                    .select("id")
-                    .eq("id", friendId)
-                    .maybeSingle();
-
-                if (senderCheckError || receiverCheckError || !senderCheck || !receiverCheck) {
-                    throw new Error("Final verification failed - user records not found");
-                }
-
-                console.log("Inserting message into database...");
-                const { error } = await client.from("messages").insert([{
-                    sender_id: currentUserId,
-                    receiver_id: friendId,
-                    content
-                }]);
-
-                if (error) {
-                    console.error("Error sending message:", error);
-                    throw error;
-                }
-
-                console.log("Message sent successfully");
-                updateLastMessage(friendId, content, new Date().toISOString());
-            });
-        } catch (err) {
-            console.error("sendMessage error after retries:", err);
-            if (err.code === '23503') {
-                console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
-                console.error("Sender ID:", currentUserId, "Receiver ID:", friendId);
-
-                // Diagnostic check
-                const { data: diagnosticSender } = await client
-                    .from("users")
-                    .select("id")
-                    .eq("id", currentUserId)
-                    .maybeSingle();
-
-                const { data: diagnosticReceiver } = await client
-                    .from("users")
-                    .select("id")
-                    .eq("id", friendId)
-                    .maybeSingle();
-
-                console.error("Diagnostic - Sender exists:", !!diagnosticSender, "Receiver exists:", !!diagnosticReceiver);
-
-                showToast("Message failed to send: Database inconsistency detected. Please try again.", "error");
-            } else {
-                showToast("Message failed to send. Please try again.", "error");
-            }
         }
     }
 });
