@@ -385,7 +385,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             await setUserOnlineStatus(true);
 
             // Initialize AI assistant BEFORE adding as friend
-            await ensureAIAssistantExists();
+            await initializeAIAssistant();
 
             // Add AI assistant as friend for new users
             await addAIAssistantAsFriend();
@@ -3071,11 +3071,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Ensure AI assistant exists
-    async function ensureAIAssistantExists() {
+    // Initialize AI assistant
+    async function initializeAIAssistant() {
         try {
-            console.log("Ensuring AI assistant exists in the database...");
+            console.log("Initializing AI assistant...");
 
+            // Check if AI assistant exists in users table
             const { data: existingUser, error: userError } = await client
                 .from("users")
                 .select("id")
@@ -3087,6 +3088,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return false;
             }
 
+            // If AI assistant doesn't exist in users table, create it
             if (!existingUser) {
                 console.log("AI assistant not found in users table, creating...");
                 const { error: createUserError } = await client
@@ -3094,7 +3096,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     .insert([{
                         id: AI_ASSISTANT_ID,
                         name: AI_ASSISTANT_USERNAME,
-                        email: AI_ASSISTANT_EMAIL // Added email for AI assistant
+                        email: AI_ASSISTANT_EMAIL
                     }]);
 
                 if (createUserError) {
@@ -3106,6 +3108,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.log("AI assistant already exists in users table");
             }
 
+            // Check if AI assistant profile exists
             const { data: existingProfile, error: fetchError } = await client
                 .from("user_profiles")
                 .select("user_id")
@@ -3117,6 +3120,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return false;
             }
 
+            // If profile doesn't exist, create it
             if (!existingProfile) {
                 console.log("AI assistant profile not found, creating...");
                 const { error: insertError } = await client
@@ -3135,6 +3139,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
                 console.log("AI assistant profile created successfully");
             } else {
+                // Update existing profile
                 console.log("AI assistant profile already exists, updating...");
                 const { error: updateError } = await client
                     .from("user_profiles")
@@ -3153,6 +3158,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.log("AI assistant profile updated successfully");
             }
 
+            // Final verification - check both tables again
             const { data: finalUserCheck, error: finalUserError } = await client
                 .from("users")
                 .select("id")
@@ -3175,12 +3181,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return false;
             }
 
-            console.log("AI assistant exists in the database");
+            console.log("AI assistant initialized successfully");
             return true;
         } catch (err) {
-            console.error("Error ensuring AI assistant exists:", err);
+            console.error("Error initializing AI assistant:", err);
             return false;
         }
+    }
+
+    // Ensure AI assistant exists (deprecated, use initializeAIAssistant instead)
+    async function ensureAIAssistantExists() {
+        return await initializeAIAssistant();
     }
 
     // Add AI assistant as a friend
@@ -3188,9 +3199,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!currentUserId) return;
 
         try {
-            const aiExists = await ensureAIAssistantExists();
+            // Make sure AI assistant is initialized
+            const aiExists = await initializeAIAssistant();
             if (!aiExists) {
-                console.error("Failed to ensure AI assistant exists");
+                console.error("Failed to initialize AI assistant");
                 return;
             }
 
@@ -3237,7 +3249,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             return await withRetry(async () => {
                 // Ensure AI assistant exists if needed
                 if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
-                    const aiExists = await ensureAIAssistantExists();
+                    const aiExists = await initializeAIAssistant();
                     if (!aiExists) {
                         throw new Error("Failed to ensure AI assistant exists");
                     }
@@ -3395,7 +3407,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 // Ensure AI assistant exists if needed
                 if (friendId === AI_ASSISTANT_ID) {
                     console.log("Sending message to AI assistant, ensuring it exists...");
-                    const aiExists = await ensureAIAssistantExists();
+                    const aiExists = await initializeAIAssistant();
                     if (!aiExists) {
                         throw new Error("Failed to initialize AI assistant");
                     }
