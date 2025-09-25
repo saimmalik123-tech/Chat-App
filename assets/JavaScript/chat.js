@@ -49,14 +49,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         throw lastError;
     }
 
-    // Initialize AI assistant with proper error handling
+    // Update the initializeAIAssistant function
     async function initializeAIAssistant() {
-        if (aiAssistantInitialized) return true; // Skip if already initialized
+        if (aiAssistantInitialized) return true;
 
         try {
             console.log("Initializing AI assistant...");
 
-            // Check if AI assistant exists in users table
+            // First check if AI assistant exists in users table
             const { data: existingUser, error: userError } = await client
                 .from("users")
                 .select("id")
@@ -88,7 +88,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.log("AI assistant already exists in users table");
             }
 
-            // Check if AI assistant profile exists
+            // Then check if AI assistant profile exists
             const { data: existingProfile, error: fetchError } = await client
                 .from("user_profiles")
                 .select("user_id")
@@ -162,7 +162,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             console.log("AI assistant initialized successfully");
-            aiAssistantInitialized = true; // Set flag to true
+            aiAssistantInitialized = true;
             return true;
         } catch (err) {
             console.error("Error initializing AI assistant:", err);
@@ -192,7 +192,25 @@ document.addEventListener("DOMContentLoaded", async () => {
             // User doesn't exist, try to create them
             console.log(`User ${userId} not found, attempting to create...`);
 
-            // Get user profile information
+            // Special handling for AI assistant
+            if (userId === AI_ASSISTANT_ID) {
+                const { error: insertError } = await client
+                    .from("users")
+                    .insert([{
+                        id: AI_ASSISTANT_ID,
+                        name: AI_ASSISTANT_USERNAME,
+                        email: AI_ASSISTANT_EMAIL
+                    }]);
+
+                if (insertError) {
+                    console.error("Error creating AI assistant in users table:", insertError);
+                    throw insertError;
+                }
+                console.log(`AI assistant ${userId} created successfully`);
+                return true;
+            }
+
+            // Get user profile information for regular users
             const { data: profile, error: profileError } = await client
                 .from("user_profiles")
                 .select("user_name")
@@ -301,6 +319,31 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 console.error("Diagnostic - Sender exists:", !!diagnosticSender, "Receiver exists:", !!diagnosticReceiver);
 
+                // If sender doesn't exist, try to create it and retry
+                if (!diagnosticSender) {
+                    console.log("Sender not found, attempting to create...");
+                    try {
+                        await ensureUserExists(senderId);
+                        // Retry the message insertion
+                        console.log("Retrying message insertion after creating sender...");
+                        const { error: retryError } = await client.from("messages").insert([{
+                            sender_id: senderId,
+                            receiver_id: receiverId,
+                            content
+                        }]);
+
+                        if (retryError) {
+                            console.error("Retry failed:", retryError);
+                            return false;
+                        } else {
+                            console.log("Message inserted successfully on retry");
+                            return true;
+                        }
+                    } catch (retryErr) {
+                        console.error("Error during retry for sender:", retryErr);
+                    }
+                }
+
                 // If receiver doesn't exist, try to create it and retry
                 if (!diagnosticReceiver) {
                     console.log("Receiver not found, attempting to create...");
@@ -322,8 +365,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             return true;
                         }
                     } catch (retryErr) {
-                        console.error("Error during retry:", retryErr);
-                        return false;
+                        console.error("Error during retry for receiver:", retryErr);
                     }
                 }
             }
@@ -2595,46 +2637,62 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Check and fix database schema
     async function checkAndFixDatabaseSchema() {
         try {
             console.log("Checking database schema...");
 
-            const { data: columns, error: columnsError } = await client
-                .from("information_schema.table_constraints")
-                .select("*")
-                .eq("table_name", "messages")
-                .eq("constraint_type", "FOREIGN KEY");
+            // Try to check the constraints, but if it fails, we'll try to add them anyway
+            let columns = [];
+            try {
+                const { data: columnsData, error: columnsError } = await client
+                    .from("information_schema.table_constraints")
+                    .select("*")
+                    .eq("table_name", "messages")
+                    .eq("constraint_type", "FOREIGN KEY");
 
-            if (columnsError) {
-                console.error("Error checking table constraints:", columnsError);
-                return false;
+                if (columnsError) {
+                    console.error("Error checking table constraints:", columnsError);
+                    // We'll try to add the constraints without checking
+                } else {
+                    columns = columnsData || [];
+                }
+            } catch (err) {
+                console.error("Exception when checking table constraints:", err);
             }
 
-            console.log("Table constraints:", columns);
-
+            // If we didn't get any constraints (or had an error), try to add them
             if (!columns || columns.length === 0) {
                 console.log("No foreign key constraints found, adding them...");
 
-                const { error: senderError } = await client.rpc('exec_sql', {
-                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id);`
-                });
+                try {
+                    const { error: senderError } = await client.rpc('exec_sql', {
+                        sql: `ALTER TABLE messages ADD CONSTRAINT IF NOT EXISTS messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id);`
+                    });
 
-                if (senderError) {
-                    console.error("Error adding sender foreign key constraint:", senderError);
-                    return false;
+                    if (senderError) {
+                        console.error("Error adding sender foreign key constraint:", senderError);
+                    } else {
+                        console.log("Sender foreign key constraint added successfully");
+                    }
+                } catch (senderErr) {
+                    console.error("Exception when adding sender foreign key constraint:", senderErr);
                 }
 
-                const { error: receiverError } = await client.rpc('exec_sql', {
-                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id);`
-                });
+                try {
+                    const { error: receiverError } = await client.rpc('exec_sql', {
+                        sql: `ALTER TABLE messages ADD CONSTRAINT IF NOT EXISTS messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id);`
+                    });
 
-                if (receiverError) {
-                    console.error("Error adding receiver foreign key constraint:", receiverError);
-                    return false;
+                    if (receiverError) {
+                        console.error("Error adding receiver foreign key constraint:", receiverError);
+                    } else {
+                        console.log("Receiver foreign key constraint added successfully");
+                    }
+                } catch (receiverErr) {
+                    console.error("Exception when adding receiver foreign key constraint:", receiverErr);
                 }
-
-                console.log("Foreign key constraints added successfully");
+            } else {
+                console.log("Foreign key constraints already exist");
             }
 
             return true;
