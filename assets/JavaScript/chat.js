@@ -22,7 +22,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let deletionTimeouts = {};
     let processingMessageIds = new Set();
     let allFriends = new Map();
-    let aiAssistantInitialized = false; // Flag to track initialization
+    let aiAssistantInitialized = false;
 
     // Helper function for retrying database operations
     async function withRetry(fn, maxRetries = 3, initialDelay = 500) {
@@ -49,7 +49,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         throw lastError;
     }
 
-    // Update the initializeAIAssistant function
+    // Initialize AI assistant
     async function initializeAIAssistant() {
         if (aiAssistantInitialized) return true;
 
@@ -2641,58 +2641,41 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             console.log("Checking database schema...");
 
-            // Try to check the constraints, but if it fails, we'll try to add them anyway
-            let columns = [];
+            // Try to add the constraints without checking first, and handle the error if they exist
             try {
-                const { data: columnsData, error: columnsError } = await client
-                    .from("information_schema.table_constraints")
-                    .select("*")
-                    .eq("table_name", "messages")
-                    .eq("constraint_type", "FOREIGN KEY");
+                const { error: senderError } = await client.rpc('exec_sql', {
+                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id);`
+                });
 
-                if (columnsError) {
-                    console.error("Error checking table constraints:", columnsError);
-                    // We'll try to add the constraints without checking
+                if (senderError) {
+                    console.error("Error adding sender foreign key constraint:", senderError);
+                    // If the error is that the constraint already exists, we can ignore it
+                    if (!senderError.message.includes('already exists')) {
+                        throw senderError;
+                    }
                 } else {
-                    columns = columnsData || [];
+                    console.log("Sender foreign key constraint added successfully");
                 }
-            } catch (err) {
-                console.error("Exception when checking table constraints:", err);
+            } catch (senderErr) {
+                console.error("Exception when adding sender foreign key constraint:", senderErr);
             }
 
-            // If we didn't get any constraints (or had an error), try to add them
-            if (!columns || columns.length === 0) {
-                console.log("No foreign key constraints found, adding them...");
+            try {
+                const { error: receiverError } = await client.rpc('exec_sql', {
+                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id);`
+                });
 
-                try {
-                    const { error: senderError } = await client.rpc('exec_sql', {
-                        sql: `ALTER TABLE messages ADD CONSTRAINT IF NOT EXISTS messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id);`
-                    });
-
-                    if (senderError) {
-                        console.error("Error adding sender foreign key constraint:", senderError);
-                    } else {
-                        console.log("Sender foreign key constraint added successfully");
+                if (receiverError) {
+                    console.error("Error adding receiver foreign key constraint:", receiverError);
+                    // If the error is that the constraint already exists, we can ignore it
+                    if (!receiverError.message.includes('already exists')) {
+                        throw receiverError;
                     }
-                } catch (senderErr) {
-                    console.error("Exception when adding sender foreign key constraint:", senderErr);
+                } else {
+                    console.log("Receiver foreign key constraint added successfully");
                 }
-
-                try {
-                    const { error: receiverError } = await client.rpc('exec_sql', {
-                        sql: `ALTER TABLE messages ADD CONSTRAINT IF NOT EXISTS messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id);`
-                    });
-
-                    if (receiverError) {
-                        console.error("Error adding receiver foreign key constraint:", receiverError);
-                    } else {
-                        console.log("Receiver foreign key constraint added successfully");
-                    }
-                } catch (receiverErr) {
-                    console.error("Exception when adding receiver foreign key constraint:", receiverErr);
-                }
-            } else {
-                console.log("Foreign key constraints already exist");
+            } catch (receiverErr) {
+                console.error("Exception when adding receiver foreign key constraint:", receiverErr);
             }
 
             return true;
