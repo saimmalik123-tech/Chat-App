@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.png";
     const GEMINI_API_KEY = "AIzaSyCVqoPntSjTMdrbkhaulp2jhE_i7vootUk";
     const AI_ASSISTANT_ID = "00000000-0000-0000-0000-000000000001";
-    const AI_ASSISTANT_EMAIL = "ai-assistant@chatapp.com"; // Added email for AI assistant
+    const AI_ASSISTANT_EMAIL = "ai-assistant@chatapp.com";
 
     const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
     const ADMIN_USERNAME = "Saim_Malik88";
@@ -3135,9 +3135,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Insert message
+    // Insert message with proper transaction handling
     async function insertMessage(senderId, receiverId, content) {
         try {
+            // Ensure AI assistant exists if needed
             if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
                 const aiExists = await ensureAIAssistantExists();
                 if (!aiExists) {
@@ -3146,6 +3147,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             }
 
+            // Verify both users exist in the users table
             const senderExists = await userExistsInUsersTable(senderId);
             if (!senderExists) {
                 console.error("Sender not found in users table:", senderId);
@@ -3265,12 +3267,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Enhanced sendMessage function
+    // Enhanced sendMessage function with transaction handling
     async function sendMessage(friendId, content) {
         if (!content || !content.trim()) return;
+
         try {
+            // Ensure current user exists in users table
             await ensureCurrentUserInUsersTable();
 
+            // If sending to AI assistant, ensure it exists
             if (friendId === AI_ASSISTANT_ID) {
                 console.log("Sending message to AI assistant, ensuring it exists...");
                 const aiExists = await ensureAIAssistantExists();
@@ -3281,6 +3286,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
                 console.log("AI assistant initialized successfully");
             } else {
+                // For regular users, ensure they exist in the users table
                 try {
                     const receiverExists = await userExistsInUsersTable(friendId);
                     if (!receiverExists) {
