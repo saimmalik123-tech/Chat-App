@@ -306,6 +306,48 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     fetchCurrentUserAvatar();
 
+    // Ensure current user exists in users table
+    async function ensureCurrentUserInUsersTable() {
+        if (!currentUserId) return false;
+
+        try {
+            // Check if user exists in users table
+            const userExists = await userExistsInUsersTable(currentUserId);
+
+            if (!userExists) {
+                console.log("Current user not found in users table, adding...");
+
+                // Get user data from auth
+                const { data: { user }, error: authError } = await client.auth.getUser();
+
+                if (authError || !user) {
+                    console.error("Error getting user from auth:", authError);
+                    return false;
+                }
+
+                // Add user to users table
+                const { error: insertError } = await client
+                    .from("users")
+                    .insert([{
+                        id: currentUserId,
+                        name: user.user_metadata?.full_name || user.email?.split('@')[0] || "User"
+                    }]);
+
+                if (insertError) {
+                    console.error("Error adding user to users table:", insertError);
+                    return false;
+                }
+
+                console.log("User added to users table successfully");
+            }
+
+            return true;
+        } catch (err) {
+            console.error("Error ensuring user in users table:", err);
+            return false;
+        }
+    }
+
     // Get current user
     async function getCurrentUser() {
         try {
@@ -317,6 +359,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
             currentUserId = user.id;
             console.log("Current user ID:", currentUserId);
+
+            // Ensure user exists in users table
+            await ensureCurrentUserInUsersTable();
+
             await setUserOnlineStatus(true);
 
             // Initialize AI assistant BEFORE adding as friend
@@ -3193,6 +3239,20 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             }
 
+            // Check if both sender and receiver exist in the users table
+            const senderExists = await userExistsInUsersTable(senderId);
+            if (!senderExists) {
+                console.error("Sender not found in users table:", senderId);
+                return false;
+            }
+
+            const receiverExists = await userExistsInUsersTable(receiverId);
+            if (!receiverExists) {
+                console.error("Receiver not found in users table:", receiverId);
+                return false;
+            }
+
+            console.log("Inserting message into database...");
             const { error } = await client.from("messages").insert([{
                 sender_id: senderId,
                 receiver_id: receiverId,
@@ -3201,8 +3261,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (error) {
                 console.error("Error inserting message:", error);
+                if (error.code === '23503') {
+                    // Foreign key constraint violation
+                    console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
+                    console.error("Sender ID:", senderId, "Receiver ID:", receiverId);
+                }
                 return false;
             }
+            console.log("Message inserted successfully");
             return true;
         } catch (err) {
             console.error("insertMessage error:", err);
@@ -3305,13 +3371,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function sendMessage(friendId, content) {
         if (!content || !content.trim()) return;
         try {
-            // Check if the sender exists in the users table
-            const senderExists = await userExistsInUsersTable(currentUserId);
-            if (!senderExists) {
-                console.error("Current user not found in users table");
-                showToast("Your user account is not properly set up. Please log in again.", "error");
-                return;
-            }
+            // Ensure current user exists in users table
+            await ensureCurrentUserInUsersTable();
 
             // If the receiver is the AI assistant, ensure it exists in the database
             if (friendId === AI_ASSISTANT_ID) {
@@ -3324,22 +3385,44 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
                 console.log("AI assistant initialized successfully");
             } else {
-                // Check if the receiver exists in the users table
-                const receiverExists = await userExistsInUsersTable(friendId);
-                if (!receiverExists) {
-                    console.error("Receiver not found in users table");
-                    showToast("The user you're trying to message doesn't exist. Please try again.", "error");
-                    return;
+                // For regular users, try to ensure they exist in the users table
+                try {
+                    const receiverExists = await userExistsInUsersTable(friendId);
+                    if (!receiverExists) {
+                        console.warn("Receiver not found in users table, attempting to add...");
+
+                        // Get receiver profile
+                        const { data: profile } = await client
+                            .from("user_profiles")
+                            .select("user_name")
+                            .eq("user_id", friendId)
+                            .maybeSingle();
+
+                        if (profile) {
+                            // Add to users table
+                            await client
+                                .from("users")
+                                .insert([{
+                                    id: friendId,
+                                    name: profile.user_name || "User"
+                                }]);
+
+                            console.log("Added receiver to users table");
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error ensuring receiver exists:", err);
                 }
             }
 
-            // For all users (including AI assistant), store the message in the database
+            // Now try to send the message
             console.log("Inserting message into database...");
             const { error } = await client.from("messages").insert([{
                 sender_id: currentUserId,
                 receiver_id: friendId,
                 content
             }]);
+
             if (error) {
                 console.error("Error sending message:", error);
                 if (error.code === '23503') {
@@ -3357,57 +3440,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         } catch (err) {
             console.error("sendMessage error:", err);
             showToast("Message failed to send. Please try again.", "error");
-        }
-    }
-
-    // Enhanced insertMessage function
-    async function insertMessage(senderId, receiverId, content) {
-        try {
-            // Check if both sender and receiver exist in the users table
-            const senderExists = await userExistsInUsersTable(senderId);
-            if (!senderExists) {
-                console.error("Sender not found in users table:", senderId);
-                return false;
-            }
-
-            const receiverExists = await userExistsInUsersTable(receiverId);
-            if (!receiverExists) {
-                console.error("Receiver not found in users table:", receiverId);
-                return false;
-            }
-
-            // If either the sender or receiver is the AI assistant, ensure it exists
-            if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
-                console.log("Inserting message involving AI assistant, ensuring it exists...");
-                const aiExists = await ensureAIAssistantExists();
-                if (!aiExists) {
-                    console.error("Failed to ensure AI assistant exists");
-                    return false;
-                }
-                console.log("AI assistant exists");
-            }
-
-            console.log("Inserting message into database...");
-            const { error } = await client.from("messages").insert([{
-                sender_id: senderId,
-                receiver_id: receiverId,
-                content
-            }]);
-
-            if (error) {
-                console.error("Error inserting message:", error);
-                if (error.code === '23503') {
-                    // Foreign key constraint violation
-                    console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
-                    console.error("Sender ID:", senderId, "Receiver ID:", receiverId);
-                }
-                return false;
-            }
-            console.log("Message inserted successfully");
-            return true;
-        } catch (err) {
-            console.error("insertMessage error:", err);
-            return false;
         }
     }
 
