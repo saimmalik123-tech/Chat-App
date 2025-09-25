@@ -49,30 +49,25 @@ document.addEventListener("DOMContentLoaded", async () => {
         throw lastError;
     }
 
-    // Initialize AI assistant
-    async function initializeAIAssistant() {
-        if (aiAssistantInitialized) return true;
-         showLoading("SetUp Assistant...");
-
+    // Add this function to explicitly verify and create the AI assistant in the users table
+    async function verifyAndCreateAIAssistant() {
         try {
-            console.log("Initializing AI assistant...");
-
-            // First check if AI assistant exists in users table
-            const { data: existingUser, error: userError } = await client
+            // Check if AI assistant exists in users table
+            const { data: aiUser, error: checkError } = await client
                 .from("users")
                 .select("id")
                 .eq("id", AI_ASSISTANT_ID)
                 .maybeSingle();
 
-            if (userError) {
-                console.error("Error checking users table:", userError);
-                throw userError;
+            if (checkError) {
+                console.error("Error checking AI assistant in users table:", checkError);
+                return false;
             }
 
-            // If AI assistant doesn't exist in users table, create it
-            if (!existingUser) {
+            // If AI assistant doesn't exist, create it
+            if (!aiUser) {
                 console.log("AI assistant not found in users table, creating...");
-                const { error: createUserError } = await client
+                const { error: insertError } = await client
                     .from("users")
                     .insert([{
                         id: AI_ASSISTANT_ID,
@@ -80,13 +75,34 @@ document.addEventListener("DOMContentLoaded", async () => {
                         email: AI_ASSISTANT_EMAIL
                     }]);
 
-                if (createUserError) {
-                    console.error("Error creating AI assistant in users table:", createUserError);
-                    throw createUserError;
+                if (insertError) {
+                    console.error("Error creating AI assistant in users table:", insertError);
+                    return false;
                 }
                 console.log("AI assistant created in users table");
             } else {
                 console.log("AI assistant already exists in users table");
+            }
+
+            return true;
+        } catch (err) {
+            console.error("Error in verifyAndCreateAIAssistant:", err);
+            return false;
+        }
+    }
+
+    // Initialize AI assistant
+    async function initializeAIAssistant() {
+        if (aiAssistantInitialized) return true;
+        showLoading("Setting up AI Assistant...");
+
+        try {
+            console.log("Initializing AI assistant...");
+
+            // First verify/create in users table
+            const userCreated = await verifyAndCreateAIAssistant();
+            if (!userCreated) {
+                throw new Error("Failed to create AI assistant in users table");
             }
 
             // Then check if AI assistant profile exists
@@ -139,36 +155,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.log("AI assistant profile updated successfully");
             }
 
-            // Final verification - check both tables again
-            const { data: finalUserCheck, error: finalUserError } = await client
-                .from("users")
-                .select("id")
-                .eq("id", AI_ASSISTANT_ID)
-                .maybeSingle();
-
-            if (finalUserError || !finalUserCheck) {
-                console.error("Final check failed: AI assistant not found in users table");
-                return false;
-            }
-
-            const { data: finalProfileCheck, error: finalProfileError } = await client
-                .from("user_profiles")
-                .select("user_id")
-                .eq("user_id", AI_ASSISTANT_ID)
-                .maybeSingle();
-
-            if (finalProfileError || !finalProfileCheck) {
-                console.error("Final check failed: AI assistant profile not found");
-                return false;
-            }
-
             console.log("AI assistant initialized successfully");
             aiAssistantInitialized = true;
             return true;
         } catch (err) {
             console.error("Error initializing AI assistant:", err);
             return false;
-        } finally{
+        } finally {
             hideLoading();
         }
     }
@@ -176,6 +169,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Ensure user exists in users table
     async function ensureUserExists(userId) {
         return withRetry(async () => {
+            // Special handling for AI assistant
+            if (userId === AI_ASSISTANT_ID) {
+                const success = await verifyAndCreateAIAssistant();
+                if (!success) {
+                    throw new Error("Failed to verify/create AI assistant");
+                }
+                return true;
+            }
+
             // Check if user exists
             const { data: existingUser, error: checkError } = await client
                 .from("users")
@@ -194,15 +196,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             // User doesn't exist, try to create them
             console.log(`User ${userId} not found, attempting to create...`);
-
-            // Special handling for AI assistant
-            if (userId === AI_ASSISTANT_ID) {
-                const success = await initializeAIAssistant();
-                if (!success) {
-                    throw new Error("Failed to initialize AI assistant");
-                }
-                return true;
-            }
 
             // Get user profile information for regular users
             const { data: profile, error: profileError } = await client
@@ -255,6 +248,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Insert message function with proper user existence checks
     async function insertMessage(senderId, receiverId, content) {
         try {
+            // Special handling for AI assistant
+            if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
+                const aiVerified = await verifyAndCreateAIAssistant();
+                if (!aiVerified) {
+                    console.error("Failed to verify/create AI assistant");
+                    return false;
+                }
+            }
+
             // Ensure both users exist in the users table
             await ensureUserExists(senderId);
             await ensureUserExists(receiverId);
@@ -282,24 +284,61 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return false;
             }
 
-            // Insert the message
-            const { data, error } = await client
-                .from("messages")
-                .insert([{
-                    sender_id: senderId,
-                    receiver_id: receiverId,
-                    content
-                }])
-                .select()
-                .single();
+            // Insert the message with retry logic for foreign key errors
+            try {
+                const { data, error } = await client
+                    .from("messages")
+                    .insert([{
+                        sender_id: senderId,
+                        receiver_id: receiverId,
+                        content
+                    }])
+                    .select()
+                    .single();
 
-            if (error) {
-                console.error("Error inserting message:", error);
+                if (error) {
+                    // If it's a foreign key error, try to ensure the users exist again and retry
+                    if (error.code === '23503') {
+                        console.error("Foreign key error, retrying after ensuring users exist");
+
+                        // Special handling for AI assistant
+                        if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
+                            await verifyAndCreateAIAssistant();
+                        }
+
+                        await ensureUserExists(senderId);
+                        await ensureUserExists(receiverId);
+
+                        // Retry insertion
+                        const { data: retryData, error: retryError } = await client
+                            .from("messages")
+                            .insert([{
+                                sender_id: senderId,
+                                receiver_id: receiverId,
+                                content
+                            }])
+                            .select()
+                            .single();
+
+                        if (retryError) {
+                            console.error("Error inserting message on retry:", retryError);
+                            return false;
+                        }
+
+                        console.log("Message inserted successfully on retry");
+                        return true;
+                    } else {
+                        console.error("Error inserting message:", error);
+                        return false;
+                    }
+                }
+
+                console.log("Message inserted successfully");
+                return true;
+            } catch (err) {
+                console.error("Exception in insertMessage:", err);
                 return false;
             }
-
-            console.log("Message inserted successfully");
-            return true;
         } catch (err) {
             console.error("Error in insertMessage:", err);
             return false;
@@ -331,11 +370,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Initialize app with proper AI assistant setup
     try {
+        // First, ensure AI assistant is initialized before anything else
+        console.log("Starting application initialization...");
+        const aiInitialized = await initializeAIAssistant();
+        if (!aiInitialized) {
+            console.error("Critical error: Failed to initialize AI assistant");
+            showToast("Failed to initialize application. Please refresh the page.", "error");
+            return;
+        }
+
         const me = await getCurrentUser();
         if (me) {
-            // Initialize AI assistant BEFORE any other operations
-            await initializeAIAssistant();
-
+            // Ensure current user exists in users table
             await ensureCurrentUserInUsersTable();
 
             await checkAndFixDatabaseSchema();
@@ -940,9 +986,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             await ensureCurrentUserInUsersTable();
 
             await setUserOnlineStatus(true);
-
-            // Initialize AI assistant BEFORE adding as friend
-            await initializeAIAssistant();
 
             // Add AI assistant as friend for new users
             await addAIAssistantAsFriend();
