@@ -1180,6 +1180,53 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Mark messages as seen
+    async function markMessagesAsSeen(friendId, chatBox, messages, friendAvatar) {
+        if (!currentUserId || !friendId) return;
+
+        try {
+            // Get unseen messages from friend
+            const { data: unseenMessages, error } = await client
+                .from("messages")
+                .select("id")
+                .eq("sender_id", friendId)
+                .eq("receiver_id", currentUserId)
+                .eq("seen", false)
+                .is('deleted_at', null);
+
+            if (error) {
+                console.error("Error fetching unseen messages:", error);
+                return;
+            }
+
+            if (unseenMessages && unseenMessages.length > 0) {
+                // Mark messages as seen
+                const { error: updateError } = await client
+                    .from("messages")
+                    .update({ seen: true })
+                    .in("id", unseenMessages.map(msg => msg.id));
+
+                if (updateError) {
+                    console.error("Error marking messages as seen:", updateError);
+                    return;
+                }
+
+                // Update the messages in the array
+                unseenMessages.forEach(unseenMsg => {
+                    const msgIndex = messages.findIndex(m => m.id === unseenMsg.id);
+                    if (msgIndex !== -1) {
+                        messages[msgIndex].seen = true;
+                    }
+                });
+
+                // Re-render messages to update seen status
+                renderChatMessages(chatBox, messages, friendAvatar);
+            }
+        } catch (err) {
+            console.error("Error in markMessagesAsSeen:", err);
+        }
+    }
+
     // Update last message
     function updateLastMessage(friendId, content, createdAt) {
         try {
@@ -2843,6 +2890,30 @@ document.addEventListener("DOMContentLoaded", async () => {
             showToast("Failed to open chat.", "error");
         } finally {
             hideLoading();
+        }
+    }
+
+    // Fetch messages between current user and friend
+    async function fetchMessages(friendId) {
+        if (!currentUserId || !friendId) return [];
+
+        try {
+            const { data, error } = await client
+                .from("messages")
+                .select("*")
+                .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                .is('deleted_at', null)
+                .order("created_at", { ascending: true });
+
+            if (error) {
+                console.error("Error fetching messages:", error);
+                return [];
+            }
+
+            return data || [];
+        } catch (err) {
+            console.error("Error in fetchMessages:", err);
+            return [];
         }
     }
 
