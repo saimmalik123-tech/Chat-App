@@ -3157,7 +3157,33 @@ document.addEventListener("DOMContentLoaded", async () => {
             const receiverExists = await userExistsInUsersTable(receiverId);
             if (!receiverExists) {
                 console.error("Receiver not found in users table:", receiverId);
-                return false;
+
+                // Try to add the receiver to the users table
+                const { data: profile } = await client
+                    .from("user_profiles")
+                    .select("user_name")
+                    .eq("user_id", receiverId)
+                    .maybeSingle();
+
+                if (profile) {
+                    const { error: insertError } = await client
+                        .from("users")
+                        .insert([{
+                            id: receiverId,
+                            name: profile.user_name || "User",
+                            email: `${receiverId}@placeholder.com`
+                        }]);
+
+                    if (insertError) {
+                        console.error("Failed to add receiver to users table:", insertError);
+                        return false;
+                    }
+
+                    console.log("Added receiver to users table");
+                } else {
+                    console.error("Receiver profile not found");
+                    return false;
+                }
             }
 
             console.log("Inserting message into database...");
@@ -3287,32 +3313,56 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.log("AI assistant initialized successfully");
             } else {
                 // For regular users, ensure they exist in the users table
-                try {
-                    const receiverExists = await userExistsInUsersTable(friendId);
-                    if (!receiverExists) {
-                        console.warn("Receiver not found in users table, attempting to add...");
+                const receiverExists = await userExistsInUsersTable(friendId);
+                if (!receiverExists) {
+                    console.warn("Receiver not found in users table, attempting to add...");
 
-                        const { data: profile } = await client
-                            .from("user_profiles")
-                            .select("user_name")
-                            .eq("user_id", friendId)
-                            .maybeSingle();
+                    // Get the receiver's profile information
+                    const { data: profile, error: profileError } = await client
+                        .from("user_profiles")
+                        .select("user_name")
+                        .eq("user_id", friendId)
+                        .maybeSingle();
 
-                        if (profile) {
-                            await client
-                                .from("users")
-                                .insert([{
-                                    id: friendId,
-                                    name: profile.user_name || "User",
-                                    email: `${friendId}@placeholder.com` // Added email for receiver
-                                }]);
-
-                            console.log("Added receiver to users table");
-                        }
+                    if (profileError) {
+                        console.error("Error fetching receiver profile:", profileError);
+                        showToast("Failed to find user information. Please try again.", "error");
+                        return;
                     }
-                } catch (err) {
-                    console.error("Error ensuring receiver exists:", err);
+
+                    if (profile) {
+                        // Create the user in the users table
+                        const { error: insertError } = await client
+                            .from("users")
+                            .insert([{
+                                id: friendId,
+                                name: profile.user_name || "User",
+                                email: `${friendId}@placeholder.com`
+                            }]);
+
+                        if (insertError) {
+                            console.error("Error adding receiver to users table:", insertError);
+                            showToast("Failed to create user record. Please try again.", "error");
+                            return;
+                        }
+
+                        console.log("Added receiver to users table");
+                    } else {
+                        console.error("Receiver profile not found");
+                        showToast("User not found. Please try again.", "error");
+                        return;
+                    }
                 }
+            }
+
+            // Double-check that both users exist before inserting the message
+            const senderExists = await userExistsInUsersTable(currentUserId);
+            const receiverExists = await userExistsInUsersTable(friendId);
+
+            if (!senderExists || !receiverExists) {
+                console.error("Pre-insert check failed: Sender exists:", senderExists, "Receiver exists:", receiverExists);
+                showToast("Failed to send message. User records not found. Please try again.", "error");
+                return;
             }
 
             console.log("Inserting message into database...");
@@ -3326,7 +3376,24 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.error("Error sending message:", error);
                 if (error.code === '23503') {
                     console.error("Foreign key constraint violation. This usually means the user doesn't exist in the users table.");
-                    showToast("Message failed to send: User not found. Please try again.", "error");
+                    console.error("Sender ID:", currentUserId, "Receiver ID:", friendId);
+
+                    // Check the actual state of the database
+                    const { data: senderCheck } = await client
+                        .from("users")
+                        .select("id")
+                        .eq("id", currentUserId)
+                        .maybeSingle();
+
+                    const { data: receiverCheck } = await client
+                        .from("users")
+                        .select("id")
+                        .eq("id", friendId)
+                        .maybeSingle();
+
+                    console.error("Database check - Sender exists:", !!senderCheck, "Receiver exists:", !!receiverCheck);
+
+                    showToast("Message failed to send: User not found in database. Please try again.", "error");
                 } else {
                     showToast("Message failed to send. Please try again.", "error");
                 }
