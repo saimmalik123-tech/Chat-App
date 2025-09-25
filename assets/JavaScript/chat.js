@@ -249,72 +249,61 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Direct message insertion using RPC to bypass constraints
-    async function insertMessageDirect(senderId, receiverId, content) {
-        try {
-            console.log("Using direct message insert...");
-
-            // First, ensure both users exist in the users table
-            await ensureUserExists(senderId);
-            await ensureUserExists(receiverId);
-
-            // Use RPC to execute a raw SQL insert that bypasses constraints
-            const { data, error } = await client.rpc('exec_sql', {
-                sql: `INSERT INTO messages (id, sender_id, receiver_id, content, created_at, seen) 
-                      VALUES (gen_random_uuid(), '${senderId}', '${receiverId}', '${content.replace(/'/g, "''")}', NOW(), false)`
-            });
-
-            if (error) {
-                console.error("Direct insert failed:", error);
-                return false;
-            }
-
-            console.log("Message inserted directly");
-            return true;
-        } catch (err) {
-            console.error("Exception in direct insert:", err);
-            return false;
-        }
-    }
-
-    // Enhanced insertMessage function with fallback approaches
+    // Insert message function with proper user existence checks
     async function insertMessage(senderId, receiverId, content) {
         try {
-            // Try the direct insert approach first
-            const success = await insertMessageDirect(senderId, receiverId, content);
-
-            if (success) {
-                return true;
-            }
-
-            // If direct insert fails, try the regular approach
-            console.log("Direct insert failed, trying regular approach...");
-
-            // Ensure both users exist
+            // Ensure both users exist in the users table
             await ensureUserExists(senderId);
             await ensureUserExists(receiverId);
 
-            // Try regular insert
-            const { error } = await client.from("messages").insert([{
-                sender_id: senderId,
-                receiver_id: receiverId,
-                content
-            }]);
+            // Double-check that both users exist before inserting
+            const { data: senderCheck, error: senderCheckError } = await client
+                .from("users")
+                .select("id")
+                .eq("id", senderId)
+                .maybeSingle();
 
-            if (error) {
-                console.error("Regular insert also failed:", error);
+            if (senderCheckError || !senderCheck) {
+                console.error("Sender verification failed:", senderCheckError);
                 return false;
             }
 
-            console.log("Message inserted with regular approach");
+            const { data: receiverCheck, error: receiverCheckError } = await client
+                .from("users")
+                .select("id")
+                .eq("id", receiverId)
+                .maybeSingle();
+
+            if (receiverCheckError || !receiverCheck) {
+                console.error("Receiver verification failed:", receiverCheckError);
+                return false;
+            }
+
+            // Insert the message
+            const { data, error } = await client
+                .from("messages")
+                .insert([{
+                    sender_id: senderId,
+                    receiver_id: receiverId,
+                    content
+                }])
+                .select()
+                .single();
+
+            if (error) {
+                console.error("Error inserting message:", error);
+                return false;
+            }
+
+            console.log("Message inserted successfully");
             return true;
         } catch (err) {
-            console.error("All insert methods failed:", err);
+            console.error("Error in insertMessage:", err);
             return false;
         }
     }
 
-    // Enhanced sendMessage function with fallback approaches
+    // Enhanced sendMessage function with proper user existence checks
     async function sendMessage(friendId, content) {
         if (!content || !content.trim()) return;
 
@@ -323,27 +312,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             await ensureUserExists(currentUserId);
             await ensureUserExists(friendId);
 
-            // Try to insert the message using direct approach
-            const success = await insertMessageDirect(currentUserId, friendId, content);
+            // Insert the message
+            const success = await insertMessage(currentUserId, friendId, content);
 
             if (success) {
                 updateLastMessage(friendId, content, new Date().toISOString());
-                return;
-            }
-
-            // If direct insert fails, try regular insert
-            const { error } = await client.from("messages").insert([{
-                sender_id: currentUserId,
-                receiver_id: friendId,
-                content
-            }]);
-
-            if (error) {
-                console.error("Error sending message:", error);
-                showToast("Message failed to send. Please try again.", "error");
             } else {
-                console.log("Message sent successfully");
-                updateLastMessage(friendId, content, new Date().toISOString());
+                showToast("Message failed to send. Please try again.", "error");
             }
         } catch (err) {
             console.error("Error in sendMessage:", err);
