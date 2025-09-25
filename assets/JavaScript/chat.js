@@ -2636,66 +2636,49 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.error("Error initializing database schema:", err);
         }
     }
-
     async function checkAndFixDatabaseSchema() {
         try {
             console.log("Checking database schema...");
 
-            // Check if the foreign key constraints already exist
-            const { data: constraints, error: constraintsError } = await client
-                .from("information_schema.table_constraints")
-                .select("constraint_name")
-                .eq("table_name", "messages")
-                .eq("constraint_type", "FOREIGN KEY")
-                .in("constraint_name", ["messages_sender_id_fkey", "messages_receiver_id_fkey"]);
+            // Try to add the constraints directly and handle the "already exists" error
+            try {
+                console.log("Attempting to add sender foreign key constraint...");
+                const { error: senderError } = await client.rpc('exec_sql', {
+                    sql: `ALTER TABLE messages ADD CONSTRAINT IF NOT EXISTS messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
+                });
 
-            if (constraintsError) {
-                console.error("Error checking table constraints:", constraintsError);
-                // We'll continue and try to add the constraints if we can't check
-            }
-
-            const existingConstraints = (constraints || []).map(c => c.constraint_name);
-            console.log("Existing constraints:", existingConstraints);
-
-            // Add sender foreign key constraint if it doesn't exist
-            if (!existingConstraints.includes("messages_sender_id_fkey")) {
-                console.log("Adding sender foreign key constraint...");
-                try {
-                    const { error: senderError } = await client.rpc('exec_sql', {
-                        sql: `ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
-                    });
-
-                    if (senderError) {
+                if (senderError) {
+                    // Check if the error is because the constraint already exists
+                    if (senderError.code === '42710' && senderError.message.includes('already exists')) {
+                        console.log("Sender foreign key constraint already exists");
+                    } else {
                         console.error("Error adding sender foreign key constraint:", senderError);
-                        // Don't throw here, we'll continue with the receiver constraint
-                    } else {
-                        console.log("Sender foreign key constraint added successfully");
                     }
-                } catch (senderErr) {
-                    console.error("Exception when adding sender foreign key constraint:", senderErr);
+                } else {
+                    console.log("Sender foreign key constraint added successfully");
                 }
-            } else {
-                console.log("Sender foreign key constraint already exists");
+            } catch (senderErr) {
+                console.error("Exception when adding sender foreign key constraint:", senderErr);
             }
 
-            // Add receiver foreign key constraint if it doesn't exist
-            if (!existingConstraints.includes("messages_receiver_id_fkey")) {
-                console.log("Adding receiver foreign key constraint...");
-                try {
-                    const { error: receiverError } = await client.rpc('exec_sql', {
-                        sql: `ALTER TABLE messages ADD CONSTRAINT messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE;`
-                    });
+            try {
+                console.log("Attempting to add receiver foreign key constraint...");
+                const { error: receiverError } = await client.rpc('exec_sql', {
+                    sql: `ALTER TABLE messages ADD CONSTRAINT IF NOT EXISTS messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE;`
+                });
 
-                    if (receiverError) {
-                        console.error("Error adding receiver foreign key constraint:", receiverError);
+                if (receiverError) {
+                    // Check if the error is because the constraint already exists
+                    if (receiverError.code === '42710' && receiverError.message.includes('already exists')) {
+                        console.log("Receiver foreign key constraint already exists");
                     } else {
-                        console.log("Receiver foreign key constraint added successfully");
+                        console.error("Error adding receiver foreign key constraint:", receiverError);
                     }
-                } catch (receiverErr) {
-                    console.error("Exception when adding receiver foreign key constraint:", receiverErr);
+                } else {
+                    console.log("Receiver foreign key constraint added successfully");
                 }
-            } else {
-                console.log("Receiver foreign key constraint already exists");
+            } catch (receiverErr) {
+                console.error("Exception when adding receiver foreign key constraint:", receiverErr);
             }
 
             return true;
@@ -2704,7 +2687,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             return false;
         }
     }
-
     // Get user profile for chat
     async function getUserProfileForChat(userId) {
         if (userId === AI_ASSISTANT_ID) {
