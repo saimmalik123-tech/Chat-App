@@ -3063,7 +3063,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function ensureAIAssistantExists() {
         try {
             console.log("Ensuring AI assistant exists in the database...");
-
+            
             // First, check if AI assistant exists in the users table
             const { data: existingUser, error: userError } = await client
                 .from("users")
@@ -3073,34 +3073,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (userError) {
                 console.error("Error checking users table:", userError);
-                // Try to check in a table named "private_users"
-                const { data: existingInPrivate, error: privateError } = await client
-                    .from("private_users")
-                    .select("id")
-                    .eq("id", AI_ASSISTANT_ID)
-                    .maybeSingle();
+                return false;
+            }
 
-                if (privateError) {
-                    console.error("Error checking private_users table:", privateError);
-                    return false;
-                }
-
-                if (!existingInPrivate) {
-                    // Create in private_users table
-                    const { error: createPrivateError } = await client
-                        .from("private_users")
-                        .insert([{
-                            id: AI_ASSISTANT_ID,
-                            name: AI_ASSISTANT_USERNAME
-                        }]);
-
-                    if (createPrivateError) {
-                        console.error("Error creating AI assistant in private_users table:", createPrivateError);
-                        return false;
-                    }
-                    console.log("AI assistant created in private_users table");
-                }
-            } else if (!existingUser) {
+            if (!existingUser) {
                 // Create in users table
                 const { error: createUserError } = await client
                     .from("users")
