@@ -2644,12 +2644,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             try {
                 console.log("Attempting to add sender foreign key constraint...");
                 const { error: senderError } = await client.rpc('exec_sql', {
-                    sql: `ALTER TABLE messages ADD CONSTRAINT IF NOT EXISTS messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
+                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
                 });
 
                 if (senderError) {
                     // Check if the error is because the constraint already exists
-                    if (senderError.code === '42710' && senderError.message.includes('already exists')) {
+                    if (senderError.code === '42710') {
                         console.log("Sender foreign key constraint already exists");
                     } else {
                         console.error("Error adding sender foreign key constraint:", senderError);
@@ -2664,12 +2664,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             try {
                 console.log("Attempting to add receiver foreign key constraint...");
                 const { error: receiverError } = await client.rpc('exec_sql', {
-                    sql: `ALTER TABLE messages ADD CONSTRAINT IF NOT EXISTS messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE;`
+                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE;`
                 });
 
                 if (receiverError) {
                     // Check if the error is because the constraint already exists
-                    if (receiverError.code === '42710' && receiverError.message.includes('already exists')) {
+                    if (receiverError.code === '42710') {
                         console.log("Receiver foreign key constraint already exists");
                     } else {
                         console.error("Error adding receiver foreign key constraint:", receiverError);
