@@ -3062,56 +3062,58 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Add this function to ensure AI assistant exists
     async function ensureAIAssistantExists() {
         try {
-            // First, check if AI assistant exists in private_users
+            console.log("Ensuring AI assistant exists in the database...");
+
+            // First, check if AI assistant exists in the users table
             const { data: existingUser, error: userError } = await client
-                .from("private_users")
+                .from("users")
                 .select("id")
                 .eq("id", AI_ASSISTANT_ID)
                 .maybeSingle();
 
             if (userError) {
-                console.error("Error checking private_users:", userError);
-                // Try to check in a table named "users"
-                const { data: existingInUsers, error: usersError } = await client
-                    .from("users")
+                console.error("Error checking users table:", userError);
+                // Try to check in a table named "private_users"
+                const { data: existingInPrivate, error: privateError } = await client
+                    .from("private_users")
                     .select("id")
                     .eq("id", AI_ASSISTANT_ID)
                     .maybeSingle();
 
-                if (usersError) {
-                    console.error("Error checking users table:", usersError);
+                if (privateError) {
+                    console.error("Error checking private_users table:", privateError);
                     return false;
                 }
 
-                if (!existingInUsers) {
-                    // Create in users table
-                    const { error: createUserError } = await client
-                        .from("users")
+                if (!existingInPrivate) {
+                    // Create in private_users table
+                    const { error: createPrivateError } = await client
+                        .from("private_users")
                         .insert([{
                             id: AI_ASSISTANT_ID,
                             name: AI_ASSISTANT_USERNAME
                         }]);
 
-                    if (createUserError) {
-                        console.error("Error creating AI assistant in users table:", createUserError);
+                    if (createPrivateError) {
+                        console.error("Error creating AI assistant in private_users table:", createPrivateError);
                         return false;
                     }
-                    console.log("AI assistant created in users table");
+                    console.log("AI assistant created in private_users table");
                 }
             } else if (!existingUser) {
-                // Create in private_users
+                // Create in users table
                 const { error: createUserError } = await client
-                    .from("private_users")
+                    .from("users")
                     .insert([{
                         id: AI_ASSISTANT_ID,
                         name: AI_ASSISTANT_USERNAME
                     }]);
 
                 if (createUserError) {
-                    console.error("Error creating AI assistant in private_users:", createUserError);
+                    console.error("Error creating AI assistant in users table:", createUserError);
                     return false;
                 }
-                console.log("AI assistant created in private_users");
+                console.log("AI assistant created in users table");
             }
 
             // Now check and create/update the profile in user_profiles
@@ -3161,6 +3163,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.log("AI assistant profile updated successfully");
             }
 
+            console.log("AI assistant exists in the database");
             return true;
         } catch (err) {
             console.error("Error ensuring AI assistant exists:", err);
