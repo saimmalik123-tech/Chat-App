@@ -134,6 +134,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             if (messageSent) {
+                // Fixed: Only update last message for the specific friend
                 updateLastMessage(friendId, content, new Date().toISOString());
             } else {
                 showToast("Message failed to send. Please try again.", "error");
@@ -185,6 +186,78 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Fixed: Update last message only for specific friend
+    function updateLastMessage(friendId, content, createdAt) {
+        try {
+            if (!friendId) {
+                console.error("No friendId provided to updateLastMessage");
+                return;
+            }
+
+            // Convert to string to ensure proper matching
+            const friendIdStr = String(friendId);
+
+            // Find the specific chat element for this friend
+            const chatLi = document.querySelector(`.chat[data-friend-id="${friendIdStr}"]`);
+            if (!chatLi) {
+                console.warn(`Chat element not found for friendId: ${friendIdStr}`);
+                return;
+            }
+
+            const lastMessageEl = chatLi.querySelector(".last-message");
+            const timeEl = chatLi.querySelector(".time");
+
+            if (lastMessageEl) lastMessageEl.textContent = content;
+            if (timeEl) {
+                const timeStr = new Date(createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                });
+                timeEl.textContent = timeStr;
+            }
+
+            // Move chat to top of list
+            const chatList = chatLi.parentElement;
+            if (chatList && chatList.firstChild !== chatLi) {
+                chatList.prepend(chatLi);
+            }
+        } catch (error) {
+            console.error("Error updating last message:", error);
+        }
+    }
+
+    // Fixed: setUserOnlineStatus with timestamp
+    async function setUserOnlineStatus(isOnline) {
+        if (!currentUserId) return;
+        try {
+            console.log(`Setting user ${currentUserId} online status to: ${isOnline}`);
+            await client.from('user_profiles')
+                .upsert({
+                    user_id: currentUserId,
+                    is_online: isOnline,
+                    last_seen: new Date().toISOString() // Add timestamp
+                }, {
+                    onConflict: 'user_id'
+                });
+        } catch (err) {
+            console.error("Error updating online status:", err);
+        }
+    }
+
+    // Fixed: Periodic online status check
+    function setupOnlineStatusCheck() {
+        // Check every 30 seconds
+        setInterval(async () => {
+            if (currentUserId) {
+                try {
+                    await setUserOnlineStatus(true);
+                } catch (err) {
+                    console.error("Error in periodic status check:", err);
+                }
+            }
+        }, 30000);
+    }
+
     // Initialize app
     try {
         console.log("Starting application initialization...");
@@ -195,6 +268,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             await initializeDatabaseSchema();
             await fetchFriends();
             await fetchFriendRequests();
+
+            // Set up periodic online status check
+            setupOnlineStatusCheck();
 
             const setupRealtimeSubscriptions = async () => {
                 try {
@@ -882,16 +958,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         } catch (err) {
             console.error("Unexpected error rejecting request:", err);
             showToast("Failed to reject friend request.", "error");
-        }
-    }
-
-    async function setUserOnlineStatus(isOnline) {
-        if (!currentUserId) return;
-        try {
-            await client.from('user_profiles')
-                .upsert({ user_id: currentUserId, is_online: isOnline }, { onConflict: 'user_id' });
-        } catch (err) {
-            console.error("Error updating online status:", err);
         }
     }
 
@@ -1585,33 +1651,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Fixed updateLastMessage to only update the specific friend
-    function updateLastMessage(friendId, content, createdAt) {
-        try {
-            if (!friendId) return;
-
-            const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
-            if (!chatLi) return;
-
-            const lastMessageEl = chatLi.querySelector(".last-message");
-            const timeEl = chatLi.querySelector(".time");
-
-            if (lastMessageEl) lastMessageEl.textContent = content;
-            if (timeEl) {
-                const timeStr = new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-                timeEl.textContent = timeStr;
-            }
-
-            // Move chat to top of list
-            const chatList = chatLi.parentElement;
-            if (chatList && chatList.firstChild !== chatLi) {
-                chatList.prepend(chatLi);
-            }
-        } catch (error) {
-            console.error("Error updating last message:", error);
-        }
-    }
-
     document.querySelector(".submit-friend")?.addEventListener("click", () => {
         try {
             const username = document.querySelector(".friend-input")?.value.trim();
@@ -2164,6 +2203,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.getElementById("user-modal-status").textContent = "Checking status...";
             document.getElementById("user-modal-status").className = "user-modal-status";
 
+            // Fixed: Fetch fresh profile data including online status
             getUserProfile(userId).then(profile => {
                 if (profile) {
                     document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
@@ -2530,12 +2570,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             inputSafe.value = "";
             sendBtnSafe.disabled = true;
 
+            // Fixed: Fetch fresh profile data including online status
             const { data: profile } = await client
                 .from("user_profiles")
                 .select("is_online")
                 .eq("user_id", friendId)
                 .maybeSingle();
 
+            // Update typing indicator with current status
             typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
 
             const oldMessages = await fetchMessages(friendId);
@@ -2706,6 +2748,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             }
                         });
 
+                    // Fixed: Real-time subscription for status updates
                     const statusChannelName = `user-status-${friendId}`;
                     const statusChannel = client.channel(statusChannelName);
 
@@ -2716,8 +2759,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                             table: 'user_profiles',
                             filter: `user_id=eq.${friendId}`
                         }, (payload) => {
+                            console.log("Status update received:", payload);
                             const onlineTextElt = typingIndicator;
-                            if (onlineTextElt) onlineTextElt.textContent = payload.new?.is_online ? "Online" : "Offline";
+                            if (onlineTextElt) {
+                                const isOnline = payload.new?.is_online;
+                                onlineTextElt.textContent = isOnline ? "Online" : "Offline";
+                            }
                         })
                         .subscribe((status, err) => {
                             if (status === 'SUBSCRIBED') {
