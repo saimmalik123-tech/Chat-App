@@ -41,12 +41,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         throw lastError;
     }
 
-    // Ensure user exists in users table
+    // Ensure user exists in private_users table
     async function ensureUserExists(userId) {
         return withRetry(async () => {
             // Check if user exists
             const { data: existingUser, error: checkError } = await client
-                .from("users")
+                .from("private_users")
                 .select("id")
                 .eq("id", userId)
                 .maybeSingle();
@@ -82,7 +82,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             // Create the user
             const { error: insertError } = await client
-                .from("users")
+                .from("private_users")
                 .insert([{
                     id: userId,
                     name: profile.user_name || "User",
@@ -96,7 +96,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             // Verify the user was actually created
             const { data: verifyUser, error: verifyError } = await client
-                .from("users")
+                .from("private_users")
                 .select("id")
                 .eq("id", userId)
                 .maybeSingle();
@@ -116,13 +116,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             console.log(`Inserting message from ${senderId} to ${receiverId}`);
 
-            // Ensure both users exist in the users table
+            // Ensure both users exist in the private_users table
             await ensureUserExists(senderId);
             await ensureUserExists(receiverId);
 
             // Double-check that both users exist before inserting
             const { data: senderCheck, error: senderCheckError } = await client
-                .from("users")
+                .from("private_users")
                 .select("id")
                 .eq("id", senderId)
                 .maybeSingle();
@@ -133,7 +133,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             const { data: receiverCheck, error: receiverCheckError } = await client
-                .from("users")
+                .from("private_users")
                 .select("id")
                 .eq("id", receiverId)
                 .maybeSingle();
@@ -178,25 +178,25 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         // Try to determine which user is missing
                         const { data: senderCheck, error: senderCheckError } = await client
-                            .from("users")
+                            .from("private_users")
                             .select("id")
                             .eq("id", senderId)
                             .maybeSingle();
 
                         if (senderCheckError || !senderCheck) {
-                            console.error(`Sender ${senderId} does not exist in users table`);
+                            console.error(`Sender ${senderId} does not exist in private_users table`);
                             // Try to recreate the sender
                             await ensureUserExists(senderId);
                         }
 
                         const { data: receiverCheck, error: receiverCheckError } = await client
-                            .from("users")
+                            .from("private_users")
                             .select("id")
                             .eq("id", receiverId)
                             .maybeSingle();
 
                         if (receiverCheckError || !receiverCheck) {
-                            console.error(`Receiver ${receiverId} does not exist in users table`);
+                            console.error(`Receiver ${receiverId} does not exist in private_users table`);
                             // Try to recreate the receiver
                             await ensureUserExists(receiverId);
                         }
@@ -233,7 +233,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!content || !content.trim()) return;
 
         try {
-            // Ensure both users exist in the users table
+            // Ensure both users exist in the private_users table
             await ensureUserExists(currentUserId);
             await ensureUserExists(friendId);
 
@@ -316,7 +316,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.log("Adding sender foreign key constraint...");
                 try {
                     const { error: senderError } = await client.rpc('exec_sql', {
-                        sql: `ALTER TABLE messages ADD CONSTRAINT sender_id FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
+                        sql: `ALTER TABLE messages ADD CONSTRAINT sender_id FOREIGN KEY (sender_id) REFERENCES private_users(id) ON DELETE CASCADE;`
                     });
 
                     if (senderError) {
@@ -336,7 +336,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.log("Adding receiver foreign key constraint...");
                 try {
                     const { error: receiverError } = await client.rpc('exec_sql', {
-                        sql: `ALTER TABLE messages ADD CONSTRAINT receiver_id FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE;`
+                        sql: `ALTER TABLE messages ADD CONSTRAINT receiver_id FOREIGN KEY (receiver_id) REFERENCES private_users(id) ON DELETE CASCADE;`
                     });
 
                     if (receiverError) {
@@ -364,8 +364,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const me = await getCurrentUser();
         if (me) {
-            // Ensure current user exists in users table
-            await ensureCurrentUserInUsersTable();
+            // Ensure current user exists in private_users table
+            await ensureCurrentUserInPrivateUsersTable();
 
             await checkAndFixDatabaseSchema();
             await initializeDatabaseSchema();
@@ -905,16 +905,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     fetchCurrentUserAvatar();
 
-    // Ensure current user exists in users table
-    async function ensureCurrentUserInUsersTable() {
+    // Ensure current user exists in private_users table
+    async function ensureCurrentUserInPrivateUsersTable() {
         if (!currentUserId) return false;
 
         try {
-            // Check if user exists in users table
-            const userExists = await userExistsInUsersTable(currentUserId);
+            // Check if user exists in private_users table
+            const userExists = await userExistsInPrivateUsersTable(currentUserId);
 
             if (!userExists) {
-                console.log("Current user not found in users table, adding...");
+                console.log("Current user not found in private_users table, adding...");
 
                 // Get user data from auth
                 const { data: { user }, error: authError } = await client.auth.getUser();
@@ -924,9 +924,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                     return false;
                 }
 
-                // Add user to users table with email
+                // Add user to private_users table with email
                 const { error: insertError } = await client
-                    .from("users")
+                    .from("private_users")
                     .insert([{
                         id: currentUserId,
                         name: user.user_metadata?.full_name || user.email?.split('@')[0] || "User",
@@ -934,16 +934,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                     }]);
 
                 if (insertError) {
-                    console.error("Error adding user to users table:", insertError);
+                    console.error("Error adding user to private_users table:", insertError);
                     return false;
                 }
 
-                console.log("User added to users table successfully");
+                console.log("User added to private_users table successfully");
             }
 
             return true;
         } catch (err) {
-            console.error("Error ensuring user in users table:", err);
+            console.error("Error ensuring user in private_users table:", err);
             return false;
         }
     }
@@ -960,8 +960,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             currentUserId = user.id;
             console.log("Current user ID:", currentUserId);
 
-            // Ensure user exists in users table
-            await ensureCurrentUserInUsersTable();
+            // Ensure user exists in private_users table
+            await ensureCurrentUserInPrivateUsersTable();
 
             await setUserOnlineStatus(true);
 
@@ -2470,7 +2470,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             try {
                 console.log("Attempting to add sender foreign key constraint...");
                 const { error: senderError } = await client.rpc('exec_sql', {
-                    sql: `ALTER TABLE messages ADD CONSTRAINT sender_id FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
+                    sql: `ALTER TABLE messages ADD CONSTRAINT sender_id FOREIGN KEY (sender_id) REFERENCES private_users(id) ON DELETE CASCADE;`
                 });
 
                 if (senderError) {
@@ -2490,7 +2490,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             try {
                 console.log("Attempting to add receiver foreign key constraint...");
                 const { error: receiverError } = await client.rpc('exec_sql', {
-                    sql: `ALTER TABLE messages ADD CONSTRAINT receiver_id FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE;`
+                    sql: `ALTER TABLE messages ADD CONSTRAINT receiver_id FOREIGN KEY (receiver_id) REFERENCES private_users(id) ON DELETE CASCADE;`
                 });
 
                 if (receiverError) {
@@ -3237,23 +3237,23 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Check if user exists in users table
-    async function userExistsInUsersTable(userId) {
+    // Check if user exists in private_users table
+    async function userExistsInPrivateUsersTable(userId) {
         try {
             const { data, error } = await client
-                .from("users")
+                .from("private_users")
                 .select("id")
                 .eq("id", userId)
                 .maybeSingle();
 
             if (error) {
-                console.error("Error checking if user exists in users table:", error);
+                console.error("Error checking if user exists in private_users table:", error);
                 return false;
             }
 
             return !!data;
         } catch (err) {
-            console.error("Error in userExistsInUsersTable:", err);
+            console.error("Error in userExistsInPrivateUsersTable:", err);
             return false;
         }
     }
