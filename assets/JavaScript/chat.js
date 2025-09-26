@@ -348,19 +348,45 @@ document.addEventListener("DOMContentLoaded", async () => {
                     retries--;
 
                     if (err.code === '23503') {  // Foreign key violation
-                        console.error("Foreign key error, retrying...");
+                        console.error("Foreign key error, details:", err.details);
+                        console.error("Error message:", err.message);
 
-                        // If it's a foreign key error, try to ensure the users exist again
-                        if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
-                            await verifyAndCreateAIAssistant();
+                        // Try to determine which user is missing
+                        const { data: senderCheck, error: senderCheckError } = await client
+                            .from("users")
+                            .select("id")
+                            .eq("id", senderId)
+                            .maybeSingle();
+
+                        if (senderCheckError || !senderCheck) {
+                            console.error(`Sender ${senderId} does not exist in users table`);
+                            // Try to recreate the sender
+                            if (senderId === AI_ASSISTANT_ID) {
+                                await verifyAndCreateAIAssistant();
+                            } else {
+                                await ensureUserExists(senderId);
+                            }
                         }
 
-                        await ensureUserExists(senderId);
-                        await ensureUserExists(receiverId);
+                        const { data: receiverCheck, error: receiverCheckError } = await client
+                            .from("users")
+                            .select("id")
+                            .eq("id", receiverId)
+                            .maybeSingle();
+
+                        if (receiverCheckError || !receiverCheck) {
+                            console.error(`Receiver ${receiverId} does not exist in users table`);
+                            // Try to recreate the receiver
+                            if (receiverId === AI_ASSISTANT_ID) {
+                                await verifyAndCreateAIAssistant();
+                            } else {
+                                await ensureUserExists(receiverId);
+                            }
+                        }
 
                         // Wait before retrying
                         if (retries > 0) {
-                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            await new Promise(resolve => setTimeout(resolve, 2000));
                         }
                     } else if (err.code === '409' || err.code === '23505') {  // Conflict or unique violation
                         console.error("Conflict error, retrying...");
