@@ -3,7 +3,7 @@ import { client } from "../../supabase.js";
 document.addEventListener("DOMContentLoaded", async () => {
     const AI_ASSISTANT_USERNAME = "AI_Assistant";
     const AI_ASSISTANT_BIO = "I'm your AI assistant! Feel free to ask me anything.";
-    const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.png";
+    const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.jpg";
     const GEMINI_API_KEY = "AIzaSyCVqoPntSjTMdrbkhaulp2jhE_i7vootUk";
     const AI_ASSISTANT_ID = "00000000-0000-0000-0000-000000000001";
     const AI_ASSISTANT_EMAIL = "ai-assistant@chatapp.com";
@@ -52,6 +52,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Add this function to explicitly verify and create the AI assistant in the users table
     async function verifyAndCreateAIAssistant() {
         try {
+            console.log("Verifying AI assistant in users table...");
+
             // Check if AI assistant exists in users table
             const { data: aiUser, error: checkError } = await client
                 .from("users")
@@ -67,13 +69,15 @@ document.addEventListener("DOMContentLoaded", async () => {
             // If AI assistant doesn't exist, create it
             if (!aiUser) {
                 console.log("AI assistant not found in users table, creating...");
+
+                // Use upsert to handle race conditions
                 const { error: insertError } = await client
                     .from("users")
-                    .insert([{
+                    .upsert([{
                         id: AI_ASSISTANT_ID,
                         name: AI_ASSISTANT_USERNAME,
                         email: AI_ASSISTANT_EMAIL
-                    }]);
+                    }], { onConflict: 'id' });
 
                 if (insertError) {
                     console.error("Error creating AI assistant in users table:", insertError);
@@ -261,9 +265,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Insert message function with proper user existence checks
     async function insertMessage(senderId, receiverId, content) {
         try {
+            console.log(`Inserting message from ${senderId} to ${receiverId}`);
+
             // Special handling for AI assistant
             if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
-                // Use a more robust approach to ensure AI assistant exists
+                // Make sure AI assistant exists
                 let aiVerified = false;
                 let attempts = 0;
                 const maxAttempts = 5;
@@ -312,24 +318,38 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return false;
             }
 
-            // Insert the message with retry logic for foreign key errors
-            try {
-                const { data, error } = await client
-                    .from("messages")
-                    .insert([{
-                        sender_id: senderId,
-                        receiver_id: receiverId,
-                        content
-                    }])
-                    .select()
-                    .single();
+            // Insert the message with retry logic
+            let retries = 3;
+            let success = false;
+            let lastError = null;
 
-                if (error) {
-                    // If it's a foreign key error, try to ensure the users exist again and retry
-                    if (error.code === '23503') {
-                        console.error("Foreign key error, retrying after ensuring users exist");
+            while (retries > 0 && !success) {
+                try {
+                    const { data, error } = await client
+                        .from("messages")
+                        .insert([{
+                            sender_id: senderId,
+                            receiver_id: receiverId,
+                            content
+                        }])
+                        .select()
+                        .single();
 
-                        // Special handling for AI assistant
+                    if (error) {
+                        throw error;
+                    }
+
+                    console.log("Message inserted successfully");
+                    success = true;
+                    return true;
+                } catch (err) {
+                    lastError = err;
+                    retries--;
+
+                    if (err.code === '23503') {
+                        console.error("Foreign key error, retrying...");
+
+                        // If it's a foreign key error, try to ensure the users exist again
                         if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
                             await verifyAndCreateAIAssistant();
                         }
@@ -337,36 +357,19 @@ document.addEventListener("DOMContentLoaded", async () => {
                         await ensureUserExists(senderId);
                         await ensureUserExists(receiverId);
 
-                        // Retry insertion
-                        const { data: retryData, error: retryError } = await client
-                            .from("messages")
-                            .insert([{
-                                sender_id: senderId,
-                                receiver_id: receiverId,
-                                content
-                            }])
-                            .select()
-                            .single();
-
-                        if (retryError) {
-                            console.error("Error inserting message on retry:", retryError);
-                            return false;
+                        // Wait before retrying
+                        if (retries > 0) {
+                            await new Promise(resolve => setTimeout(resolve, 1000));
                         }
-
-                        console.log("Message inserted successfully on retry");
-                        return true;
                     } else {
-                        console.error("Error inserting message:", error);
-                        return false;
+                        // For other errors, don't retry
+                        break;
                     }
                 }
-
-                console.log("Message inserted successfully");
-                return true;
-            } catch (err) {
-                console.error("Exception in insertMessage:", err);
-                return false;
             }
+
+            console.error("Error inserting message after retries:", lastError);
+            return false;
         } catch (err) {
             console.error("Error in insertMessage:", err);
             return false;
@@ -396,26 +399,161 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Function to check if a constraint exists
+    async function constraintExists(tableName, constraintName) {
+        try {
+            const { data, error } = await client.rpc('exec_sql', {
+                sql: `
+                    SELECT EXISTS (
+                        SELECT 1 
+                        FROM information_schema.table_constraints 
+                        WHERE table_name = '${tableName}' 
+                        AND constraint_name = '${constraintName}'
+                    ) as exists;
+                `
+            });
+
+            if (error) {
+                console.error("Error checking constraint existence:", error);
+                return false;
+            }
+
+            return data?.[0]?.exists || false;
+        } catch (err) {
+            console.error("Error in constraintExists:", err);
+            return false;
+        }
+    }
+
+    // Initialize database schema
+    async function initializeDatabaseSchema() {
+        try {
+            console.log("Initializing database schema...");
+
+            // Check if deleted_at column exists
+            try {
+                const { error: alterError } = await client.rpc('exec_sql', {
+                    sql: "ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;"
+                });
+
+                if (alterError) {
+                    console.error("Error adding deleted_at column:", alterError);
+                } else {
+                    console.log("Successfully added deleted_at column");
+                }
+            } catch (err) {
+                console.error("Exception when adding deleted_at column:", err);
+            }
+
+            // Check and add foreign key constraints
+            const senderConstraintExists = await constraintExists('messages', 'messages_sender_id_fkey');
+            if (!senderConstraintExists) {
+                console.log("Adding sender foreign key constraint...");
+                try {
+                    const { error: senderError } = await client.rpc('exec_sql', {
+                        sql: `ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
+                    });
+
+                    if (senderError) {
+                        console.error("Error adding sender foreign key constraint:", senderError);
+                    } else {
+                        console.log("Sender foreign key constraint added successfully");
+                    }
+                } catch (senderErr) {
+                    console.error("Exception when adding sender foreign key constraint:", senderErr);
+                }
+            } else {
+                console.log("Sender foreign key constraint already exists");
+            }
+
+            const receiverConstraintExists = await constraintExists('messages', 'messages_receiver_id_fkey');
+            if (!receiverConstraintExists) {
+                console.log("Adding receiver foreign key constraint...");
+                try {
+                    const { error: receiverError } = await client.rpc('exec_sql', {
+                        sql: `ALTER TABLE messages ADD CONSTRAINT messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE;`
+                    });
+
+                    if (receiverError) {
+                        console.error("Error adding receiver foreign key constraint:", receiverError);
+                    } else {
+                        console.log("Receiver foreign key constraint added successfully");
+                    }
+                } catch (receiverErr) {
+                    console.error("Exception when adding receiver foreign key constraint:", receiverErr);
+                }
+            } else {
+                console.log("Receiver foreign key constraint already exists");
+            }
+
+            return true;
+        } catch (err) {
+            console.error("Error initializing database schema:", err);
+            return false;
+        }
+    }
+
+    // Check and fix foreign key constraints
+    async function checkAndFixForeignKeys() {
+        try {
+            console.log("Checking foreign key constraints...");
+
+            // Check if AI assistant exists in users table
+            const { data: aiUser, error: aiError } = await client
+                .from("users")
+                .select("id")
+                .eq("id", AI_ASSISTANT_ID)
+                .maybeSingle();
+
+            if (aiError) {
+                console.error("Error checking AI assistant:", aiError);
+                return false;
+            }
+
+            if (!aiUser) {
+                console.log("AI assistant not found in users table, creating...");
+                const { error: insertError } = await client
+                    .from("users")
+                    .insert([{
+                        id: AI_ASSISTANT_ID,
+                        name: AI_ASSISTANT_USERNAME,
+                        email: AI_ASSISTANT_EMAIL
+                    }]);
+
+                if (insertError) {
+                    console.error("Error creating AI assistant:", insertError);
+                    return false;
+                }
+                console.log("AI assistant created in users table");
+            }
+
+            return true;
+        } catch (err) {
+            console.error("Error in checkAndFixForeignKeys:", err);
+            return false;
+        }
+    }
+
     // Initialize app with proper AI assistant setup
     try {
         // First, ensure AI assistant is initialized before anything else
         console.log("Starting application initialization...");
-        
+
         let aiInitialized = false;
         let initAttempts = 0;
         const maxInitAttempts = 5;
-        
+
         while (!aiInitialized && initAttempts < maxInitAttempts) {
             initAttempts++;
             aiInitialized = await initializeAIAssistant();
-            
+
             if (!aiInitialized) {
                 console.log(`AI assistant initialization failed (attempt ${initAttempts}/${maxInitAttempts}), retrying...`);
                 // Wait before retrying
                 await new Promise(resolve => setTimeout(resolve, 2000 * initAttempts));
             }
         }
-        
+
         if (!aiInitialized) {
             console.error("Critical error: Failed to initialize AI assistant after multiple attempts");
             showToast("Failed to initialize application. Please refresh the page.", "error");
@@ -2564,37 +2702,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Initialize database schema
-    async function initializeDatabaseSchema() {
-        try {
-            const { data, error } = await client
-                .from("messages")
-                .select("id")
-                .limit(1)
-                .is('deleted_at', null);
-
-            if (error && error.message.includes("column \"deleted_at\" does not exist")) {
-                console.log("deleted_at column does not exist, adding it...");
-
-                try {
-                    const { error: alterError } = await client.rpc('exec_sql', {
-                        sql: "ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;"
-                    });
-
-                    if (alterError) {
-                        console.error("Error adding deleted_at column:", alterError);
-                    } else {
-                        console.log("Successfully added deleted_at column");
-                    }
-                } catch (alterErr) {
-                    console.error("Exception when adding deleted_at column:", alterErr);
-                }
-            }
-        } catch (err) {
-            console.error("Error initializing database schema:", err);
-        }
-    }
-
+    // Check and fix database schema
     async function checkAndFixDatabaseSchema() {
         try {
             console.log("Checking database schema...");
@@ -2643,47 +2751,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             return true;
         } catch (err) {
             console.error("Error checking database schema:", err);
-            return false;
-        }
-    }
-
-    // Check and fix foreign key constraints
-    async function checkAndFixForeignKeys() {
-        try {
-            console.log("Checking foreign key constraints...");
-            
-            // Check if AI assistant exists in users table
-            const { data: aiUser, error: aiError } = await client
-                .from("users")
-                .select("id")
-                .eq("id", AI_ASSISTANT_ID)
-                .maybeSingle();
-                
-            if (aiError) {
-                console.error("Error checking AI assistant:", aiError);
-                return false;
-            }
-            
-            if (!aiUser) {
-                console.log("AI assistant not found in users table, creating...");
-                const { error: insertError } = await client
-                    .from("users")
-                    .insert([{
-                        id: AI_ASSISTANT_ID,
-                        name: AI_ASSISTANT_USERNAME,
-                        email: AI_ASSISTANT_EMAIL
-                    }]);
-
-                if (insertError) {
-                    console.error("Error creating AI assistant:", insertError);
-                    return false;
-                }
-                console.log("AI assistant created in users table");
-            }
-            
-            return true;
-        } catch (err) {
-            console.error("Error in checkAndFixForeignKeys:", err);
             return false;
         }
     }
@@ -3567,22 +3634,57 @@ document.addEventListener("DOMContentLoaded", async () => {
                     typingIndicator.textContent = "AI is typing...";
                 }
 
+                // Make sure AI assistant exists before calling API
+                const aiVerified = await verifyAndCreateAIAssistant();
+                if (!aiVerified) {
+                    console.error("Failed to verify AI assistant exists");
+                    showToast("Error: AI assistant not available", "error");
+                    if (typingIndicator) {
+                        typingIndicator.textContent = "Error";
+                    }
+                    return;
+                }
+
                 const aiResponse = await callGeminiAPI(userMessage);
 
-                const success = await insertMessage(AI_ASSISTANT_ID, currentUserId, aiResponse);
+                // Try to insert the AI response with retries
+                let insertSuccess = false;
+                let insertRetries = 3;
 
-                if (success) {
+                while (!insertSuccess && insertRetries > 0) {
+                    insertSuccess = await insertMessage(AI_ASSISTANT_ID, currentUserId, aiResponse);
+
+                    if (!insertSuccess) {
+                        console.log(`Failed to insert AI response, retrying... (${insertRetries} attempts left)`);
+                        insertRetries--;
+
+                        // Wait before retrying
+                        if (insertRetries > 0) {
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        }
+                    }
+                }
+
+                if (insertSuccess) {
                     if (typingIndicator) {
                         typingIndicator.textContent = "Online";
                     }
                 } else {
-                    console.error("Failed to insert AI response");
+                    console.error("Failed to insert AI response after multiple attempts");
                     showToast("Failed to send AI response", "error");
+                    if (typingIndicator) {
+                        typingIndicator.textContent = "Error";
+                    }
                 }
             }
         } catch (error) {
             console.error("Error handling AI response:", error);
             showToast("Error processing AI response", "error");
+
+            const typingIndicator = document.querySelector("#typing-indicator");
+            if (typingIndicator) {
+                typingIndicator.textContent = "Error";
+            }
         }
     }
 
