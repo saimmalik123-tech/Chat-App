@@ -8,7 +8,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Global variables
     let currentUserId = null;
     let friendRequests = [];
-    let statusChannelRef = null;
     let unseenCounts = {};
     let currentOpenChatId = null;
     let notificationData = {};
@@ -27,13 +26,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 lastError = error;
                 console.log(`Attempt ${attempt} failed:`, error.message);
 
-                if (attempt === maxRetries) {
-                    break;
-                }
+                if (attempt === maxRetries) break;
 
-                // Exponential backoff with jitter
                 const delay = initialDelay * Math.pow(2, attempt - 1) + Math.random() * 200;
-                console.log(`Retrying in ${delay}ms...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
@@ -44,67 +39,31 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Ensure user exists in private_users table
     async function ensureUserExists(userId) {
         return withRetry(async () => {
-            // Check if user exists
-            const { data: existingUser, error: checkError } = await client
+            const { data: existingUser } = await client
                 .from("private_users")
                 .select("id")
                 .eq("id", userId)
                 .maybeSingle();
 
-            if (checkError) {
-                console.error("Error checking user existence:", checkError);
-                throw checkError;
-            }
+            if (existingUser) return true;
 
-            if (existingUser) {
-                return true;
-            }
-
-            // User doesn't exist, try to create them
             console.log(`User ${userId} not found, attempting to create...`);
 
-            // Get user profile information for regular users
-            const { data: profile, error: profileError } = await client
+            const { data: profile } = await client
                 .from("user_profiles")
                 .select("user_name")
                 .eq("user_id", userId)
                 .maybeSingle();
 
-            if (profileError) {
-                console.error("Error fetching user profile:", profileError);
-                throw profileError;
-            }
+            if (!profile) throw new Error("User profile not found");
 
-            if (!profile) {
-                console.error("User profile not found for:", userId);
-                throw new Error("User profile not found");
-            }
-
-            // Create the user
-            const { error: insertError } = await client
+            await client
                 .from("private_users")
                 .insert([{
                     id: userId,
                     name: profile.user_name || "User",
                     email: `${userId}@placeholder.com`
                 }]);
-
-            if (insertError) {
-                console.error("Error creating user:", insertError);
-                throw insertError;
-            }
-
-            // Verify the user was actually created
-            const { data: verifyUser, error: verifyError } = await client
-                .from("private_users")
-                .select("id")
-                .eq("id", userId)
-                .maybeSingle();
-
-            if (verifyError || !verifyUser) {
-                console.error("User creation verification failed");
-                throw new Error("User creation verification failed");
-            }
 
             console.log(`User ${userId} created successfully`);
             return true;
@@ -116,41 +75,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             console.log(`Inserting message from ${senderId} to ${receiverId}`);
 
-            // Ensure both users exist in the private_users table
             await ensureUserExists(senderId);
             await ensureUserExists(receiverId);
 
-            // Double-check that both users exist before inserting
-            const { data: senderCheck, error: senderCheckError } = await client
-                .from("private_users")
-                .select("id")
-                .eq("id", senderId)
-                .maybeSingle();
-
-            if (senderCheckError || !senderCheck) {
-                console.error("Sender verification failed:", senderCheckError);
-                return false;
-            }
-
-            const { data: receiverCheck, error: receiverCheckError } = await client
-                .from("private_users")
-                .select("id")
-                .eq("id", receiverId)
-                .maybeSingle();
-
-            if (receiverCheckError || !receiverCheck) {
-                console.error("Receiver verification failed:", receiverCheckError);
-                return false;
-            }
-
-            // Insert the message with retry logic
             let retries = 3;
-            let success = false;
-            let lastError = null;
-
-            while (retries > 0 && !success) {
+            while (retries > 0) {
                 try {
-                    // Use a simpler insert approach without specifying columns
                     const { data, error } = await client
                         .from("messages")
                         .insert({
@@ -161,66 +91,20 @@ document.addEventListener("DOMContentLoaded", async () => {
                         .select()
                         .single();
 
-                    if (error) {
-                        throw error;
-                    }
-
+                    if (error) throw error;
                     console.log("Message inserted successfully");
-                    success = true;
                     return true;
                 } catch (err) {
-                    lastError = err;
                     retries--;
-
-                    if (err.code === '23503') {  // Foreign key violation
-                        console.error("Foreign key error, details:", err.details);
-                        console.error("Error message:", err.message);
-
-                        // Try to determine which user is missing
-                        const { data: senderCheck, error: senderCheckError } = await client
-                            .from("private_users")
-                            .select("id")
-                            .eq("id", senderId)
-                            .maybeSingle();
-
-                        if (senderCheckError || !senderCheck) {
-                            console.error(`Sender ${senderId} does not exist in private_users table`);
-                            // Try to recreate the sender
-                            await ensureUserExists(senderId);
-                        }
-
-                        const { data: receiverCheck, error: receiverCheckError } = await client
-                            .from("private_users")
-                            .select("id")
-                            .eq("id", receiverId)
-                            .maybeSingle();
-
-                        if (receiverCheckError || !receiverCheck) {
-                            console.error(`Receiver ${receiverId} does not exist in private_users table`);
-                            // Try to recreate the receiver
-                            await ensureUserExists(receiverId);
-                        }
-
-                        // Wait before retrying
-                        if (retries > 0) {
-                            await new Promise(resolve => setTimeout(resolve, 2000));
-                        }
-                    } else if (err.code === '409' || err.code === '23505') {  // Conflict or unique violation
-                        console.error("Conflict error, retrying...");
-
-                        // Wait before retrying
-                        if (retries > 0) {
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                        }
-                    } else {
-                        // For other errors, don't retry
-                        console.error("Non-retryable error:", err);
-                        break;
-                    }
+                    if (err.code === '23503') { // Foreign key violation
+                        await ensureUserExists(senderId);
+                        await ensureUserExists(receiverId);
+                        if (retries > 0) await new Promise(resolve => setTimeout(resolve, 2000));
+                    } else if (err.code === '409' || err.code === '23505') { // Conflict
+                        if (retries > 0) await new Promise(resolve => setTimeout(resolve, 1000));
+                    } else break;
                 }
             }
-
-            console.error("Error inserting message after retries:", lastError);
             return false;
         } catch (err) {
             console.error("Error in insertMessage:", err);
@@ -228,16 +112,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Enhanced sendMessage function with proper user existence checks
+    // Enhanced sendMessage function
     async function sendMessage(friendId, content) {
         if (!content || !content.trim()) return;
 
         try {
-            // Ensure both users exist in the private_users table
             await ensureUserExists(currentUserId);
             await ensureUserExists(friendId);
 
-            // Try to insert the message with multiple attempts
             let messageSent = false;
             let attempts = 0;
             const maxAttempts = 3;
@@ -245,10 +127,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             while (!messageSent && attempts < maxAttempts) {
                 attempts++;
                 messageSent = await insertMessage(currentUserId, friendId, content);
-
                 if (!messageSent) {
                     console.log(`Message send failed (attempt ${attempts}/${maxAttempts}), retrying...`);
-                    // Wait before retrying
                     await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
                 }
             }
@@ -264,92 +144,39 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Function to check if a constraint exists
-    async function constraintExists(tableName, constraintName) {
-        try {
-            const { data, error } = await client.rpc('exec_sql', {
-                sql: `
-                    SELECT EXISTS (
-                        SELECT 1 
-                        FROM information_schema.table_constraints 
-                        WHERE table_name = '${tableName}' 
-                        AND constraint_name = '${constraintName}'
-                    ) as exists;
-                `
-            });
-
-            if (error) {
-                console.error("Error checking constraint existence:", error);
-                return false;
-            }
-
-            return data?.[0]?.exists || false;
-        } catch (err) {
-            console.error("Error in constraintExists:", err);
-            return false;
-        }
-    }
-
     // Initialize database schema
     async function initializeDatabaseSchema() {
         try {
             console.log("Initializing database schema...");
 
-            // Check if deleted_at column exists
+            // Add deleted_at column if it doesn't exist
             try {
-                const { error: alterError } = await client.rpc('exec_sql', {
+                await client.rpc('exec_sql', {
                     sql: "ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;"
                 });
-
-                if (alterError) {
-                    console.error("Error adding deleted_at column:", alterError);
-                } else {
-                    console.log("Successfully added deleted_at column");
-                }
+                console.log("Successfully added deleted_at column");
             } catch (err) {
                 console.error("Exception when adding deleted_at column:", err);
             }
 
             // Check and add foreign key constraints
-            const senderConstraintExists = await constraintExists('messages', 'sender_id');
-            if (!senderConstraintExists) {
-                console.log("Adding sender foreign key constraint...");
+            const addConstraint = async (constraintName, sql) => {
                 try {
-                    const { error: senderError } = await client.rpc('exec_sql', {
-                        sql: `ALTER TABLE messages ADD CONSTRAINT sender_id FOREIGN KEY (sender_id) REFERENCES private_users(id) ON DELETE CASCADE;`
-                    });
-
-                    if (senderError) {
-                        console.error("Error adding sender foreign key constraint:", senderError);
+                    await client.rpc('exec_sql', { sql });
+                    console.log(`${constraintName} foreign key constraint added successfully`);
+                } catch (err) {
+                    if (err.code === '42710') {
+                        console.log(`${constraintName} foreign key constraint already exists`);
                     } else {
-                        console.log("Sender foreign key constraint added successfully");
+                        console.error(`Error adding ${constraintName} foreign key constraint:`, err);
                     }
-                } catch (senderErr) {
-                    console.error("Exception when adding sender foreign key constraint:", senderErr);
                 }
-            } else {
-                console.log("Sender foreign key constraint already exists");
-            }
+            };
 
-            const receiverConstraintExists = await constraintExists('messages', 'receiver_id');
-            if (!receiverConstraintExists) {
-                console.log("Adding receiver foreign key constraint...");
-                try {
-                    const { error: receiverError } = await client.rpc('exec_sql', {
-                        sql: `ALTER TABLE messages ADD CONSTRAINT receiver_id FOREIGN KEY (receiver_id) REFERENCES private_users(id) ON DELETE CASCADE;`
-                    });
-
-                    if (receiverError) {
-                        console.error("Error adding receiver foreign key constraint:", receiverError);
-                    } else {
-                        console.log("Receiver foreign key constraint added successfully");
-                    }
-                } catch (receiverErr) {
-                    console.error("Exception when adding receiver foreign key constraint:", receiverErr);
-                }
-            } else {
-                console.log("Receiver foreign key constraint already exists");
-            }
+            await addConstraint('sender_id',
+                `ALTER TABLE messages ADD CONSTRAINT sender_id FOREIGN KEY (sender_id) REFERENCES private_users(id) ON DELETE CASCADE;`);
+            await addConstraint('receiver_id',
+                `ALTER TABLE messages ADD CONSTRAINT receiver_id FOREIGN KEY (receiver_id) REFERENCES private_users(id) ON DELETE CASCADE;`);
 
             return true;
         } catch (err) {
@@ -364,16 +191,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const me = await getCurrentUser();
         if (me) {
-            // Ensure current user exists in private_users table
             await ensureCurrentUserInPrivateUsersTable();
-
-            await checkAndFixDatabaseSchema();
             await initializeDatabaseSchema();
             await fetchFriends();
             await fetchFriendRequests();
 
             const setupRealtimeSubscriptions = async () => {
                 try {
+                    // Global messages channel
                     const globalMessagesChannel = client.channel('global-messages');
 
                     globalMessagesChannel
@@ -393,16 +218,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 updateLastMessage(senderId, newMsg.content, newMsg.created_at);
 
                                 try {
-                                    let senderName, senderAvatar;
-
                                     const { data: senderProfile } = await client
                                         .from("user_profiles")
                                         .select("user_name, profile_image_url")
                                         .eq("user_id", senderId)
                                         .maybeSingle();
 
-                                    senderName = senderProfile?.user_name || "New Message";
-                                    senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
+                                    const senderName = senderProfile?.user_name || "New Message";
+                                    const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
 
                                     showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
 
@@ -445,7 +268,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                             if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
                                 const senderId = updatedMsg.sender_id;
-
                                 if (currentOpenChatId !== senderId) {
                                     updateUnseenCountForFriend(senderId);
                                 }
@@ -459,6 +281,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             }
                         });
 
+                    // Friend requests channel
                     const friendRequestsChannel = client.channel(`friend-requests-${currentUserId}`);
 
                     friendRequestsChannel
@@ -469,11 +292,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                             filter: `receiver_id=eq.${currentUserId}`
                         }, async (payload) => {
                             console.log("Friend request event received:", payload);
-                            const { eventType, new: newRecord, old: oldRecord } = payload;
+                            const { eventType, new: newRecord } = payload;
 
                             if (eventType === 'INSERT' && newRecord.status === "pending") {
-                                console.log("New friend request received:", newRecord);
-
                                 try {
                                     const { data: senderProfile } = await client
                                         .from("user_profiles")
@@ -505,8 +326,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                                 fetchFriendRequests();
                             } else if (eventType === 'UPDATE') {
-                                console.log("Friend request updated:", newRecord);
-
                                 if (newRecord.status === "accepted") {
                                     if (newRecord.sender_id === currentUserId) {
                                         showTopRightPopup("Your friend request was accepted!", "success");
@@ -521,10 +340,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                                         showTopRightPopup("You rejected a friend request", "info");
                                     }
                                 }
-
-                                fetchFriendRequests();
-                            } else if (eventType === 'DELETE') {
-                                console.log("Friend request deleted:", oldRecord);
                                 fetchFriendRequests();
                             }
                         })
@@ -537,6 +352,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             }
                         });
 
+                    // Friends updates channel
                     const friendsUpdatesChannel = client.channel('friends-updates');
 
                     friendsUpdatesChannel
@@ -546,24 +362,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                             table: 'friends'
                         }, (payload) => {
                             console.log("Friends update event received:", payload);
-
-                            const { eventType, new: newRecord, old: oldRecord } = payload;
+                            const { eventType, new: newRecord } = payload;
 
                             const isRelevant = newRecord && (
                                 newRecord.user1_id === currentUserId ||
                                 newRecord.user2_id === currentUserId
-                            ) || oldRecord && (
-                                oldRecord.user1_id === currentUserId ||
-                                oldRecord.user2_id === currentUserId
                             );
 
                             if (!isRelevant) return;
 
-                            if (eventType === 'INSERT') {
-                                console.log("New friend added:", newRecord);
-                                fetchFriends();
-                            } else if (eventType === 'DELETE') {
-                                console.log("Friend removed:", oldRecord);
+                            if (eventType === 'INSERT' || eventType === 'DELETE') {
                                 fetchFriends();
                             }
                         })
@@ -575,6 +383,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             }
                         });
 
+                    // User profiles updates channel
                     const userProfilesUpdatesChannel = client.channel('user-profiles-updates');
 
                     userProfilesUpdatesChannel
@@ -583,8 +392,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                             schema: 'public',
                             table: 'user_profiles'
                         }, (payload) => {
-                            console.log("User profile update event received:", payload);
-
                             const { new: newRecord } = payload;
 
                             if (allFriends.has(newRecord.user_id)) {
@@ -592,7 +399,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                                     ...allFriends.get(newRecord.user_id),
                                     ...newRecord
                                 });
-
                                 updateFriendUI(newRecord.user_id);
                             }
 
@@ -629,14 +435,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         showToast("Failed to initialize application. Please refresh the page.", "error");
     }
 
-    // Show modal with animation
+    // UI Helper Functions
     function showModal(modalId) {
         try {
             const modal = document.getElementById(modalId);
-            if (!modal) {
-                console.error(`Modal with ID ${modalId} not found`);
-                return;
-            }
+            if (!modal) return;
 
             modal.classList.remove('hidden');
             modal.offsetHeight;
@@ -646,33 +449,23 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Hide modal with animation
     function hideModal(modalId) {
         try {
             const modal = document.getElementById(modalId);
-            if (!modal) {
-                console.error(`Modal with ID ${modalId} not found`);
-                return;
-            }
+            if (!modal) return;
 
             modal.classList.remove('show');
-            setTimeout(() => {
-                modal.classList.add('hidden');
-            }, 300);
+            setTimeout(() => modal.classList.add('hidden'), 300);
         } catch (error) {
             console.error("Error hiding modal:", error);
         }
     }
 
-    // Show toast notification
     function showToast(message, type = "info") {
         try {
             const toast = document.getElementById("toast-notification");
             const messageEl = document.getElementById("toast-message");
-            if (!toast || !messageEl) {
-                console.error("Toast notification elements not found");
-                return;
-            }
+            if (!toast || !messageEl) return;
 
             messageEl.textContent = message;
             toast.classList.remove("hidden", "success", "error", "info", "warning");
@@ -695,15 +488,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Show loading overlay
     function showLoading(message = 'Loading...') {
         try {
             const overlay = document.getElementById("loading-overlay");
             const msgEl = document.getElementById("loading-message");
-            if (!overlay) {
-                console.error("Loading overlay not found");
-                return;
-            }
+            if (!overlay) return;
 
             if (msgEl) msgEl.textContent = message;
             overlay.classList.remove('hidden');
@@ -714,14 +503,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Hide loading overlay
     function hideLoading() {
         try {
             const overlay = document.getElementById("loading-overlay");
-            if (!overlay) {
-                console.error("Loading overlay not found");
-                return;
-            }
+            if (!overlay) return;
 
             overlay.classList.remove('show');
             setTimeout(() => overlay.classList.add("hidden"), 300);
@@ -733,7 +518,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Track active popups
     const activePopups = new Set();
 
-    // Top-right popup function
     function showTopRightPopup(message, type = "info", image = null) {
         try {
             const popupKey = `${message}-${type}-${image || ''}`;
@@ -827,7 +611,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Request notification permission
+    // Notification functions
     async function requestNotificationPermission() {
         if (!("Notification" in window)) {
             console.warn("Browser does not support notifications.");
@@ -854,7 +638,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Function to show notification with fallback to in-app notification
     async function showNotification(title, options = {}) {
         const hasPermission = await requestNotificationPermission();
 
@@ -874,25 +657,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Initialize notifications
     await requestNotificationPermission();
 
-    // Fetch current user avatar
+    // User profile functions
     async function fetchCurrentUserAvatar(profileImageSelector = '.profile-pic') {
         try {
             const profileImage = document.querySelector(profileImageSelector);
             if (!profileImage) return;
 
-            const { data: { user }, error } = await client.auth.getUser();
-            if (error || !user) return;
+            const { data: { user } } = await client.auth.getUser();
+            if (!user) return;
 
-            const { data: profile, error: profileError } = await client
+            const { data: profile } = await client
                 .from("user_profiles")
                 .select("profile_image_url")
                 .eq("user_id", user.id)
                 .maybeSingle();
-
-            if (profileError) {
-                console.error("Error fetching profile:", profileError);
-                return;
-            }
 
             let avatarUrl = DEFAULT_PROFILE_IMG;
             if (profile?.profile_image_url) {
@@ -903,40 +681,28 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.error("fetchCurrentUserAvatar error:", err);
         }
     }
+
     fetchCurrentUserAvatar();
 
-    // Ensure current user exists in private_users table
     async function ensureCurrentUserInPrivateUsersTable() {
         if (!currentUserId) return false;
 
         try {
-            // Check if user exists in private_users table
             const userExists = await userExistsInPrivateUsersTable(currentUserId);
 
             if (!userExists) {
                 console.log("Current user not found in private_users table, adding...");
 
-                // Get user data from auth
-                const { data: { user }, error: authError } = await client.auth.getUser();
+                const { data: { user } } = await client.auth.getUser();
+                if (!user) return false;
 
-                if (authError || !user) {
-                    console.error("Error getting user from auth:", authError);
-                    return false;
-                }
-
-                // Add user to private_users table with email
-                const { error: insertError } = await client
+                await client
                     .from("private_users")
                     .insert([{
                         id: currentUserId,
                         name: user.user_metadata?.full_name || user.email?.split('@')[0] || "User",
                         email: user.email || `${currentUserId}@placeholder.com`
                     }]);
-
-                if (insertError) {
-                    console.error("Error adding user to private_users table:", insertError);
-                    return false;
-                }
 
                 console.log("User added to private_users table successfully");
             }
@@ -948,7 +714,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Get current user
     async function getCurrentUser() {
         try {
             const { data: { user }, error } = await client.auth.getUser();
@@ -960,12 +725,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             currentUserId = user.id;
             console.log("Current user ID:", currentUserId);
 
-            // Ensure user exists in private_users table
             await ensureCurrentUserInPrivateUsersTable();
-
             await setUserOnlineStatus(true);
-
-            // Check if we need to show admin friend request popup
             await checkAndShowAdminRequestPopup();
 
             return user;
@@ -976,21 +737,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Check if user is already a friend
     async function isAlreadyFriend(userId) {
         if (!currentUserId || !userId) return false;
 
         try {
-            const { data, error } = await client
+            const { data } = await client
                 .from("friends")
                 .select("*")
                 .or(`and(user1_id.eq.${currentUserId},user2_id.eq.${userId}),and(user1_id.eq.${userId},user2_id.eq.${currentUserId})`)
                 .maybeSingle();
-
-            if (error) {
-                console.error("Error checking friendship status:", error);
-                return false;
-            }
 
             return !!data;
         } catch (err) {
@@ -999,13 +754,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Show admin friend request popup for new users
     async function checkAndShowAdminRequestPopup() {
         if (localStorage.getItem(ADMIN_REQUEST_KEY) === 'true') return;
 
         try {
-            const { data: { user }, error: userError } = await client.auth.getUser();
-            if (userError || !user) return;
+            const { data: { user } } = await client.auth.getUser();
+            if (!user) return;
 
             const createdAt = new Date(user.created_at);
             const now = new Date();
@@ -1016,13 +770,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            const { data: adminProfile, error: adminError } = await client
+            const { data: adminProfile } = await client
                 .from("user_profiles")
                 .select("user_id")
                 .eq("user_name", ADMIN_USERNAME)
                 .maybeSingle();
 
-            if (adminError || !adminProfile) {
+            if (!adminProfile) {
                 localStorage.setItem(ADMIN_REQUEST_KEY, 'true');
                 return;
             }
@@ -1049,13 +803,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Accept friend request
+    // Friend request functions
     async function acceptRequest(requestId, senderId) {
         try {
             const alreadyFriends = await isAlreadyFriend(senderId);
             if (alreadyFriends) {
                 showToast("You are already friends with this user.", "info");
-                showTopRightPopup("You are already friends with this user.", "info");
                 return;
             }
 
@@ -1065,7 +818,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .eq("id", requestId);
 
             if (updateError) {
-                console.error("Error updating request:", updateError.message || updateError);
+                console.error("Error updating request:", updateError);
                 return showToast("Failed to accept request.", "error");
             }
 
@@ -1074,7 +827,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .insert([{ user1_id: currentUserId, user2_id: senderId }]);
 
             if (insertError) {
-                console.error("Error inserting into friends:", insertError.message || insertError);
+                console.error("Error inserting into friends:", insertError);
                 return showToast("Failed to add friend.", "error");
             }
 
@@ -1092,7 +845,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Reject friend request
     async function rejectRequest(requestId) {
         try {
             const { error } = await client
@@ -1101,7 +853,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .eq("id", requestId);
 
             if (error) {
-                console.error("Error rejecting request:", error.message || error);
+                console.error("Error rejecting request:", error);
                 return showToast("Failed to reject request.", "error");
             }
 
@@ -1114,7 +866,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Set user online status
     async function setUserOnlineStatus(isOnline) {
         if (!currentUserId) return;
         try {
@@ -1124,12 +875,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.error("Error updating online status:", err);
         }
     }
+
     window.addEventListener('beforeunload', () => {
         setUserOnlineStatus(false);
         Object.values(deletionTimeouts).forEach(timeoutId => clearTimeout(timeoutId));
     });
 
-    // Render friend requests
     function renderFriendRequests() {
         try {
             const messageList = document.getElementById("friend-requests-list");
@@ -1185,7 +936,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Message notification click handler
     document.getElementById("message-notification")?.addEventListener("click", () => {
         try {
             const popup = document.getElementById("friend-requests-popup");
@@ -1201,7 +951,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // Close message popup when clicking outside
     document.addEventListener("click", (e) => {
         try {
             const messageIcon = document.getElementById("message-notification");
@@ -1214,7 +963,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // Fetch friend requests
     async function fetchFriendRequests() {
         if (!currentUserId) return;
 
@@ -1222,16 +970,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         showLoading("Fetching friend requests...");
 
         try {
-            const { data: requests, error } = await client
+            const { data: requests } = await client
                 .from("requests")
                 .select("id, sender_id, status")
                 .eq("receiver_id", currentUserId)
                 .eq("status", "pending");
-
-            if (error) {
-                console.error("Error fetching friend requests:", error);
-                throw error;
-            }
 
             console.log("Friend requests data:", requests);
             friendRequests = [];
@@ -1240,15 +983,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const senderIds = Array.from(new Set(requests.map(r => r.sender_id)));
                 console.log("Sender IDs:", senderIds);
 
-                const { data: profilesMap, error: profilesError } = await client
+                const { data: profilesMap } = await client
                     .from("user_profiles")
                     .select("user_id, user_name, profile_image_url")
                     .in("user_id", senderIds);
-
-                if (profilesError) {
-                    console.error("Error fetching sender profiles:", profilesError);
-                    throw profilesError;
-                }
 
                 const profileById = {};
                 (profilesMap || []).forEach(p => {
@@ -1282,7 +1020,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Update unseen badge
     function updateUnseenBadge(friendId, count) {
         try {
             const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
@@ -1307,21 +1044,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Update unseen count for friend
     async function updateUnseenCountForFriend(friendId) {
         try {
-            const { count, error } = await client
+            const { count } = await client
                 .from("messages")
                 .select("*", { count: "exact", head: true })
                 .eq("sender_id", friendId)
                 .eq("receiver_id", currentUserId)
                 .eq("seen", false)
                 .is('deleted_at', null);
-
-            if (error) {
-                console.error("Error updating unseen count:", error);
-                return;
-            }
 
             const unseenCount = count || 0;
             unseenCounts[friendId] = unseenCount;
@@ -1331,7 +1062,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Schedule message deletion
     function scheduleMessageDeletion(messageId, friendId, delay = 30000) {
         try {
             if (deletionTimeouts[messageId]) {
@@ -1362,12 +1092,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Delete seen messages for chat
     async function deleteSeenMessagesForChat(friendId) {
         if (!currentUserId) return;
 
         try {
-            const { data: seenMessages, error: fetchError } = await client
+            const { data: seenMessages } = await client
                 .from("messages")
                 .select("id")
                 .eq("receiver_id", currentUserId)
@@ -1375,14 +1104,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .eq("seen", true)
                 .is('deleted_at', null);
 
-            if (fetchError) {
-                console.error("Error fetching seen messages for deletion:", fetchError);
-                return;
-            }
-
-            if (!seenMessages || seenMessages.length === 0) {
-                return;
-            }
+            if (!seenMessages || seenMessages.length === 0) return;
 
             seenMessages.forEach(msg => {
                 if (deletionTimeouts[msg.id]) {
@@ -1408,7 +1130,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Update last message in chat list
     async function updateLastMessageInChatList(friendId) {
         try {
             const { data: lastMsgData } = await client
@@ -1436,7 +1157,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Fetch friends
     async function fetchFriends() {
         showLoading("Fetching friends...");
         if (!currentUserId) {
@@ -1445,12 +1165,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         try {
-            const { data: friends, error } = await client
+            const { data: friends } = await client
                 .from("friends")
                 .select("*")
                 .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
-
-            if (error) throw error;
 
             const chatList = document.querySelector(".chat-list");
             if (!chatList) return;
@@ -1492,7 +1210,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 let unseenCount = 0;
                 try {
-                    const { count, error: unseenError } = await client
+                    const { count } = await client
                         .from("messages")
                         .select("*", { count: "exact", head: true })
                         .eq("sender_id", friendId)
@@ -1500,7 +1218,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         .eq("seen", false)
                         .is('deleted_at', null);
 
-                    if (!unseenError) unseenCount = count || 0;
+                    unseenCount = count || 0;
                 } catch (err) {
                     console.warn("unseen count fetch failed:", err);
                 }
@@ -1557,7 +1275,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Enable friend search
     function enableFriendSearch() {
         try {
             const searchInput = document.getElementById("search-friends");
@@ -1601,7 +1318,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Linkify function to make URLs clickable
     function linkify(text) {
         try {
             const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -1614,7 +1330,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Render chat messages
     function renderChatMessages(chatBox, msgs, friendAvatar) {
         try {
             if (!chatBox) return;
@@ -1671,7 +1386,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Send friend request
     async function sendFriendRequest(username) {
         if (!username) return showToast("Enter a username.", "error");
 
@@ -1679,14 +1393,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         showLoading("Sending friend request...");
 
         try {
-            const { data: user, error: userError } = await client
+            const { data: user } = await client
                 .from("user_profiles")
                 .select("user_id")
                 .eq("user_name", username)
                 .maybeSingle();
 
-            if (userError || !user) {
-                console.error("User not found:", userError);
+            if (!user) {
                 hideLoading();
                 return showToast("User not found.", "error");
             }
@@ -1707,17 +1420,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            const { data: existing, error: existingError } = await client
+            const { data: existing } = await client
                 .from("requests")
                 .select("id, status")
                 .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${currentUserId})`)
                 .maybeSingle();
-
-            if (existingError) {
-                console.error("Error checking existing request:", existingError);
-                hideLoading();
-                return showToast("Something went wrong. Try again.", "error");
-            }
 
             if (existing) {
                 console.log("Existing request found:", existing);
@@ -1738,7 +1445,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             console.log("Creating new friend request...");
-            const { data: newRequest, error: requestError } = await client
+            const { data: newRequest } = await client
                 .from("requests")
                 .insert([{
                     sender_id: currentUserId,
@@ -1747,12 +1454,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }])
                 .select()
                 .single();
-
-            if (requestError) {
-                console.error("Error sending friend request:", requestError);
-                hideLoading();
-                return showToast("Failed to send friend request.", "error");
-            }
 
             console.log("Friend request created successfully:", newRequest);
             showToast("Friend request sent successfully!", "success");
@@ -1765,7 +1466,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Update message seen status
     function updateMessageSeenStatus(chatBox, messageId) {
         try {
             const chatMessage = chatBox.querySelector(`.message[data-message-id="${messageId}"] .seen-status`);
@@ -1777,23 +1477,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Mark messages as seen
     async function markMessagesAsSeen(friendId, chatBox, messages, friendAvatar) {
         if (!currentUserId || !friendId) return;
 
         try {
-            const { data: unseenMessages, error } = await client
+            const { data: unseenMessages } = await client
                 .from("messages")
                 .select("id")
                 .eq("sender_id", friendId)
                 .eq("receiver_id", currentUserId)
                 .eq("seen", false)
                 .is('deleted_at', null);
-
-            if (error) {
-                console.error("Error fetching unseen messages:", error);
-                return;
-            }
 
             if (unseenMessages && unseenMessages.length > 0) {
                 const { error: updateError } = await client
@@ -1820,7 +1514,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Update last message
     function updateLastMessage(friendId, content, createdAt) {
         try {
             const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
@@ -1844,7 +1537,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Submit friend request
     document.querySelector(".submit-friend")?.addEventListener("click", () => {
         try {
             const username = document.querySelector(".friend-input")?.value.trim();
@@ -2068,7 +1760,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Create loader
     function createLoader() {
         const loader = document.createElement('div');
         loader.className = 'btn-loader';
@@ -2082,21 +1773,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         return loader;
     }
 
-    // Profile pic click handler
     profilePic?.addEventListener("click", async () => {
         try {
             if (!profilePopup) return;
             showModal("profile-popup");
 
             try {
-                const { data: profile, error } = await client
+                const { data: profile } = await client
                     .from("user_profiles")
                     .select("profile_image_url, bio, user_name")
                     .eq("user_id", currentUserId)
                     .limit(1)
                     .maybeSingle();
-
-                if (error) throw error;
 
                 profilePreview.src = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
                 bioInput.value = profile?.bio || "";
@@ -2152,25 +1840,21 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const file = profileUpload?.files[0];
                 if (file) {
                     const fileName = `${currentUserId}_${Date.now()}_${file.name}`;
-                    const { data, error: uploadError } = await client.storage
+                    const { data } = await client.storage
                         .from('avatars')
                         .upload(fileName, file, {
                             cacheControl: '3600',
                             upsert: false
                         });
 
-                    if (uploadError) throw uploadError;
-
                     const { data: publicUrlData } = client.storage.from('avatars').getPublicUrl(data.path);
                     imageUrl = publicUrlData.publicUrl;
                 }
 
-                const { error } = await client
+                await client
                     .from("user_profiles")
                     .update({ profile_image_url: imageUrl, bio })
                     .eq("user_id", currentUserId);
-
-                if (error) throw error;
 
                 saveProfileBtn.innerHTML = `
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2280,12 +1964,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             saveUsernameBtn.appendChild(createLoader());
 
             try {
-                const { error } = await client
+                await client
                     .from("user_profiles")
                     .update({ user_name: newUsername })
                     .eq("user_id", currentUserId);
-
-                if (error) throw error;
 
                 saveUsernameBtn.innerHTML = `
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2329,7 +2011,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // Show confirm popup
     function showConfirmPopup(message, onConfirm, onCancel) {
         try {
             const popup = document.getElementById("notification-popup");
@@ -2397,7 +2078,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // User modal function
     function showUserModal(userId, userName, userAvatar) {
         try {
             const modal = document.getElementById("user-modal");
@@ -2444,16 +2124,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Get user profile data
     async function getUserProfile(userId) {
         try {
-            const { data, error } = await client
+            const { data } = await client
                 .from("user_profiles")
                 .select("user_name, profile_image_url, bio, is_online")
                 .eq("user_id", userId)
                 .maybeSingle();
 
-            if (error) throw error;
             return data;
         } catch (err) {
             console.error("Error fetching user profile:", err);
@@ -2461,72 +2139,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Check and fix database schema
-    async function checkAndFixDatabaseSchema() {
-        try {
-            console.log("Checking database schema...");
-
-            // Try to add the constraints directly and handle the "already exists" error
-            try {
-                console.log("Attempting to add sender foreign key constraint...");
-                const { error: senderError } = await client.rpc('exec_sql', {
-                    sql: `ALTER TABLE messages ADD CONSTRAINT sender_id FOREIGN KEY (sender_id) REFERENCES private_users(id) ON DELETE CASCADE;`
-                });
-
-                if (senderError) {
-                    // Check if the error is because the constraint already exists
-                    if (senderError.code === '42710') {
-                        console.log("Sender foreign key constraint already exists");
-                    } else {
-                        console.error("Error adding sender foreign key constraint:", senderError);
-                    }
-                } else {
-                    console.log("Sender foreign key constraint added successfully");
-                }
-            } catch (senderErr) {
-                console.error("Exception when adding sender foreign key constraint:", senderErr);
-            }
-
-            try {
-                console.log("Attempting to add receiver foreign key constraint...");
-                const { error: receiverError } = await client.rpc('exec_sql', {
-                    sql: `ALTER TABLE messages ADD CONSTRAINT receiver_id FOREIGN KEY (receiver_id) REFERENCES private_users(id) ON DELETE CASCADE;`
-                });
-
-                if (receiverError) {
-                    // Check if the error is because the constraint already exists
-                    if (receiverError.code === '42710') {
-                        console.log("Receiver foreign key constraint already exists");
-                    } else {
-                        console.error("Error adding receiver foreign key constraint:", receiverError);
-                    }
-                } else {
-                    console.log("Receiver foreign key constraint added successfully");
-                }
-            } catch (receiverErr) {
-                console.error("Exception when adding receiver foreign key constraint:", receiverErr);
-            }
-
-            return true;
-        } catch (err) {
-            console.error("Error checking database schema:", err);
-            return false;
-        }
-    }
-
-    // Get user profile for chat
     async function getUserProfileForChat(userId) {
         try {
-            const { data, error } = await client
+            const { data } = await client
                 .from("user_profiles")
                 .select("user_name, profile_image_url")
                 .eq("user_id", userId)
                 .maybeSingle();
-
-            if (error) {
-                console.error("Error fetching user profile:", error);
-                return null;
-            }
 
             return data;
         } catch (err) {
@@ -2535,7 +2154,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Open specific chat
     async function openSpecificChat(userId, profile = null) {
         try {
             if (!currentUserId) {
@@ -2565,7 +2183,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Generate chat link
     function generateChatLink(friendId) {
         try {
             const baseUrl = window.location.origin + window.location.pathname;
@@ -2576,7 +2193,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Open chat from URL
     function openChatFromUrl() {
         try {
             const urlParams = new URLSearchParams(window.location.search);
@@ -2587,8 +2203,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     .select("user_name, profile_image_url")
                     .eq("user_id", friendId)
                     .maybeSingle()
-                    .then(({ data, error }) => {
-                        if (!error && data) {
+                    .then(({ data }) => {
+                        if (data) {
                             openSpecificChat(friendId, data);
                         }
                     });
@@ -2598,18 +2214,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Global function to open chat with user
     window.openChatWithUser = async function (userId) {
         try {
             if (!currentUserId) return;
 
-            const { data: profile, error } = await client
+            const { data: profile } = await client
                 .from("user_profiles")
                 .select("user_name, profile_image_url")
                 .eq("user_id", userId)
                 .maybeSingle();
-
-            if (error) throw error;
 
             if (profile) {
                 openSpecificChat(userId, profile);
@@ -2622,15 +2235,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     };
 
-    // Fetch recent chats
     async function fetchRecentChats() {
         try {
-            const { data: friends, error: friendsError } = await client
+            const { data: friends } = await client
                 .from("friends")
                 .select("*")
                 .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
-
-            if (friendsError) throw friendsError;
 
             if (!friends || friends.length === 0) {
                 renderRecentChats([]);
@@ -2641,12 +2251,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 f.user1_id === currentUserId ? f.user2_id : f.user1_id
             ))];
 
-            const { data: profiles, error: profilesError } = await client
+            const { data: profiles } = await client
                 .from("user_profiles")
                 .select("user_id, user_name, profile_image_url, is_online")
                 .in("user_id", friendIds);
-
-            if (profilesError) throw profilesError;
 
             const recentChatsPromises = friendIds.map(async (friendId) => {
                 let profile, user_name, avatar_url, is_online;
@@ -2690,7 +2298,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Render recent chats
     function renderRecentChats(chats) {
         try {
             const recentChatsContainer = document.getElementById('recent-chats');
@@ -2737,7 +2344,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Add friend button
     document.querySelector(".addFriends")?.addEventListener("click", () => {
         try {
             showModal("friendModal");
@@ -2746,7 +2352,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // Close friend modal
     document.querySelector("#friendModal .close")?.addEventListener("click", () => {
         try {
             hideModal("friendModal");
@@ -2755,7 +2360,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // Close friend requests popup
     document.querySelector("#friend-requests-popup .popup-close")?.addEventListener("click", () => {
         try {
             document.getElementById("friend-requests-popup").classList.remove("show");
@@ -2764,7 +2368,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // Open chat function
     async function openChat(friendId, friendName, friendAvatar, fromNotification = false) {
         try {
             currentOpenChatId = friendId;
@@ -2876,9 +2479,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             filter: `sender_id=eq.${currentUserId}`
                         }, (payload) => {
                             const newMsg = payload.new;
-                            if (processingMessageIds.has(newMsg.id)) {
-                                return;
-                            }
+                            if (processingMessageIds.has(newMsg.id)) return;
                             processingMessageIds.add(newMsg.id);
 
                             oldMessages.push(newMsg);
@@ -2896,9 +2497,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             filter: `sender_id=eq.${friendId}`
                         }, async (payload) => {
                             const newMsg = payload.new;
-                            if (processingMessageIds.has(newMsg.id)) {
-                                return;
-                            }
+                            if (processingMessageIds.has(newMsg.id)) return;
                             processingMessageIds.add(newMsg.id);
 
                             oldMessages.push(newMsg);
@@ -3138,22 +2737,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Fetch messages between current user and friend
     async function fetchMessages(friendId) {
         if (!currentUserId || !friendId) return [];
 
         try {
-            const { data, error } = await client
+            const { data } = await client
                 .from("messages")
                 .select("*")
                 .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
                 .is('deleted_at', null)
                 .order("created_at", { ascending: true });
-
-            if (error) {
-                console.error("Error fetching messages:", error);
-                return [];
-            }
 
             return data || [];
         } catch (err) {
@@ -3162,7 +2755,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Update friend UI in real-time
     function updateFriendUI(friendId) {
         try {
             let friendData = allFriends.get(friendId);
@@ -3215,7 +2807,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Handle notification redirect
     function handleNotificationRedirect() {
         try {
             if (!currentOpenChatId && notificationData.type === 'message' && notificationData.senderId) {
@@ -3224,8 +2815,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     .select("user_name, profile_image_url")
                     .eq("user_id", notificationData.senderId)
                     .maybeSingle()
-                    .then(({ data, error }) => {
-                        if (!error && data) {
+                    .then(({ data }) => {
+                        if (data) {
                             openChat(notificationData.senderId, data.user_name, data.profile_image_url, true);
                         }
                     });
@@ -3237,19 +2828,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Check if user exists in private_users table
     async function userExistsInPrivateUsersTable(userId) {
         try {
-            const { data, error } = await client
+            const { data } = await client
                 .from("private_users")
                 .select("id")
                 .eq("id", userId)
                 .maybeSingle();
-
-            if (error) {
-                console.error("Error checking if user exists in private_users table:", error);
-                return false;
-            }
 
             return !!data;
         } catch (err) {
