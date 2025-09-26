@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let deletionTimeouts = {};
     let processingMessageIds = new Set();
     let allFriends = new Map();
+    let onlineStatusInterval = null;
 
     // Helper function for retrying database operations
     async function withRetry(fn, maxRetries = 3, initialDelay = 500) {
@@ -226,7 +227,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Fixed: setUserOnlineStatus with timestamp
+    // Fixed: setUserOnlineStatus with timestamp and better error handling
     async function setUserOnlineStatus(isOnline) {
         if (!currentUserId) return;
         try {
@@ -239,15 +240,44 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }, {
                     onConflict: 'user_id'
                 });
+
+            // Update local UI to reflect the status change immediately
+            updateCurrentUserStatusUI(isOnline);
         } catch (err) {
             console.error("Error updating online status:", err);
         }
     }
 
-    // Fixed: Periodic online status check
+    // Fixed: Function to update current user's status UI
+    function updateCurrentUserStatusUI(isOnline) {
+        try {
+            // Update status in header if element exists
+            const headerStatusElement = document.querySelector('.header-user-status');
+            if (headerStatusElement) {
+                headerStatusElement.textContent = isOnline ? "Online" : "Offline";
+                headerStatusElement.className = isOnline ? "header-user-status online" : "header-user-status offline";
+            }
+
+            // Update status in popup if element exists
+            const popupStatusElement = document.querySelector('.popup-user-status');
+            if (popupStatusElement) {
+                popupStatusElement.textContent = isOnline ? "Online" : "Offline";
+                popupStatusElement.className = isOnline ? "popup-user-status online" : "popup-user-status offline";
+            }
+        } catch (error) {
+            console.error("Error updating current user status UI:", error);
+        }
+    }
+
+    // Fixed: Periodic online status check with cleanup
     function setupOnlineStatusCheck() {
+        // Clear any existing interval
+        if (onlineStatusInterval) {
+            clearInterval(onlineStatusInterval);
+        }
+
         // Check every 30 seconds
-        setInterval(async () => {
+        onlineStatusInterval = setInterval(async () => {
             if (currentUserId) {
                 try {
                     await setUserOnlineStatus(true);
@@ -291,6 +321,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                             if (currentOpenChatId !== senderId) {
                                 updateUnseenCountForFriend(senderId);
+                                // Fixed: Only update last message for the specific friend
                                 updateLastMessage(senderId, newMsg.content, newMsg.created_at);
 
                                 try {
@@ -333,6 +364,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             if (!updatedMsg || !currentUserId) return;
 
                             if (updatedMsg.deleted_at) {
+                                // Fixed: Only update last message for the specific friends involved
                                 updateLastMessageInChatList(updatedMsg.sender_id);
                                 updateLastMessageInChatList(updatedMsg.receiver_id);
 
@@ -482,7 +514,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 updateFriendUI(newRecord.user_id);
                             }
 
+                            // Fixed: Update current user's status UI if it's the current user
                             if (newRecord.user_id === currentUserId) {
+                                updateCurrentUserStatusUI(newRecord.is_online);
                                 fetchCurrentUserAvatar();
                             }
                         })
@@ -961,9 +995,24 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Fixed: Properly handle page unload to set offline status
     window.addEventListener('beforeunload', () => {
         setUserOnlineStatus(false);
         Object.values(deletionTimeouts).forEach(timeoutId => clearTimeout(timeoutId));
+
+        // Clear the online status interval
+        if (onlineStatusInterval) {
+            clearInterval(onlineStatusInterval);
+        }
+    });
+
+    // Fixed: Handle page visibility changes
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            setUserOnlineStatus(true);
+        } else {
+            setUserOnlineStatus(false);
+        }
     });
 
     function renderFriendRequests() {
