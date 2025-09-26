@@ -305,7 +305,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                                     const senderName = senderProfile?.user_name || "Someone";
                                     const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
 
-                                    showTopRightPopup(`${senderName} sent you a friend request`, "info", senderAvatar);
+                                    // Modified to show friend requests popup on click
+                                    showTopRightPopup(`${senderName} sent you a friend request`, "info", senderAvatar, () => {
+                                        document.getElementById("friend-requests-popup").classList.add("show");
+                                    });
 
                                     if (Notification.permission === "granted") {
                                         const notif = new Notification("Friend Request 👥", {
@@ -314,9 +317,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                                             data: { type: 'friend_request', senderId: newRecord.sender_id }
                                         });
 
+                                        // Modified to show friend requests popup on click
                                         notif.addEventListener('click', () => {
                                             window.focus();
-                                            openSpecificChat(newRecord.sender_id);
+                                            document.getElementById("friend-requests-popup").classList.add("show");
                                             notif.close();
                                         });
                                     }
@@ -475,7 +479,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (closeBtn) {
                 closeBtn.addEventListener('click', () => {
                     toast.classList.remove("show");
-                    setTimeout(() => toast.classList.add("hidden"), 300);
+                    setTimeout(() => toast.classList.add('hidden'), 300);
                 });
             }
 
@@ -518,7 +522,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Track active popups
     const activePopups = new Set();
 
-    function showTopRightPopup(message, type = "info", image = null) {
+    // Modified showTopRightPopup to accept onClick callback
+    function showTopRightPopup(message, type = "info", image = null, onClick = null) {
         try {
             const popupKey = `${message}-${type}-${image || ''}`;
             if (activePopups.has(popupKey)) return;
@@ -585,6 +590,20 @@ document.addEventListener("DOMContentLoaded", async () => {
                     }
                 `;
                 document.head.appendChild(style);
+            }
+
+            // Add click handler to popup content
+            const popupContent = popup.querySelector(".popup-content");
+            if (onClick) {
+                popupContent.style.cursor = "pointer";
+                popupContent.addEventListener("click", () => {
+                    onClick();
+                    popup.style.animation = "slideOut 0.3s ease-out forwards";
+                    setTimeout(() => {
+                        popup.remove();
+                        activePopups.delete(popupKey);
+                    }, 300);
+                });
             }
 
             popup.querySelector(".popup-close").addEventListener("click", () => {
@@ -1174,6 +1193,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!chatList) return;
             chatList.innerHTML = "";
 
+            // Get unique friend IDs to prevent duplicates
             const friendIds = [...new Set(friends.map(f =>
                 f.user1_id === currentUserId ? f.user2_id : f.user1_id
             ))];
@@ -1228,8 +1248,59 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const friendData = await Promise.all(friendDataPromises);
 
+            // Check for existing elements to prevent duplicates
             friendData.forEach(data => {
                 const { friendId, friendName, avatarUrl, isOnline, lastMessageText, lastMessageTime, unseenCount } = data;
+
+                // Check if this friend is already in the DOM
+                const existingChat = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
+                if (existingChat) {
+                    // Update existing element instead of creating a new one
+                    const existingName = existingChat.querySelector("h4");
+                    const existingAvatar = existingChat.querySelector("img");
+                    const existingLastMessage = existingChat.querySelector(".last-message");
+                    const existingTime = existingChat.querySelector(".time");
+                    const existingBadge = existingChat.querySelector(".non-seen-msg");
+                    const existingOnlineDot = existingChat.querySelector(".online-dot");
+
+                    if (existingName) existingName.textContent = friendName;
+                    if (existingAvatar) existingAvatar.src = avatarUrl;
+                    if (existingLastMessage) existingLastMessage.textContent = lastMessageText;
+                    if (existingTime) existingTime.textContent = lastMessageTime;
+
+                    // Update online status
+                    if (isOnline) {
+                        if (!existingOnlineDot) {
+                            const avatarWrapper = existingChat.querySelector(".avatar-wrapper");
+                            if (avatarWrapper) {
+                                const onlineDot = document.createElement("span");
+                                onlineDot.className = "online-dot";
+                                avatarWrapper.appendChild(onlineDot);
+                            }
+                        }
+                    } else {
+                        if (existingOnlineDot) {
+                            existingOnlineDot.remove();
+                        }
+                    }
+
+                    // Update unseen count badge
+                    if (unseenCount > 0) {
+                        if (!existingBadge) {
+                            const badge = document.createElement("p");
+                            badge.className = "non-seen-msg";
+                            badge.textContent = unseenCount;
+                            existingChat.appendChild(badge);
+                        } else {
+                            existingBadge.textContent = unseenCount;
+                            existingBadge.style.display = "flex";
+                        }
+                    } else if (existingBadge) {
+                        existingBadge.style.display = "none";
+                    }
+
+                    return; // Skip creating a new element
+                }
 
                 const defaultImg = './assets/icon/download.jpeg';
 
@@ -1514,8 +1585,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Fixed updateLastMessage to only update the specific friend
     function updateLastMessage(friendId, content, createdAt) {
         try {
+            if (!friendId) return;
+
             const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
             if (!chatLi) return;
 
@@ -1528,6 +1602,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 timeEl.textContent = timeStr;
             }
 
+            // Move chat to top of list
             const chatList = chatLi.parentElement;
             if (chatList && chatList.firstChild !== chatLi) {
                 chatList.prepend(chatLi);
