@@ -494,12 +494,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             // Check and add foreign key constraints
-            const senderConstraintExists = await constraintExists('messages', 'messages_sender_id_fkey');
+            const senderConstraintExists = await constraintExists('messages', 'sender_id');
             if (!senderConstraintExists) {
                 console.log("Adding sender foreign key constraint...");
                 try {
                     const { error: senderError } = await client.rpc('exec_sql', {
-                        sql: `ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
+                        sql: `ALTER TABLE messages ADD CONSTRAINT sender_id FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
                     });
 
                     if (senderError) {
@@ -2759,7 +2759,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             try {
                 console.log("Attempting to add sender foreign key constraint...");
                 const { error: senderError } = await client.rpc('exec_sql', {
-                    sql: `ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
+                    sql: `ALTER TABLE messages ADD CONSTRAINT sender_id FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
                 });
 
                 if (senderError) {
