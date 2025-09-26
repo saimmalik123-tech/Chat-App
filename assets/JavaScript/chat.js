@@ -325,13 +325,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             while (retries > 0 && !success) {
                 try {
+                    // Use a simpler insert approach without specifying columns
                     const { data, error } = await client
                         .from("messages")
-                        .insert([{
+                        .insert({
                             sender_id: senderId,
                             receiver_id: receiverId,
-                            content
-                        }])
+                            content: content
+                        })
                         .select()
                         .single();
 
@@ -346,7 +347,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     lastError = err;
                     retries--;
 
-                    if (err.code === '23503') {
+                    if (err.code === '23503') {  // Foreign key violation
                         console.error("Foreign key error, retrying...");
 
                         // If it's a foreign key error, try to ensure the users exist again
@@ -361,8 +362,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (retries > 0) {
                             await new Promise(resolve => setTimeout(resolve, 1000));
                         }
+                    } else if (err.code === '409' || err.code === '23505') {  // Conflict or unique violation
+                        console.error("Conflict error, retrying...");
+
+                        // Wait before retrying
+                        if (retries > 0) {
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        }
                     } else {
                         // For other errors, don't retry
+                        console.error("Non-retryable error:", err);
                         break;
                     }
                 }
@@ -385,10 +394,23 @@ document.addEventListener("DOMContentLoaded", async () => {
             await ensureUserExists(currentUserId);
             await ensureUserExists(friendId);
 
-            // Insert the message
-            const success = await insertMessage(currentUserId, friendId, content);
+            // Try to insert the message with multiple attempts
+            let messageSent = false;
+            let attempts = 0;
+            const maxAttempts = 3;
 
-            if (success) {
+            while (!messageSent && attempts < maxAttempts) {
+                attempts++;
+                messageSent = await insertMessage(currentUserId, friendId, content);
+
+                if (!messageSent) {
+                    console.log(`Message send failed (attempt ${attempts}/${maxAttempts}), retrying...`);
+                    // Wait before retrying
+                    await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+                }
+            }
+
+            if (messageSent) {
                 updateLastMessage(friendId, content, new Date().toISOString());
             } else {
                 showToast("Message failed to send. Please try again.", "error");
