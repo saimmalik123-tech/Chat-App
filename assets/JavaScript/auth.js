@@ -260,7 +260,6 @@ async function setupProfile() {
 }
 
 setUpBtn?.addEventListener("click", async e => {
-    alert('he;lo')
     e.preventDefault();
     setUpBtn.innerHTML = '<div class="loader"></div>';
     await setupProfile();
