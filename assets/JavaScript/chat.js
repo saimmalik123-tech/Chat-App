@@ -16,77 +16,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     let allFriends = new Map();
     let onlineStatusInterval = null;
 
-    // Initialize database schema
-    async function initializeDatabaseSchema() {
-        try {
-            console.log("Initializing database schema...");
-            
-            // Create tables if they don't exist
-            const { error: tablesError } = await client.rpc('exec_sql', {
-                sql: `
-                    -- Create user_profiles table if it doesn't exist
-                    CREATE TABLE IF NOT EXISTS public.user_profiles (
-                        user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL PRIMARY KEY,
-                        user_name TEXT,
-                        full_name TEXT,
-                        bio TEXT,
-                        profile_image_url TEXT,
-                        is_online BOOLEAN DEFAULT false,
-                        last_seen TIMESTAMP WITH TIME ZONE,
-                        created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-                    );
-                    
-                    -- Enable RLS
-                    ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
-                    
-                    -- Drop existing policies if they exist
-                    DROP POLICY IF EXISTS "Users can view own profile" ON public.user_profiles;
-                    DROP POLICY IF EXISTS "Users can insert own profile" ON public.user_profiles;
-                    DROP POLICY IF EXISTS "Users can update own profile" ON public.user_profiles;
-                    
-                    -- Create policies
-                    CREATE POLICY "Users can view own profile" ON public.user_profiles
-                        FOR SELECT USING (auth.uid() = user_id);
-                        
-                    CREATE POLICY "Users can insert own profile" ON public.user_profiles
-                        FOR INSERT WITH CHECK (auth.uid() = user_id);
-                        
-                    CREATE POLICY "Users can update own profile" ON public.user_profiles
-                        FOR UPDATE USING (auth.uid() = user_id);
-                `
-            });
-            
-            if (tablesError) {
-                console.error("Error creating tables:", tablesError);
-                return false;
-            }
-            
-            // Create a function to execute SQL if it doesn't exist
-            try {
-                await client.rpc('exec_sql', {
-                    sql: `
-                        CREATE OR REPLACE FUNCTION public.handle_updated_at()
-                        RETURNS TRIGGER AS $$
-                        BEGIN
-                            NEW.updated_at = now();
-                            RETURN NEW;
-                        END;
-                        $$ LANGUAGE plpgsql;
-                    `
-                });
-            } catch (err) {
-                console.log("Function already exists or error creating it:", err);
-            }
-            
-            console.log("Database schema initialized successfully");
-            return true;
-        } catch (err) {
-            console.error("Error initializing database schema:", err);
-            return false;
-        }
-    }
-
     // Helper function for retrying database operations
     async function withRetry(fn, maxRetries = 3, initialDelay = 500) {
         let lastError;
@@ -116,14 +45,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .select("user_id")
                 .eq("user_id", userId)
                 .maybeSingle();
-                
+
             if (existingProfile) return true;
-            
+
             console.log(`User profile ${userId} not found, creating...`);
-            
+
             const { data: { user } } = await client.auth.getUser();
             if (!user) return false;
-            
+
             const { error } = await client
                 .from("user_profiles")
                 .insert([{
@@ -135,12 +64,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                     is_online: true,
                     last_seen: new Date().toISOString()
                 }]);
-                
+
             if (error) {
                 console.error("Error creating user profile:", error);
                 return false;
             }
-            
+
             console.log(`User profile ${userId} created successfully`);
             return true;
         } catch (err) {
@@ -2826,10 +2755,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function initializeApp() {
         try {
             console.log("Starting application initialization...");
-            
-            // Initialize database schema
-            await initializeDatabaseSchema();
-            
+
             // Get current user
             const { data: { user }, error: userError } = await client.auth.getUser();
             if (userError || !user) {
@@ -2837,44 +2763,44 @@ document.addEventListener("DOMContentLoaded", async () => {
                 window.location.href = 'signup.html';
                 return;
             }
-            
+
             currentUserId = user.id;
             console.log("Current user ID:", currentUserId);
-            
+
             // Ensure user exists in all necessary tables
             await ensureUserProfileExists(currentUserId);
             await ensureCurrentUserInPrivateUsersTable();
-            
+
             // Set user online status
             await setUserOnlineStatus(true);
-            
+
             // Set up periodic online status check
             setupOnlineStatusCheck();
-            
+
             // Fetch initial data
             await fetchFriends();
             await fetchFriendRequests();
-            
+
             // Set up real-time subscriptions
             await setupRealtimeSubscriptions();
-            
+
             // Fetch recent chats
             await fetchRecentChats();
-            
+
             // Check for admin request
             await checkAndShowAdminRequestPopup();
-            
+
             // Handle notification redirects
             if (Object.keys(notificationData).length > 0) {
                 handleNotificationRedirect();
             }
-            
+
             // Open chat from URL if present
             openChatFromUrl();
-            
+
             // Request notification permissions
             await requestNotificationPermission();
-            
+
             console.log("App initialized successfully");
         } catch (error) {
             console.error("Error initializing app:", error);
