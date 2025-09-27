@@ -205,12 +205,14 @@ async function setupProfile() {
     const user_name = document.getElementById("username").value.trim();
     const bio = document.getElementById("bio").value.trim();
 
+    // get logged in user
     const { data: { user }, error: userError } = await client.auth.getUser();
     if (userError || !user) {
         showPopup("User not logged in.");
         return;
     }
 
+    // upsert into private_users (optional, you had this in your code)
     const { error: upsertError } = await client
         .from("private_users")
         .upsert([{
@@ -224,6 +226,7 @@ async function setupProfile() {
         return;
     }
 
+    // handle avatar upload
     let avatar_url = null;
     if (avatarFile) {
         const fileName = `public/${user.id}-${Date.now()}-${avatarFile.name}`;
@@ -256,8 +259,9 @@ async function setupProfile() {
     }
 
     showPopup("Profile saved successfully!");
-    window.location.href = "dashboard.html";
+    window.location.href = "dashboard";
 }
+
 
 setUpBtn?.addEventListener("click", async e => {
     e.preventDefault();

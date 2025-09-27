@@ -34,7 +34,7 @@ async function handleGoogleAuth() {
 
         if (error || !user) {
             showPopup("No active session. Redirecting to login...");
-            setTimeout(() => (window.location.href = "login.html"), 1500);
+            setTimeout(() => (window.location.href = "login"), 1500);
             return;
         }
 
@@ -52,9 +52,9 @@ async function handleGoogleAuth() {
 
         // 3. Redirect based on profile existence
         if (profile) {
-            window.location.href = "dashboard.html";
+            window.location.href = "dashboard";
         } else {
-            window.location.href = "setupProfile.html";
+            window.location.href = "setupProfile";
         }
     } catch (err) {
         showPopup("Unexpected error: " + err.message);
