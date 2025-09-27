@@ -18,7 +18,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         onlineStatusInterval: null,
         activeChannels: new Set(),
         messageQueue: [],
-        isProcessingQueue: false
+        isProcessingQueue: false,
+        databaseSetupComplete: false
     };
 
     // Helper function for retrying database operations
@@ -42,8 +43,75 @@ document.addEventListener("DOMContentLoaded", async () => {
         throw lastError;
     }
 
+    // Check if database tables exist
+    async function checkDatabaseSetup() {
+        try {
+            // Check if user_profiles table exists
+            const { error: profileError } = await client
+                .from('user_profiles')
+                .select('user_id')
+                .limit(1);
+
+            if (profileError && profileError.code === '42P01') {
+                throw new Error("Database tables not found. Please run the setup script.");
+            }
+
+            // Check if private_users table exists
+            const { error: privateError } = await client
+                .from('private_users')
+                .select('id')
+                .limit(1);
+
+            if (privateError && privateError.code === '42P01') {
+                throw new Error("Database tables not found. Please run the setup script.");
+            }
+
+            // Check if friends table exists
+            const { error: friendsError } = await client
+                .from('friends')
+                .select('id')
+                .limit(1);
+
+            if (friendsError && friendsError.code === '42P01') {
+                throw new Error("Database tables not found. Please run the setup script.");
+            }
+
+            // Check if messages table exists
+            const { error: messagesError } = await client
+                .from('messages')
+                .select('id')
+                .limit(1);
+
+            if (messagesError && messagesError.code === '42P01') {
+                throw new Error("Database tables not found. Please run the setup script.");
+            }
+
+            // Check if requests table exists
+            const { error: requestsError } = await client
+                .from('requests')
+                .select('id')
+                .limit(1);
+
+            if (requestsError && requestsError.code === '42P01') {
+                throw new Error("Database tables not found. Please run the setup script.");
+            }
+
+            state.databaseSetupComplete = true;
+            return true;
+        } catch (error) {
+            console.error("Database setup check failed:", error);
+            showToast(error.message || "Database configuration error", "error");
+            return false;
+        }
+    }
+
     // Ensure user profile exists
     async function ensureUserProfileExists(userId) {
+        if (!state.databaseSetupComplete) {
+            console.error("Database setup not complete");
+            return false;
+        }
+
         try {
             const { data: existingProfile } = await client
                 .from("user_profiles")
@@ -72,6 +140,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (error) {
                 console.error("Error creating user profile:", error);
+                if (error.code === '42501') {
+                    showToast("Permission denied. Please check your database policies.", "error");
+                } else {
+                    showToast("Failed to create user profile.", "error");
+                }
                 return false;
             }
 
@@ -79,12 +152,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             return true;
         } catch (err) {
             console.error("Error ensuring user profile exists:", err);
+            showToast("Database error occurred. Please try again later.", "error");
             return false;
         }
     }
 
     // Ensure user exists in private_users table
     async function ensureUserExists(userId) {
+        if (!state.databaseSetupComplete) {
+            console.error("Database setup not complete");
+            return false;
+        }
+
         return withRetry(async () => {
             const { data: existingUser } = await client
                 .from("private_users")
@@ -120,12 +199,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Process message queue to handle rapid message sending
     async function processMessageQueue() {
         if (state.isProcessingQueue || state.messageQueue.length === 0) return;
-        
+
         state.isProcessingQueue = true;
         const { friendId, content } = state.messageQueue.shift();
-        
+
         try {
-            await sendMessageInternal(friendId, content);
+            await sendMessageInternal(state.currentUserId, friendId, content);
         } catch (err) {
             console.error("Error processing queued message:", err);
             showToast("Failed to send message. Please try again.", "error");
@@ -137,6 +216,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Internal message sending function
     async function sendMessageInternal(senderId, receiverId, content) {
+        if (!state.databaseSetupComplete) {
+            console.error("Database setup not complete");
+            return false;
+        }
+
         try {
             console.log(`Inserting message from ${senderId} to ${receiverId}`);
 
@@ -182,6 +266,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!content || !content.trim()) return;
 
         try {
+            if (!state.databaseSetupComplete) {
+                showToast("Database not initialized. Please try again later.", "error");
+                return;
+            }
+
             await ensureUserExists(state.currentUserId);
             await ensureUserExists(friendId);
 
@@ -234,7 +323,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Update user online status
     async function setUserOnlineStatus(isOnline) {
-        if (!state.currentUserId) return;
+        if (!state.currentUserId || !state.databaseSetupComplete) return;
+
         try {
             console.log(`Setting user ${state.currentUserId} online status to: ${isOnline}`);
             await client.from('user_profiles')
@@ -278,7 +368,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         state.onlineStatusInterval = setInterval(async () => {
-            if (state.currentUserId) {
+            if (state.currentUserId && state.databaseSetupComplete) {
                 try {
                     await setUserOnlineStatus(true);
                 } catch (err) {
@@ -524,6 +614,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     // User profile functions
     async function fetchCurrentUserAvatar(profileImageSelector = '.profile-pic') {
         try {
+            if (!state.databaseSetupComplete) return;
+
             const profileImage = document.querySelector(profileImageSelector);
             if (!profileImage) return;
 
@@ -549,7 +641,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     fetchCurrentUserAvatar();
 
     async function ensureCurrentUserInPrivateUsersTable() {
-        if (!state.currentUserId) return false;
+        if (!state.currentUserId || !state.databaseSetupComplete) return false;
 
         try {
             const userExists = await userExistsInPrivateUsersTable(state.currentUserId);
@@ -589,6 +681,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             state.currentUserId = user.id;
             console.log("Current user ID:", state.currentUserId);
 
+            if (!state.databaseSetupComplete) {
+                showToast("Database not initialized. Please refresh the page.", "error");
+                return null;
+            }
+
             await ensureUserProfileExists(state.currentUserId);
             await ensureCurrentUserInPrivateUsersTable();
             await setUserOnlineStatus(true);
@@ -603,7 +700,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function isAlreadyFriend(userId) {
-        if (!state.currentUserId || !userId) return false;
+        if (!state.currentUserId || !userId || !state.databaseSetupComplete) return false;
 
         try {
             const { data } = await client
@@ -623,6 +720,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (localStorage.getItem(ADMIN_REQUEST_KEY) === 'true') return;
 
         try {
+            if (!state.databaseSetupComplete) return;
+
             const { data: { user } } = await client.auth.getUser();
             if (!user) return;
 
@@ -671,6 +770,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Friend request functions
     async function acceptRequest(requestId, senderId) {
         try {
+            if (!state.databaseSetupComplete) {
+                showToast("Database not initialized. Please try again later.", "error");
+                return;
+            }
+
             const alreadyFriends = await isAlreadyFriend(senderId);
             if (alreadyFriends) {
                 showToast("You are already friends with this user.", "info");
@@ -712,6 +816,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function rejectRequest(requestId) {
         try {
+            if (!state.databaseSetupComplete) {
+                showToast("Database not initialized. Please try again later.", "error");
+                return;
+            }
+
             const { error } = await client
                 .from("requests")
                 .update({ status: "rejected" })
@@ -843,7 +952,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     async function fetchFriendRequests() {
-        if (!state.currentUserId) return;
+        if (!state.currentUserId || !state.databaseSetupComplete) return;
 
         console.log("Fetching friend requests for user:", state.currentUserId);
         showLoading("Fetching friend requests...");
@@ -925,6 +1034,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function updateUnseenCountForFriend(friendId) {
         try {
+            if (!state.databaseSetupComplete) return;
+
             const { count } = await client
                 .from("messages")
                 .select("*", { count: "exact", head: true })
@@ -949,6 +1060,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             state.deletionTimeouts[messageId] = setTimeout(async () => {
                 try {
+                    if (!state.databaseSetupComplete) return;
+
                     const { error } = await client
                         .from("messages")
                         .update({ deleted_at: new Date().toISOString() })
@@ -972,7 +1085,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function deleteSeenMessagesForChat(friendId) {
-        if (!state.currentUserId) return;
+        if (!state.currentUserId || !state.databaseSetupComplete) return;
 
         try {
             const { data: seenMessages } = await client
@@ -1011,6 +1124,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function updateLastMessageInChatList(friendId) {
         try {
+            if (!state.databaseSetupComplete) return;
+
             const { data: lastMsgData } = await client
                 .from("messages")
                 .select("content, created_at, sender_id, receiver_id")
@@ -1040,21 +1155,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     function updateFriendElement(friendId, updates) {
         const friendElement = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
         if (!friendElement) return;
-        
+
         if (updates.name) {
             const nameElement = friendElement.querySelector("h4");
             if (nameElement) nameElement.textContent = updates.name;
         }
-        
+
         if (updates.avatar) {
             const avatarElement = friendElement.querySelector(".avatar-wrapper img");
             if (avatarElement) avatarElement.src = updates.avatar;
         }
-        
+
         if (updates.online !== undefined) {
             const avatarWrapper = friendElement.querySelector(".avatar-wrapper");
             const existingDot = avatarWrapper.querySelector(".online-dot");
-            
+
             if (updates.online && !existingDot) {
                 const onlineDot = document.createElement("span");
                 onlineDot.className = "online-dot";
@@ -1066,6 +1181,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function fetchFriends() {
+        if (!state.databaseSetupComplete) {
+            showToast("Database not initialized. Please try again later.", "error");
+            return;
+        }
+
         showLoading("Fetching friends...");
         if (!state.currentUserId) {
             hideLoading();
@@ -1328,6 +1448,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function sendFriendRequest(username) {
         if (!username) return showToast("Enter a username.", "error");
+        if (!state.databaseSetupComplete) {
+            showToast("Database not initialized. Please try again later.", "error");
+            return;
+        }
 
         console.log("Sending friend request to:", username);
         showLoading("Sending friend request...");
@@ -1418,7 +1542,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function markMessagesAsSeen(friendId, chatBox, messages, friendAvatar) {
-        if (!state.currentUserId || !friendId) return;
+        if (!state.currentUserId || !friendId || !state.databaseSetupComplete) return;
 
         try {
             const { data: unseenMessages } = await client
@@ -1696,6 +1820,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             showModal("profile-popup");
 
             try {
+                if (!state.databaseSetupComplete) {
+                    showToast("Database not initialized. Please try again later.", "error");
+                    return;
+                }
+
                 const { data: profile } = await client
                     .from("user_profiles")
                     .select("profile_image_url, bio, user_name")
@@ -1744,6 +1873,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     saveProfileBtn?.addEventListener("click", async () => {
         try {
+            if (!state.databaseSetupComplete) {
+                showToast("Database not initialized. Please try again later.", "error");
+                return;
+            }
+
             const originalContent = saveProfileBtn.innerHTML;
 
             saveProfileBtn.disabled = true;
@@ -1868,6 +2002,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     saveUsernameBtn?.addEventListener("click", async () => {
         try {
+            if (!state.databaseSetupComplete) {
+                showToast("Database not initialized. Please try again later.", "error");
+                return;
+            }
+
             const newUsername = newUsernameInput?.value.trim();
             if (!newUsername) {
                 showToast("Username cannot be empty!", "error");
@@ -2006,6 +2145,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.getElementById("user-modal-status").textContent = "Checking status...";
             document.getElementById("user-modal-status").className = "user-modal-status";
 
+            if (!state.databaseSetupComplete) {
+                document.getElementById("user-modal-bio").textContent = "Database not initialized.";
+                document.getElementById("user-modal-status").textContent = "Offline";
+                document.getElementById("user-modal-status").className = "user-modal-status offline";
+                showModal("user-modal");
+                return;
+            }
+
             getUserProfile(userId).then(profile => {
                 if (profile) {
                     document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
@@ -2043,6 +2190,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function getUserProfile(userId) {
         try {
+            if (!state.databaseSetupComplete) return null;
+
             const { data } = await client
                 .from("user_profiles")
                 .select("user_name, profile_image_url, bio, is_online")
@@ -2058,6 +2207,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function getUserProfileForChat(userId) {
         try {
+            if (!state.databaseSetupComplete) return null;
+
             const { data } = await client
                 .from("user_profiles")
                 .select("user_name, profile_image_url")
@@ -2079,6 +2230,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                     showToast("You must be logged in to open a chat", "error");
                     return;
                 }
+            }
+
+            if (!state.databaseSetupComplete) {
+                showToast("Database not initialized. Please try again later.", "error");
+                return;
             }
 
             if (state.currentOpenChatId === userId) {
@@ -2115,7 +2271,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const urlParams = new URLSearchParams(window.location.search);
             const friendId = urlParams.get('chat');
 
-            if (friendId && state.currentUserId) {
+            if (friendId && state.currentUserId && state.databaseSetupComplete) {
                 client.from("user_profiles")
                     .select("user_name, profile_image_url")
                     .eq("user_id", friendId)
@@ -2133,7 +2289,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     window.openChatWithUser = async function (userId) {
         try {
-            if (!state.currentUserId) return;
+            if (!state.currentUserId || !state.databaseSetupComplete) return;
 
             const { data: profile } = await client
                 .from("user_profiles")
@@ -2153,6 +2309,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 
     async function fetchRecentChats() {
+        if (!state.databaseSetupComplete) return;
+
         try {
             const { data: friends } = await client
                 .from("friends")
@@ -2263,6 +2421,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     document.querySelector(".addFriends")?.addEventListener("click", () => {
         try {
+            if (!state.databaseSetupComplete) {
+                showToast("Database not initialized. Please try again later.", "error");
+                return;
+            }
+
             showModal("friendModal");
         } catch (error) {
             console.error("Error handling add friends click:", error);
@@ -2288,7 +2451,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Setup subscription with retry mechanism
     async function setupSubscriptionWithRetry(channelName, setupFn, maxRetries = 3) {
         let retries = 0;
-        
+
         while (retries < maxRetries) {
             try {
                 const channel = client.channel(channelName);
@@ -2298,12 +2461,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             } catch (error) {
                 retries++;
                 console.error(`Subscription attempt ${retries} failed:`, error);
-                
+
                 if (retries >= maxRetries) {
                     showToast("Failed to establish real-time connection", "error");
                     throw error;
                 }
-                
+
                 // Exponential backoff
                 await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries)));
             }
@@ -2312,6 +2475,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function openChat(friendId, friendName, friendAvatar, fromNotification = false) {
         try {
+            if (!state.databaseSetupComplete) {
+                showToast("Database not initialized. Please try again later.", "error");
+                return;
+            }
+
             state.currentOpenChatId = friendId;
 
             const chatContainer = document.querySelector("div.chat-area-child");
@@ -2411,7 +2579,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const setupChatSubscriptions = async () => {
                 try {
                     const chatChannelName = `chat:${[state.currentUserId, friendId].sort().join(":")}`;
-                    
+
                     const chatChannel = await setupSubscriptionWithRetry(chatChannelName, async (channel) => {
                         channel
                             .on('postgres_changes', {
@@ -2539,7 +2707,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     });
 
                     const typingChannelName = `typing:${[state.currentUserId, friendId].sort().join(":")}`;
-                    
+
                     const typingChannel = await setupSubscriptionWithRetry(typingChannelName, async (channel) => {
                         channel
                             .on('broadcast', { event: 'typing' }, (payload) => {
@@ -2562,7 +2730,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     });
 
                     const statusChannelName = `user-status-${friendId}`;
-                    
+
                     const statusChannel = await setupSubscriptionWithRetry(statusChannelName, async (channel) => {
                         channel
                             .on('postgres_changes', {
@@ -2666,7 +2834,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function fetchMessages(friendId) {
-        if (!state.currentUserId || !friendId) return [];
+        if (!state.currentUserId || !friendId || !state.databaseSetupComplete) return [];
 
         try {
             const { data, error } = await client
@@ -2675,7 +2843,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .or(`and(sender_id.eq.${state.currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${state.currentUserId})`)
                 .is('deleted_at', null)
                 .order("created_at", { ascending: true });
-            
+
             if (error) throw error;
             return data || [];
         } catch (err) {
@@ -2760,6 +2928,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function userExistsInPrivateUsersTable(userId) {
         try {
+            if (!state.databaseSetupComplete) return false;
+
             const { data } = await client
                 .from("private_users")
                 .select("id")
@@ -2777,6 +2947,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function initializeApp() {
         try {
             console.log("Starting application initialization...");
+
+            // Check database setup first
+            const dbSetupSuccess = await checkDatabaseSetup();
+            if (!dbSetupSuccess) {
+                showToast("Database setup failed. Please run the setup script.", "error");
+                return;
+            }
 
             // Get current user
             const { data: { user }, error: userError } = await client.auth.getUser();
