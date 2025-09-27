@@ -1,5 +1,8 @@
 import { client } from "../../supabase.js";
 
+// Default avatar URL to prevent NULL constraint violations
+const DEFAULT_AVATAR_URL = "https://via.placeholder.com/150";
+
 function showPopup(message, type = "info") {
     const popup = document.getElementById("popup");
     const messageEl = document.getElementById("popup-message");
@@ -42,36 +45,40 @@ async function signUp() {
     const signEmail = document.querySelector('#email').value;
     const signPassword = document.querySelector('#password').value;
 
-    const { data, error } = await client.auth.signUp({
-        email: signEmail,
-        password: signPassword,
-        options: {
-            data: { name: signName },
-            emailRedirectTo: 'http://chatrsaim.netlify.app/setupProfile.html',
-        }
-    });
+    try {
+        const { data, error } = await client.auth.signUp({
+            email: signEmail,
+            password: signPassword,
+            options: {
+                data: { name: signName },
+                emailRedirectTo: 'http://chatrsaim.netlify.app/setupProfile.html',
+            }
+        });
 
-    if (error) {
-        showPopup("Error signing up: " + error.message);
-        return;
-    }
-
-    if (data?.user) {
-        const { error: upsertError } = await client
-            .from("private_users")
-            .upsert([{
-                id: data.user.id,
-                name: signName,
-                email: signEmail
-            }], { onConflict: "email" });
-
-        if (upsertError) {
-            showPopup("Error saving user in private_users: " + upsertError.message);
+        if (error) {
+            showPopup("Error signing up: " + error.message);
             return;
         }
-    }
 
-    window.location.href = 'verify.html';
+        if (data?.user) {
+            const { error: upsertError } = await client
+                .from("private_users")
+                .upsert([{
+                    id: data.user.id,
+                    name: signName,
+                    email: signEmail
+                }], { onConflict: "email" });
+
+            if (upsertError) {
+                showPopup("Error saving user in private_users: " + upsertError.message);
+                return;
+            }
+        }
+
+        window.location.href = 'verify';
+    } catch (err) {
+        showPopup("An unexpected error occurred during sign up: " + err.message);
+    }
 }
 
 const signUpBtn = document.querySelector('.signUpBtn');
@@ -93,27 +100,31 @@ signUpBtn?.addEventListener('click', async e => {
 
 /* ------------------ CHECK PROFILE & REDIRECT ------------------ */
 async function checkProfileAndRedirect() {
-    const { data: { user }, error: userError } = await client.auth.getUser();
-    if (userError || !user) {
-        showPopup("User not logged in.");
-        return;
-    }
+    try {
+        const { data: { user }, error: userError } = await client.auth.getUser();
+        if (userError || !user) {
+            showPopup("User not logged in.");
+            return;
+        }
 
-    const { data: profile, error: profileError } = await client
-        .from("user_profiles")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
+        const { data: profile, error: profileError } = await client
+            .from("user_profiles")
+            .select("*")
+            .eq("user_id", user.id)
+            .maybeSingle();
 
-    if (profileError) {
-        showPopup("Error checking profile: " + profileError.message);
-        return;
-    }
+        if (profileError) {
+            showPopup("Error checking profile: " + profileError.message);
+            return;
+        }
 
-    if (!profile) {
-        window.location.href = "setupProfile.html";
-    } else {
-        window.location.href = "dashboard.html";
+        if (!profile) {
+            window.location.href = "setupProfile";
+        } else {
+            window.location.href = "dashboard";
+        }
+    } catch (err) {
+        showPopup("An unexpected error occurred: " + err.message);
     }
 }
 
@@ -122,15 +133,19 @@ async function login() {
     const loginEmail = document.querySelector('#loginEmail').value;
     const loginPassword = document.querySelector('#loginPassword').value;
 
-    const { error } = await client.auth.signInWithPassword({
-        email: loginEmail,
-        password: loginPassword,
-    });
+    try {
+        const { error } = await client.auth.signInWithPassword({
+            email: loginEmail,
+            password: loginPassword,
+        });
 
-    if (error) {
-        showPopup("Login failed: " + error.message);
-    } else {
-        await checkProfileAndRedirect();
+        if (error) {
+            showPopup("Login failed: " + error.message);
+        } else {
+            await checkProfileAndRedirect();
+        }
+    } catch (err) {
+        showPopup("An unexpected error occurred during login: " + err.message);
     }
 }
 
@@ -153,10 +168,14 @@ loginBtn?.addEventListener('click', async e => {
 
 /* ------------------ GOOGLE SIGN UP / LOGIN ------------------ */
 async function handleGoogleAuth(redirectUrl) {
-    await client.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: redirectUrl }
-    });
+    try {
+        await client.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: redirectUrl }
+        });
+    } catch (err) {
+        showPopup("Google authentication failed: " + err.message);
+    }
 }
 
 const googleSignUpBtn = document.querySelector('.googleSignUpBtn');
@@ -201,67 +220,94 @@ avatarInput?.addEventListener("change", e => {
 });
 
 async function setupProfile() {
-    const full_name = document.getElementById("name").value.trim();
-    const user_name = document.getElementById("username").value.trim();
-    const bio = document.getElementById("bio").value.trim();
+    try {
+        const full_name = document.getElementById("name").value.trim();
+        const user_name = document.getElementById("username").value.trim();
+        const bio = document.getElementById("bio").value.trim();
 
-    // get logged in user
-    const { data: { user }, error: userError } = await client.auth.getUser();
-    if (userError || !user) {
-        showPopup("User not logged in.");
-        return;
-    }
-
-    // upsert into private_users (optional, you had this in your code)
-    const { error: upsertError } = await client
-        .from("private_users")
-        .upsert([{
-            id: user.id,
-            name: user.user_metadata?.name || full_name || "",
-            email: user.email
-        }], { onConflict: "email" });
-
-    if (upsertError) {
-        showPopup("Error saving user in private_users: " + upsertError.message);
-        return;
-    }
-
-    // handle avatar upload
-    let avatar_url = null;
-    if (avatarFile) {
-        const fileName = `public/${user.id}-${Date.now()}-${avatarFile.name}`;
-        const { error: uploadError } = await client.storage
-            .from("avatars")
-            .upload(fileName, avatarFile, { cacheControl: '3600', upsert: true });
-
-        if (uploadError) {
-            showPopup("Error uploading avatar: " + uploadError.message);
+        // Validate required fields
+        if (!full_name) {
+            showPopup("Full name is required", "error");
             return;
         }
 
-        const { data: urlData } = client.storage.from("avatars").getPublicUrl(fileName);
-        avatar_url = urlData.publicUrl;
-    }
+        if (!user_name) {
+            showPopup("Username is required", "error");
+            return;
+        }
 
-    const { error: insertProfileError } = await client
-        .from("user_profiles")
-        .insert([{
+        // get logged in user
+        const { data: { user }, error: userError } = await client.auth.getUser();
+        if (userError || !user) {
+            showPopup("User not logged in.");
+            return;
+        }
+
+        // upsert into private_users (optional, you had this in your code)
+        const { error: upsertError } = await client
+            .from("private_users")
+            .upsert([{
+                id: user.id,
+                name: user.user_metadata?.name || full_name || "",
+                email: user.email
+            }], { onConflict: "email" });
+
+        if (upsertError) {
+            showPopup("Error saving user in private_users: " + upsertError.message);
+            return;
+        }
+
+        // handle avatar upload
+        let avatar_url = DEFAULT_AVATAR_URL; // Use default avatar as fallback
+
+        if (avatarFile) {
+            const fileName = `public/${user.id}-${Date.now()}-${avatarFile.name}`;
+            const { error: uploadError } = await client.storage
+                .from("avatars")
+                .upload(fileName, avatarFile, { cacheControl: '3600', upsert: true });
+
+            if (uploadError) {
+                showPopup("Error uploading avatar: " + uploadError.message);
+                return;
+            }
+
+            const { data: urlData } = client.storage.from("avatars").getPublicUrl(fileName);
+            avatar_url = urlData.publicUrl;
+        }
+
+        // Prepare profile data
+        const profileData = {
             user_id: user.id,
             full_name,
             user_name,
             bio,
             profile_image_url: avatar_url
-        }]);
+        };
 
-    if (insertProfileError) {
-        showPopup("Error saving profile: " + insertProfileError.message);
-        return;
+        console.log("Inserting profile data:", profileData);
+
+        const { error: insertProfileError } = await client
+            .from("user_profiles")
+            .insert([profileData]);
+
+        if (insertProfileError) {
+            showPopup("Error saving profile: " + insertProfileError.message);
+            return;
+        }
+
+        showPopup("Profile saved successfully!", "success");
+        setTimeout(() => {
+            window.location.href = "dashboard";
+        }, 1500);
+    } catch (err) {
+        showPopup("An unexpected error occurred: " + err.message);
+    } finally {
+        // Reset button state
+        if (setUpBtn) {
+            setUpBtn.innerHTML = 'Set Up Profile';
+        }
     }
-
-    showPopup("Profile saved successfully!");
-    window.location.href = "dashboard";
 }
-
 
 setUpBtn?.addEventListener("click", async e => {
     e.preventDefault();
