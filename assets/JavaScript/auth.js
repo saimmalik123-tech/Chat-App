@@ -300,9 +300,10 @@ async function setupProfile() {
             window.location.href = "dashboard";
         }, 1500);
     } catch (err) {
+        console.log(err);
+        
         showPopup("An unexpected error occurred: " + err.message);
     } finally {
-        // Reset button state
         if (setUpBtn) {
             setUpBtn.innerHTML = 'Set Up Profile';
         }
