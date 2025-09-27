@@ -5,16 +5,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     const ADMIN_USERNAME = "Saim_Malik88";
     const ADMIN_REQUEST_KEY = "adminRequestShown";
 
-    // Global variables
-    let currentUserId = null;
-    let friendRequests = [];
-    let unseenCounts = {};
-    let currentOpenChatId = null;
-    let notificationData = {};
-    let deletionTimeouts = {};
-    let processingMessageIds = new Set();
-    let allFriends = new Map();
-    let onlineStatusInterval = null;
+    // Global state management
+    const state = {
+        currentUserId: null,
+        friendRequests: [],
+        unseenCounts: {},
+        currentOpenChatId: null,
+        notificationData: {},
+        deletionTimeouts: {},
+        processingMessageIds: new Set(),
+        allFriends: new Map(),
+        onlineStatusInterval: null,
+        activeChannels: new Set(),
+        messageQueue: [],
+        isProcessingQueue: false
+    };
 
     // Helper function for retrying database operations
     async function withRetry(fn, maxRetries = 3, initialDelay = 500) {
@@ -112,8 +117,26 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Insert message function with proper user existence checks
-    async function insertMessage(senderId, receiverId, content) {
+    // Process message queue to handle rapid message sending
+    async function processMessageQueue() {
+        if (state.isProcessingQueue || state.messageQueue.length === 0) return;
+        
+        state.isProcessingQueue = true;
+        const { friendId, content } = state.messageQueue.shift();
+        
+        try {
+            await sendMessageInternal(friendId, content);
+        } catch (err) {
+            console.error("Error processing queued message:", err);
+            showToast("Failed to send message. Please try again.", "error");
+        } finally {
+            state.isProcessingQueue = false;
+            processMessageQueue();
+        }
+    }
+
+    // Internal message sending function
+    async function sendMessageInternal(senderId, receiverId, content) {
         try {
             console.log(`Inserting message from ${senderId} to ${receiverId}`);
 
@@ -159,35 +182,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!content || !content.trim()) return;
 
         try {
-            await ensureUserExists(currentUserId);
+            await ensureUserExists(state.currentUserId);
             await ensureUserExists(friendId);
 
-            let messageSent = false;
-            let attempts = 0;
-            const maxAttempts = 3;
-
-            while (!messageSent && attempts < maxAttempts) {
-                attempts++;
-                messageSent = await insertMessage(currentUserId, friendId, content);
-                if (!messageSent) {
-                    console.log(`Message send failed (attempt ${attempts}/${maxAttempts}), retrying...`);
-                    await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
-                }
-            }
-
-            if (messageSent) {
-                // Fixed: Only update last message for the specific friend
-                updateLastMessage(friendId, content, new Date().toISOString());
-            } else {
-                showToast("Message failed to send. Please try again.", "error");
-            }
+            // Add to queue instead of sending directly
+            state.messageQueue.push({ friendId, content });
+            processMessageQueue();
         } catch (err) {
             console.error("Error in sendMessage:", err);
             showToast("Message failed to send. Please try again.", "error");
         }
     }
 
-    // Fixed: Update last message only for specific friend
+    // Update last message only for specific friend
     function updateLastMessage(friendId, content, createdAt) {
         try {
             if (!friendId) {
@@ -195,10 +202,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            // Convert to string to ensure proper matching
             const friendIdStr = String(friendId);
-
-            // Find the specific chat element for this friend
             const chatLi = document.querySelector(`.chat[data-friend-id="${friendIdStr}"]`);
             if (!chatLi) {
                 console.warn(`Chat element not found for friendId: ${friendIdStr}`);
@@ -224,41 +228,39 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         } catch (error) {
             console.error("Error updating last message:", error);
+            showToast("Failed to update message preview", "error");
         }
     }
 
-    // Fixed: setUserOnlineStatus with timestamp and better error handling
+    // Update user online status
     async function setUserOnlineStatus(isOnline) {
-        if (!currentUserId) return;
+        if (!state.currentUserId) return;
         try {
-            console.log(`Setting user ${currentUserId} online status to: ${isOnline}`);
+            console.log(`Setting user ${state.currentUserId} online status to: ${isOnline}`);
             await client.from('user_profiles')
                 .upsert({
-                    user_id: currentUserId,
+                    user_id: state.currentUserId,
                     is_online: isOnline,
-                    last_seen: new Date().toISOString() // Add timestamp
+                    last_seen: new Date().toISOString()
                 }, {
                     onConflict: 'user_id'
                 });
 
-            // Update local UI to reflect the status change immediately
             updateCurrentUserStatusUI(isOnline);
         } catch (err) {
             console.error("Error updating online status:", err);
         }
     }
 
-    // Fixed: Function to update current user's status UI
+    // Update current user's status UI
     function updateCurrentUserStatusUI(isOnline) {
         try {
-            // Update status in header if element exists
             const headerStatusElement = document.querySelector('.header-user-status');
             if (headerStatusElement) {
                 headerStatusElement.textContent = isOnline ? "Online" : "Offline";
                 headerStatusElement.className = isOnline ? "header-user-status online" : "header-user-status offline";
             }
 
-            // Update status in popup if element exists
             const popupStatusElement = document.querySelector('.popup-user-status');
             if (popupStatusElement) {
                 popupStatusElement.textContent = isOnline ? "Online" : "Offline";
@@ -269,16 +271,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Fixed: Periodic online status check with cleanup
+    // Periodic online status check with cleanup
     function setupOnlineStatusCheck() {
-        // Clear any existing interval
-        if (onlineStatusInterval) {
-            clearInterval(onlineStatusInterval);
+        if (state.onlineStatusInterval) {
+            clearInterval(state.onlineStatusInterval);
         }
 
-        // Check every 30 seconds
-        onlineStatusInterval = setInterval(async () => {
-            if (currentUserId) {
+        state.onlineStatusInterval = setInterval(async () => {
+            if (state.currentUserId) {
                 try {
                     await setUserOnlineStatus(true);
                 } catch (err) {
@@ -371,7 +371,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Track active popups
     const activePopups = new Set();
 
-    // Modified showTopRightPopup to accept onClick callback
+    // Show top-right popup
     function showTopRightPopup(message, type = "info", image = null, onClick = null) {
         try {
             const popupKey = `${message}-${type}-${image || ''}`;
@@ -441,7 +441,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 document.head.appendChild(style);
             }
 
-            // Add click handler to popup content
             const popupContent = popup.querySelector(".popup-content");
             if (onClick) {
                 popupContent.style.cursor = "pointer";
@@ -550,10 +549,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     fetchCurrentUserAvatar();
 
     async function ensureCurrentUserInPrivateUsersTable() {
-        if (!currentUserId) return false;
+        if (!state.currentUserId) return false;
 
         try {
-            const userExists = await userExistsInPrivateUsersTable(currentUserId);
+            const userExists = await userExistsInPrivateUsersTable(state.currentUserId);
 
             if (!userExists) {
                 console.log("Current user not found in private_users table, adding...");
@@ -564,9 +563,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 await client
                     .from("private_users")
                     .insert([{
-                        id: currentUserId,
+                        id: state.currentUserId,
                         name: user.user_metadata?.full_name || user.email?.split('@')[0] || "User",
-                        email: user.email || `${currentUserId}@placeholder.com`
+                        email: user.email || `${state.currentUserId}@placeholder.com`
                     }]);
 
                 console.log("User added to private_users table successfully");
@@ -587,10 +586,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 window.location.href = 'signup.html';
                 return null;
             }
-            currentUserId = user.id;
-            console.log("Current user ID:", currentUserId);
+            state.currentUserId = user.id;
+            console.log("Current user ID:", state.currentUserId);
 
-            await ensureUserProfileExists(currentUserId);
+            await ensureUserProfileExists(state.currentUserId);
             await ensureCurrentUserInPrivateUsersTable();
             await setUserOnlineStatus(true);
             await checkAndShowAdminRequestPopup();
@@ -604,13 +603,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function isAlreadyFriend(userId) {
-        if (!currentUserId || !userId) return false;
+        if (!state.currentUserId || !userId) return false;
 
         try {
             const { data } = await client
                 .from("friends")
                 .select("*")
-                .or(`and(user1_id.eq.${currentUserId},user2_id.eq.${userId}),and(user1_id.eq.${userId},user2_id.eq.${currentUserId})`)
+                .or(`and(user1_id.eq.${state.currentUserId},user2_id.eq.${userId}),and(user1_id.eq.${userId},user2_id.eq.${state.currentUserId})`)
                 .maybeSingle();
 
             return !!data;
@@ -690,7 +689,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const { error: insertError } = await client
                 .from("friends")
-                .insert([{ user1_id: currentUserId, user2_id: senderId }]);
+                .insert([{ user1_id: state.currentUserId, user2_id: senderId }]);
 
             if (insertError) {
                 console.error("Error inserting into friends:", insertError);
@@ -732,18 +731,27 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Fixed: Properly handle page unload to set offline status
+    // Cleanup function for subscriptions
+    function cleanupSubscriptions() {
+        state.activeChannels.forEach(channel => {
+            client.removeChannel(channel);
+        });
+        state.activeChannels.clear();
+    }
+
+    // Handle page unload
     window.addEventListener('beforeunload', () => {
         setUserOnlineStatus(false);
-        Object.values(deletionTimeouts).forEach(timeoutId => clearTimeout(timeoutId));
+        Object.values(state.deletionTimeouts).forEach(timeoutId => clearTimeout(timeoutId));
 
-        // Clear the online status interval
-        if (onlineStatusInterval) {
-            clearInterval(onlineStatusInterval);
+        if (state.onlineStatusInterval) {
+            clearInterval(state.onlineStatusInterval);
         }
+
+        cleanupSubscriptions();
     });
 
-    // Fixed: Handle page visibility changes
+    // Handle page visibility changes
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             setUserOnlineStatus(true);
@@ -759,13 +767,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!messageList || !unreadBadge) return;
 
             messageList.innerHTML = "";
-            if (!friendRequests || friendRequests.length === 0) {
+            if (!state.friendRequests || state.friendRequests.length === 0) {
                 const noRequestsItem = document.createElement("li");
                 noRequestsItem.className = "no-requests";
                 noRequestsItem.textContent = "No pending friend requests.";
                 messageList.appendChild(noRequestsItem);
             } else {
-                friendRequests.forEach((req) => {
+                state.friendRequests.forEach((req) => {
                     const li = document.createElement("li");
                     li.className = "message-item";
                     li.innerHTML = `
@@ -801,7 +809,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 });
             }
 
-            unreadBadge.textContent = (friendRequests && friendRequests.length) ? friendRequests.length : "0";
+            unreadBadge.textContent = (state.friendRequests && state.friendRequests.length) ? state.friendRequests.length : "0";
         } catch (error) {
             console.error("Error rendering friend requests:", error);
         }
@@ -835,20 +843,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     async function fetchFriendRequests() {
-        if (!currentUserId) return;
+        if (!state.currentUserId) return;
 
-        console.log("Fetching friend requests for user:", currentUserId);
+        console.log("Fetching friend requests for user:", state.currentUserId);
         showLoading("Fetching friend requests...");
 
         try {
             const { data: requests } = await client
                 .from("requests")
                 .select("id, sender_id, status")
-                .eq("receiver_id", currentUserId)
+                .eq("receiver_id", state.currentUserId)
                 .eq("status", "pending");
 
             console.log("Friend requests data:", requests);
-            friendRequests = [];
+            state.friendRequests = [];
 
             if (requests && requests.length) {
                 const senderIds = Array.from(new Set(requests.map(r => r.sender_id)));
@@ -870,7 +878,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const avatarUrl = senderProfile.profile_image_url || DEFAULT_PROFILE_IMG;
                     const senderName = senderProfile.user_name || "Someone";
 
-                    friendRequests.push({
+                    state.friendRequests.push({
                         text: `${senderName} sent you a friend request`,
                         requestId: req.id,
                         senderId: req.sender_id,
@@ -881,7 +889,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             }
 
-            console.log("Final friend requests list:", friendRequests);
+            console.log("Final friend requests list:", state.friendRequests);
             renderFriendRequests();
         } catch (err) {
             console.error("Error fetching requests:", err);
@@ -921,12 +929,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .from("messages")
                 .select("*", { count: "exact", head: true })
                 .eq("sender_id", friendId)
-                .eq("receiver_id", currentUserId)
+                .eq("receiver_id", state.currentUserId)
                 .eq("seen", false)
                 .is('deleted_at', null);
 
             const unseenCount = count || 0;
-            unseenCounts[friendId] = unseenCount;
+            state.unseenCounts[friendId] = unseenCount;
             updateUnseenBadge(friendId, unseenCount);
         } catch (err) {
             console.error("updateUnseenCountForFriend error:", err);
@@ -935,11 +943,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     function scheduleMessageDeletion(messageId, friendId, delay = 30000) {
         try {
-            if (deletionTimeouts[messageId]) {
-                clearTimeout(deletionTimeouts[messageId]);
+            if (state.deletionTimeouts[messageId]) {
+                clearTimeout(state.deletionTimeouts[messageId]);
             }
 
-            deletionTimeouts[messageId] = setTimeout(async () => {
+            state.deletionTimeouts[messageId] = setTimeout(async () => {
                 try {
                     const { error } = await client
                         .from("messages")
@@ -955,7 +963,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 } catch (err) {
                     console.error("Error in scheduled message deletion:", err);
                 } finally {
-                    delete deletionTimeouts[messageId];
+                    delete state.deletionTimeouts[messageId];
                 }
             }, delay);
         } catch (error) {
@@ -964,13 +972,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function deleteSeenMessagesForChat(friendId) {
-        if (!currentUserId) return;
+        if (!state.currentUserId) return;
 
         try {
             const { data: seenMessages } = await client
                 .from("messages")
                 .select("id")
-                .eq("receiver_id", currentUserId)
+                .eq("receiver_id", state.currentUserId)
                 .eq("sender_id", friendId)
                 .eq("seen", true)
                 .is('deleted_at', null);
@@ -978,9 +986,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!seenMessages || seenMessages.length === 0) return;
 
             seenMessages.forEach(msg => {
-                if (deletionTimeouts[msg.id]) {
-                    clearTimeout(deletionTimeouts[msg.id]);
-                    delete deletionTimeouts[msg.id];
+                if (state.deletionTimeouts[msg.id]) {
+                    clearTimeout(state.deletionTimeouts[msg.id]);
+                    delete state.deletionTimeouts[msg.id];
                 }
             });
 
@@ -1006,7 +1014,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const { data: lastMsgData } = await client
                 .from("messages")
                 .select("content, created_at, sender_id, receiver_id")
-                .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                .or(`and(sender_id.eq.${state.currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${state.currentUserId})`)
                 .is('deleted_at', null)
                 .order("created_at", { ascending: false })
                 .limit(1)
@@ -1028,9 +1036,38 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Update specific friend element instead of rebuilding entire list
+    function updateFriendElement(friendId, updates) {
+        const friendElement = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
+        if (!friendElement) return;
+        
+        if (updates.name) {
+            const nameElement = friendElement.querySelector("h4");
+            if (nameElement) nameElement.textContent = updates.name;
+        }
+        
+        if (updates.avatar) {
+            const avatarElement = friendElement.querySelector(".avatar-wrapper img");
+            if (avatarElement) avatarElement.src = updates.avatar;
+        }
+        
+        if (updates.online !== undefined) {
+            const avatarWrapper = friendElement.querySelector(".avatar-wrapper");
+            const existingDot = avatarWrapper.querySelector(".online-dot");
+            
+            if (updates.online && !existingDot) {
+                const onlineDot = document.createElement("span");
+                onlineDot.className = "online-dot";
+                avatarWrapper.appendChild(onlineDot);
+            } else if (!updates.online && existingDot) {
+                existingDot.remove();
+            }
+        }
+    }
+
     async function fetchFriends() {
         showLoading("Fetching friends...");
-        if (!currentUserId) {
+        if (!state.currentUserId) {
             hideLoading();
             return;
         }
@@ -1039,15 +1076,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             const { data: friends } = await client
                 .from("friends")
                 .select("*")
-                .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
+                .or(`user1_id.eq.${state.currentUserId},user2_id.eq.${state.currentUserId}`);
 
             const chatList = document.querySelector(".chat-list");
             if (!chatList) return;
             chatList.innerHTML = "";
 
-            // Get unique friend IDs to prevent duplicates
             const friendIds = [...new Set(friends.map(f =>
-                f.user1_id === currentUserId ? f.user2_id : f.user1_id
+                f.user1_id === state.currentUserId ? f.user2_id : f.user1_id
             ))];
 
             const { data: profiles } = await client
@@ -1055,13 +1091,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .select("user_id, user_name, profile_image_url, is_online")
                 .in("user_id", friendIds);
 
-            allFriends.clear();
+            state.allFriends.clear();
             (profiles || []).forEach(p => {
-                allFriends.set(p.user_id, p);
+                state.allFriends.set(p.user_id, p);
             });
 
             const friendDataPromises = friendIds.map(async (friendId) => {
-                let profile = allFriends.get(friendId) || {};
+                let profile = state.allFriends.get(friendId) || {};
                 let friendName, avatarUrl, isOnline;
 
                 friendName = profile.user_name || "Unknown";
@@ -1071,7 +1107,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const { data: lastMsgData } = await client
                     .from("messages")
                     .select("content, created_at, sender_id, receiver_id")
-                    .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                    .or(`and(sender_id.eq.${state.currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${state.currentUserId})`)
                     .is('deleted_at', null)
                     .order("created_at", { ascending: false })
                     .limit(1)
@@ -1086,7 +1122,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         .from("messages")
                         .select("*", { count: "exact", head: true })
                         .eq("sender_id", friendId)
-                        .eq("receiver_id", currentUserId)
+                        .eq("receiver_id", state.currentUserId)
                         .eq("seen", false)
                         .is('deleted_at', null);
 
@@ -1100,43 +1136,24 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const friendData = await Promise.all(friendDataPromises);
 
-            // Check for existing elements to prevent duplicates
             friendData.forEach(data => {
                 const { friendId, friendName, avatarUrl, isOnline, lastMessageText, lastMessageTime, unseenCount } = data;
 
-                // Check if this friend is already in the DOM
                 const existingChat = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
                 if (existingChat) {
-                    // Update existing element instead of creating a new one
-                    const existingName = existingChat.querySelector("h4");
-                    const existingAvatar = existingChat.querySelector("img");
+                    updateFriendElement(friendId, {
+                        name: friendName,
+                        avatar: avatarUrl,
+                        online: isOnline
+                    });
+
                     const existingLastMessage = existingChat.querySelector(".last-message");
                     const existingTime = existingChat.querySelector(".time");
                     const existingBadge = existingChat.querySelector(".non-seen-msg");
-                    const existingOnlineDot = existingChat.querySelector(".online-dot");
 
-                    if (existingName) existingName.textContent = friendName;
-                    if (existingAvatar) existingAvatar.src = avatarUrl;
                     if (existingLastMessage) existingLastMessage.textContent = lastMessageText;
                     if (existingTime) existingTime.textContent = lastMessageTime;
 
-                    // Update online status
-                    if (isOnline) {
-                        if (!existingOnlineDot) {
-                            const avatarWrapper = existingChat.querySelector(".avatar-wrapper");
-                            if (avatarWrapper) {
-                                const onlineDot = document.createElement("span");
-                                onlineDot.className = "online-dot";
-                                avatarWrapper.appendChild(onlineDot);
-                            }
-                        }
-                    } else {
-                        if (existingOnlineDot) {
-                            existingOnlineDot.remove();
-                        }
-                    }
-
-                    // Update unseen count badge
                     if (unseenCount > 0) {
                         if (!existingBadge) {
                             const badge = document.createElement("p");
@@ -1151,7 +1168,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         existingBadge.style.display = "none";
                     }
 
-                    return; // Skip creating a new element
+                    return;
                 }
 
                 const defaultImg = './assets/icon/download.jpeg';
@@ -1186,7 +1203,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 });
 
                 chatList.appendChild(li);
-                unseenCounts[friendId] = unseenCount || 0;
+                state.unseenCounts[friendId] = unseenCount || 0;
             });
 
             enableFriendSearch();
@@ -1261,7 +1278,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const animationDelay = 50;
 
             msgs.forEach((msg, index) => {
-                const isMe = msg.sender_id === currentUserId;
+                const isMe = msg.sender_id === state.currentUserId;
                 const msgDiv = document.createElement("div");
                 msgDiv.className = `message ${isMe ? "sent" : "received"}`;
                 msgDiv.setAttribute("data-message-id", msg.id);
@@ -1330,7 +1347,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const receiverId = user.user_id;
             console.log("Found user with ID:", receiverId);
 
-            if (receiverId === currentUserId) {
+            if (receiverId === state.currentUserId) {
                 hideLoading();
                 return showToast("You cannot send a request to yourself.", "warning");
             }
@@ -1346,7 +1363,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const { data: existing } = await client
                 .from("requests")
                 .select("id, status")
-                .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${currentUserId})`)
+                .or(`and(sender_id.eq.${state.currentUserId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${state.currentUserId})`)
                 .maybeSingle();
 
             if (existing) {
@@ -1371,7 +1388,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const { data: newRequest } = await client
                 .from("requests")
                 .insert([{
-                    sender_id: currentUserId,
+                    sender_id: state.currentUserId,
                     receiver_id: receiverId,
                     status: "pending"
                 }])
@@ -1401,14 +1418,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function markMessagesAsSeen(friendId, chatBox, messages, friendAvatar) {
-        if (!currentUserId || !friendId) return;
+        if (!state.currentUserId || !friendId) return;
 
         try {
             const { data: unseenMessages } = await client
                 .from("messages")
                 .select("id")
                 .eq("sender_id", friendId)
-                .eq("receiver_id", currentUserId)
+                .eq("receiver_id", state.currentUserId)
                 .eq("seen", false)
                 .is('deleted_at', null);
 
@@ -1682,7 +1699,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const { data: profile } = await client
                     .from("user_profiles")
                     .select("profile_image_url, bio, user_name")
-                    .eq("user_id", currentUserId)
+                    .eq("user_id", state.currentUserId)
                     .limit(1)
                     .maybeSingle();
 
@@ -1739,7 +1756,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 const file = profileUpload?.files[0];
                 if (file) {
-                    const fileName = `${currentUserId}_${Date.now()}_${file.name}`;
+                    const fileName = `${state.currentUserId}_${Date.now()}_${file.name}`;
                     const { data } = await client.storage
                         .from('avatars')
                         .upload(fileName, file, {
@@ -1754,7 +1771,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 await client
                     .from("user_profiles")
                     .update({ profile_image_url: imageUrl, bio })
-                    .eq("user_id", currentUserId);
+                    .eq("user_id", state.currentUserId);
 
                 saveProfileBtn.innerHTML = `
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1867,7 +1884,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 await client
                     .from("user_profiles")
                     .update({ user_name: newUsername })
-                    .eq("user_id", currentUserId);
+                    .eq("user_id", state.currentUserId);
 
                 saveUsernameBtn.innerHTML = `
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1989,7 +2006,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.getElementById("user-modal-status").textContent = "Checking status...";
             document.getElementById("user-modal-status").className = "user-modal-status";
 
-            // Fixed: Fetch fresh profile data including online status
             getUserProfile(userId).then(profile => {
                 if (profile) {
                     document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
@@ -2057,7 +2073,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function openSpecificChat(userId, profile = null) {
         try {
-            if (!currentUserId) {
+            if (!state.currentUserId) {
                 const user = await getCurrentUser();
                 if (!user) {
                     showToast("You must be logged in to open a chat", "error");
@@ -2065,7 +2081,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             }
 
-            if (currentOpenChatId === userId) {
+            if (state.currentOpenChatId === userId) {
                 return;
             }
 
@@ -2099,7 +2115,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const urlParams = new URLSearchParams(window.location.search);
             const friendId = urlParams.get('chat');
 
-            if (friendId && currentUserId) {
+            if (friendId && state.currentUserId) {
                 client.from("user_profiles")
                     .select("user_name, profile_image_url")
                     .eq("user_id", friendId)
@@ -2117,7 +2133,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     window.openChatWithUser = async function (userId) {
         try {
-            if (!currentUserId) return;
+            if (!state.currentUserId) return;
 
             const { data: profile } = await client
                 .from("user_profiles")
@@ -2141,7 +2157,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const { data: friends } = await client
                 .from("friends")
                 .select("*")
-                .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
+                .or(`user1_id.eq.${state.currentUserId},user2_id.eq.${state.currentUserId}`);
 
             if (!friends || friends.length === 0) {
                 renderRecentChats([]);
@@ -2149,7 +2165,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             const friendIds = [...new Set(friends.map(f =>
-                f.user1_id === currentUserId ? f.user2_id : f.user1_id
+                f.user1_id === state.currentUserId ? f.user2_id : f.user1_id
             ))];
 
             const { data: profiles } = await client
@@ -2168,7 +2184,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const { data: lastMessage } = await client
                     .from("messages")
                     .select("content, created_at")
-                    .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                    .or(`and(sender_id.eq.${state.currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${state.currentUserId})`)
                     .is('deleted_at', null)
                     .order("created_at", { ascending: false })
                     .limit(1)
@@ -2269,9 +2285,34 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
+    // Setup subscription with retry mechanism
+    async function setupSubscriptionWithRetry(channelName, setupFn, maxRetries = 3) {
+        let retries = 0;
+        
+        while (retries < maxRetries) {
+            try {
+                const channel = client.channel(channelName);
+                await setupFn(channel);
+                state.activeChannels.add(channel);
+                return channel;
+            } catch (error) {
+                retries++;
+                console.error(`Subscription attempt ${retries} failed:`, error);
+                
+                if (retries >= maxRetries) {
+                    showToast("Failed to establish real-time connection", "error");
+                    throw error;
+                }
+                
+                // Exponential backoff
+                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries)));
+            }
+        }
+    }
+
     async function openChat(friendId, friendName, friendAvatar, fromNotification = false) {
         try {
-            currentOpenChatId = friendId;
+            state.currentOpenChatId = friendId;
 
             const chatContainer = document.querySelector("div.chat-area-child");
             const defaultScreen = document.querySelector(".default");
@@ -2356,14 +2397,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             inputSafe.value = "";
             sendBtnSafe.disabled = true;
 
-            // Fixed: Fetch fresh profile data including online status
             const { data: profile } = await client
                 .from("user_profiles")
                 .select("is_online")
                 .eq("user_id", friendId)
                 .maybeSingle();
 
-            // Update typing indicator with current status
             typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
 
             const oldMessages = await fetchMessages(friendId);
@@ -2371,194 +2410,175 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const setupChatSubscriptions = async () => {
                 try {
-                    const chatChannelName = `chat:${[currentUserId, friendId].sort().join(":")}`;
-                    const chatChannel = client.channel(chatChannelName);
+                    const chatChannelName = `chat:${[state.currentUserId, friendId].sort().join(":")}`;
+                    
+                    const chatChannel = await setupSubscriptionWithRetry(chatChannelName, async (channel) => {
+                        channel
+                            .on('postgres_changes', {
+                                event: 'INSERT',
+                                schema: 'public',
+                                table: 'messages',
+                                filter: `sender_id=eq.${state.currentUserId}`
+                            }, (payload) => {
+                                const newMsg = payload.new;
+                                if (state.processingMessageIds.has(newMsg.id)) return;
+                                state.processingMessageIds.add(newMsg.id);
 
-                    chatChannel
-                        .on('postgres_changes', {
-                            event: 'INSERT',
-                            schema: 'public',
-                            table: 'messages',
-                            filter: `sender_id=eq.${currentUserId}`
-                        }, (payload) => {
-                            const newMsg = payload.new;
-                            if (processingMessageIds.has(newMsg.id)) return;
-                            processingMessageIds.add(newMsg.id);
+                                oldMessages.push(newMsg);
+                                renderChatMessages(chatBox, oldMessages, friendAvatar);
+                                updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
-                            oldMessages.push(newMsg);
-                            renderChatMessages(chatBox, oldMessages, friendAvatar);
-                            updateLastMessage(friendId, newMsg.content, newMsg.created_at);
+                                setTimeout(() => {
+                                    state.processingMessageIds.delete(newMsg.id);
+                                }, 1000);
+                            })
+                            .on('postgres_changes', {
+                                event: 'INSERT',
+                                schema: 'public',
+                                table: 'messages',
+                                filter: `sender_id=eq.${friendId}`
+                            }, async (payload) => {
+                                const newMsg = payload.new;
+                                if (state.processingMessageIds.has(newMsg.id)) return;
+                                state.processingMessageIds.add(newMsg.id);
 
-                            setTimeout(() => {
-                                processingMessageIds.delete(newMsg.id);
-                            }, 1000);
-                        })
-                        .on('postgres_changes', {
-                            event: 'INSERT',
-                            schema: 'public',
-                            table: 'messages',
-                            filter: `sender_id=eq.${friendId}`
-                        }, async (payload) => {
-                            const newMsg = payload.new;
-                            if (processingMessageIds.has(newMsg.id)) return;
-                            processingMessageIds.add(newMsg.id);
+                                oldMessages.push(newMsg);
+                                renderChatMessages(chatBox, oldMessages, friendAvatar);
+                                updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
-                            oldMessages.push(newMsg);
-                            renderChatMessages(chatBox, oldMessages, friendAvatar);
-                            updateLastMessage(friendId, newMsg.content, newMsg.created_at);
-
-                            if (newMsg.receiver_id === currentUserId) {
-                                try {
-                                    await client
-                                        .from("messages")
-                                        .update({ seen: true })
-                                        .eq("id", newMsg.id);
-
-                                    const idx = oldMessages.findIndex(m => m.id === newMsg.id);
-                                    if (idx !== -1) {
-                                        oldMessages[idx].seen = true;
-                                    }
-                                    renderChatMessages(chatBox, oldMessages, friendAvatar);
-
-                                    unseenCounts[newMsg.sender_id] = 0;
-                                    updateUnseenBadge(newMsg.sender_id, 0);
-                                    scheduleMessageDeletion(newMsg.id, friendId);
-                                } catch (err) {
-                                    console.error("Error marking message as seen:", err);
-                                }
-                            }
-
-                            setTimeout(() => {
-                                processingMessageIds.delete(newMsg.id);
-                            }, 1000);
-                        })
-                        .on('postgres_changes', {
-                            event: 'UPDATE',
-                            schema: 'public',
-                            table: 'messages',
-                            filter: `sender_id=eq.${currentUserId}`
-                        }, (payload) => {
-                            const updated = payload.new;
-
-                            if (updated.deleted_at) {
-                                const idx = oldMessages.findIndex(m => m.id === updated.id);
-                                if (idx !== -1) {
-                                    oldMessages.splice(idx, 1);
-                                    renderChatMessages(chatBox, oldMessages, friendAvatar);
-                                }
-                                updateLastMessageInChatList(updated.sender_id);
-                                updateLastMessageInChatList(updated.receiver_id);
-
-                                if (currentOpenChatId !== updated.sender_id) {
-                                    updateUnseenCountForFriend(updated.sender_id);
-                                }
-                                return;
-                            }
-
-                            const idx = oldMessages.findIndex(m => m.id === updated.id);
-                            if (idx !== -1) {
-                                oldMessages[idx] = { ...oldMessages[idx], ...updated };
-                            }
-
-                            if (updated.sender_id === currentUserId && updated.seen === true) {
-                                updateMessageSeenStatus(chatBox, updated.id);
-                            }
-                        })
-                        .on('postgres_changes', {
-                            event: 'UPDATE',
-                            schema: 'public',
-                            table: 'messages',
-                            filter: `sender_id=eq.${friendId}`
-                        }, (payload) => {
-                            const updated = payload.new;
-
-                            if (updated.deleted_at) {
-                                const idx = oldMessages.findIndex(m => m.id === updated.id);
-                                if (idx !== -1) {
-                                    oldMessages.splice(idx, 1);
-                                    renderChatMessages(chatBox, oldMessages, friendAvatar);
-                                }
-                                updateLastMessageInChatList(updated.sender_id);
-                                updateLastMessageInChatList(updated.receiver_id);
-
-                                if (currentOpenChatId !== updated.sender_id) {
-                                    updateUnseenCountForFriend(updated.sender_id);
-                                }
-                                return;
-                            }
-
-                            const idx = oldMessages.findIndex(m => m.id === updated.id);
-                            if (idx !== -1) {
-                                oldMessages[idx] = { ...oldMessages[idx], ...updated };
-                            }
-
-                            if (updated.receiver_id === currentUserId && updated.seen === true) {
-                                unseenCounts[updated.sender_id] = 0;
-                                updateUnseenBadge(updated.sender_id, 0);
-                            }
-                        })
-                        .subscribe((status, err) => {
-                            if (status === 'SUBSCRIBED') {
-                                console.log(`Successfully subscribed to ${chatChannelName}`);
-                            } else if (status === 'CHANNEL_ERROR') {
-                                console.error(`Error subscribing to ${chatChannelName}:`, err);
-                            }
-                        });
-
-                    const typingChannelName = `typing:${[currentUserId, friendId].sort().join(":")}`;
-                    const typingChannel = client.channel(typingChannelName);
-
-                    typingChannel
-                        .on('broadcast', { event: 'typing' }, (payload) => {
-                            if (payload.userId === friendId) {
-                                typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
-                                setTimeout(async () => {
+                                if (newMsg.receiver_id === state.currentUserId) {
                                     try {
-                                        const { data: profile } = await client
-                                            .from("user_profiles")
-                                            .select("is_online")
-                                            .eq("user_id", friendId)
-                                            .maybeSingle();
-                                        typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
+                                        await client
+                                            .from("messages")
+                                            .update({ seen: true })
+                                            .eq("id", newMsg.id);
+
+                                        const idx = oldMessages.findIndex(m => m.id === newMsg.id);
+                                        if (idx !== -1) {
+                                            oldMessages[idx].seen = true;
+                                        }
+                                        renderChatMessages(chatBox, oldMessages, friendAvatar);
+
+                                        state.unseenCounts[newMsg.sender_id] = 0;
+                                        updateUnseenBadge(newMsg.sender_id, 0);
+                                        scheduleMessageDeletion(newMsg.id, friendId);
                                     } catch (err) {
-                                        typingIndicator.textContent = "Offline";
+                                        console.error("Error marking message as seen:", err);
                                     }
-                                }, 1500);
-                            }
-                        })
-                        .subscribe((status, err) => {
-                            if (status === 'SUBSCRIBED') {
-                                console.log(`Successfully subscribed to ${typingChannelName}`);
-                            } else if (status === 'CHANNEL_ERROR') {
-                                console.error(`Error subscribing to ${typingChannelName}:`, err);
-                            }
-                        });
+                                }
 
-                    // Fixed: Real-time subscription for status updates
+                                setTimeout(() => {
+                                    state.processingMessageIds.delete(newMsg.id);
+                                }, 1000);
+                            })
+                            .on('postgres_changes', {
+                                event: 'UPDATE',
+                                schema: 'public',
+                                table: 'messages',
+                                filter: `sender_id=eq.${state.currentUserId}`
+                            }, (payload) => {
+                                const updated = payload.new;
+
+                                if (updated.deleted_at) {
+                                    const idx = oldMessages.findIndex(m => m.id === updated.id);
+                                    if (idx !== -1) {
+                                        oldMessages.splice(idx, 1);
+                                        renderChatMessages(chatBox, oldMessages, friendAvatar);
+                                    }
+                                    updateLastMessageInChatList(updated.sender_id);
+                                    updateLastMessageInChatList(updated.receiver_id);
+
+                                    if (state.currentOpenChatId !== updated.sender_id) {
+                                        updateUnseenCountForFriend(updated.sender_id);
+                                    }
+                                    return;
+                                }
+
+                                const idx = oldMessages.findIndex(m => m.id === updated.id);
+                                if (idx !== -1) {
+                                    oldMessages[idx] = { ...oldMessages[idx], ...updated };
+                                }
+
+                                if (updated.sender_id === state.currentUserId && updated.seen === true) {
+                                    updateMessageSeenStatus(chatBox, updated.id);
+                                }
+                            })
+                            .on('postgres_changes', {
+                                event: 'UPDATE',
+                                schema: 'public',
+                                table: 'messages',
+                                filter: `sender_id=eq.${friendId}`
+                            }, (payload) => {
+                                const updated = payload.new;
+
+                                if (updated.deleted_at) {
+                                    const idx = oldMessages.findIndex(m => m.id === updated.id);
+                                    if (idx !== -1) {
+                                        oldMessages.splice(idx, 1);
+                                        renderChatMessages(chatBox, oldMessages, friendAvatar);
+                                    }
+                                    updateLastMessageInChatList(updated.sender_id);
+                                    updateLastMessageInChatList(updated.receiver_id);
+
+                                    if (state.currentOpenChatId !== updated.sender_id) {
+                                        updateUnseenCountForFriend(updated.sender_id);
+                                    }
+                                    return;
+                                }
+
+                                const idx = oldMessages.findIndex(m => m.id === updated.id);
+                                if (idx !== -1) {
+                                    oldMessages[idx] = { ...oldMessages[idx], ...updated };
+                                }
+
+                                if (updated.receiver_id === state.currentUserId && updated.seen === true) {
+                                    state.unseenCounts[updated.sender_id] = 0;
+                                    updateUnseenBadge(updated.sender_id, 0);
+                                }
+                            });
+                    });
+
+                    const typingChannelName = `typing:${[state.currentUserId, friendId].sort().join(":")}`;
+                    
+                    const typingChannel = await setupSubscriptionWithRetry(typingChannelName, async (channel) => {
+                        channel
+                            .on('broadcast', { event: 'typing' }, (payload) => {
+                                if (payload.userId === friendId) {
+                                    typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
+                                    setTimeout(async () => {
+                                        try {
+                                            const { data: profile } = await client
+                                                .from("user_profiles")
+                                                .select("is_online")
+                                                .eq("user_id", friendId)
+                                                .maybeSingle();
+                                            typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
+                                        } catch (err) {
+                                            typingIndicator.textContent = "Offline";
+                                        }
+                                    }, 1500);
+                                }
+                            });
+                    });
+
                     const statusChannelName = `user-status-${friendId}`;
-                    const statusChannel = client.channel(statusChannelName);
-
-                    statusChannel
-                        .on('postgres_changes', {
-                            event: 'UPDATE',
-                            schema: 'public',
-                            table: 'user_profiles',
-                            filter: `user_id=eq.${friendId}`
-                        }, (payload) => {
-                            console.log("Status update received:", payload);
-                            const onlineTextElt = typingIndicator;
-                            if (onlineTextElt) {
-                                const isOnline = payload.new?.is_online;
-                                onlineTextElt.textContent = isOnline ? "Online" : "Offline";
-                            }
-                        })
-                        .subscribe((status, err) => {
-                            if (status === 'SUBSCRIBED') {
-                                console.log(`Successfully subscribed to ${statusChannelName}`);
-                            } else if (status === 'CHANNEL_ERROR') {
-                                console.error(`Error subscribing to ${statusChannelName}:`, err);
-                            }
-                        });
+                    
+                    const statusChannel = await setupSubscriptionWithRetry(statusChannelName, async (channel) => {
+                        channel
+                            .on('postgres_changes', {
+                                event: 'UPDATE',
+                                schema: 'public',
+                                table: 'user_profiles',
+                                filter: `user_id=eq.${friendId}`
+                            }, (payload) => {
+                                console.log("Status update received:", payload);
+                                const onlineTextElt = typingIndicator;
+                                if (onlineTextElt) {
+                                    const isOnline = payload.new?.is_online;
+                                    onlineTextElt.textContent = isOnline ? "Online" : "Offline";
+                                }
+                            });
+                    });
 
                     return { chatChannel, typingChannel, statusChannel };
                 } catch (error) {
@@ -2571,7 +2591,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             await markMessagesAsSeen(friendId, chatBox, oldMessages, friendAvatar);
             updateUnseenBadge(friendId, 0);
-            unseenCounts[friendId] = 0;
+            state.unseenCounts[friendId] = 0;
 
             inputSafe.addEventListener("input", () => {
                 sendBtnSafe.disabled = !inputSafe.value.trim();
@@ -2581,7 +2601,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             type: "broadcast",
                             event: "typing",
                             payload: {
-                                userId: currentUserId,
+                                userId: state.currentUserId,
                                 userName: "You",
                             },
                         });
@@ -2613,7 +2633,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const backClone = backBtn.cloneNode(true);
                 backBtn.parentNode.replaceChild(backClone, backBtn);
                 backClone.addEventListener("click", async () => {
-                    currentOpenChatId = null;
+                    state.currentOpenChatId = null;
                     await deleteSeenMessagesForChat(friendId);
 
                     document.getElementById('message-notification').classList.remove("hidden");
@@ -2646,26 +2666,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function fetchMessages(friendId) {
-        if (!currentUserId || !friendId) return [];
+        if (!state.currentUserId || !friendId) return [];
 
         try {
-            const { data } = await client
+            const { data, error } = await client
                 .from("messages")
                 .select("*")
-                .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+                .or(`and(sender_id.eq.${state.currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${state.currentUserId})`)
                 .is('deleted_at', null)
                 .order("created_at", { ascending: true });
-
+            
+            if (error) throw error;
             return data || [];
         } catch (err) {
             console.error("Error in fetchMessages:", err);
+            showToast("Failed to load messages", "error");
             return [];
         }
     }
 
     function updateFriendUI(friendId) {
         try {
-            let friendData = allFriends.get(friendId);
+            let friendData = state.allFriends.get(friendId);
             if (!friendData) return;
 
             const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
@@ -2693,7 +2715,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 nameEl.textContent = friendData.user_name;
             }
 
-            if (currentOpenChatId === friendId) {
+            if (state.currentOpenChatId === friendId) {
                 const chatHeaderName = document.querySelector("#chat-header-name");
                 const chatHeaderImg = document.querySelector(".chat-header img");
                 const typingIndicator = document.querySelector("#typing-indicator");
@@ -2717,20 +2739,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     function handleNotificationRedirect() {
         try {
-            if (!currentOpenChatId && notificationData.type === 'message' && notificationData.senderId) {
+            if (!state.currentOpenChatId && state.notificationData.type === 'message' && state.notificationData.senderId) {
                 client
                     .from("user_profiles")
                     .select("user_name, profile_image_url")
-                    .eq("user_id", notificationData.senderId)
+                    .eq("user_id", state.notificationData.senderId)
                     .maybeSingle()
                     .then(({ data }) => {
                         if (data) {
-                            openChat(notificationData.senderId, data.user_name, data.profile_image_url, true);
+                            openChat(state.notificationData.senderId, data.user_name, data.profile_image_url, true);
                         }
                     });
             }
 
-            notificationData = {};
+            state.notificationData = {};
         } catch (error) {
             console.error("Error handling notification redirect:", error);
         }
@@ -2764,11 +2786,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            currentUserId = user.id;
-            console.log("Current user ID:", currentUserId);
+            state.currentUserId = user.id;
+            console.log("Current user ID:", state.currentUserId);
 
             // Ensure user exists in all necessary tables
-            await ensureUserProfileExists(currentUserId);
+            await ensureUserProfileExists(state.currentUserId);
             await ensureCurrentUserInPrivateUsersTable();
 
             // Set user online status
@@ -2791,14 +2813,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             await checkAndShowAdminRequestPopup();
 
             // Handle notification redirects
-            if (Object.keys(notificationData).length > 0) {
+            if (Object.keys(state.notificationData).length > 0) {
                 handleNotificationRedirect();
             }
 
-            // Open chat from URL if present
             openChatFromUrl();
 
-            // Request notification permissions
             await requestNotificationPermission();
 
             console.log("App initialized successfully");
@@ -2812,228 +2832,194 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function setupRealtimeSubscriptions() {
         try {
             // Global messages channel
-            const globalMessagesChannel = client.channel('global-messages');
+            await setupSubscriptionWithRetry('global-messages', async (channel) => {
+                channel
+                    .on('postgres_changes', {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `receiver_id=eq.${state.currentUserId}`
+                    }, async (payload) => {
+                        const newMsg = payload.new;
+                        if (!newMsg || !state.currentUserId) return;
 
-            globalMessagesChannel
-                .on('postgres_changes', {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'messages',
-                    filter: `receiver_id=eq.${currentUserId}`
-                }, async (payload) => {
-                    const newMsg = payload.new;
-                    if (!newMsg || !currentUserId) return;
+                        const senderId = newMsg.sender_id;
 
-                    const senderId = newMsg.sender_id;
-
-                    if (currentOpenChatId !== senderId) {
-                        updateUnseenCountForFriend(senderId);
-                        // Fixed: Only update last message for the specific friend
-                        updateLastMessage(senderId, newMsg.content, newMsg.created_at);
-
-                        try {
-                            const { data: senderProfile } = await client
-                                .from("user_profiles")
-                                .select("user_name, profile_image_url")
-                                .eq("user_id", senderId)
-                                .maybeSingle();
-
-                            const senderName = senderProfile?.user_name || "New Message";
-                            const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
-
-                            showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
-
-                            if (Notification.permission === "granted") {
-                                const notif = new Notification(senderName, {
-                                    body: newMsg.content,
-                                    icon: senderAvatar,
-                                    data: { type: 'message', senderId, senderName }
-                                });
-
-                                notif.addEventListener('click', () => {
-                                    window.focus();
-                                    openSpecificChat(senderId);
-                                    notif.close();
-                                });
-                            }
-                        } catch (err) {
-                            console.warn("Error sending message notification:", err);
-                        }
-                    }
-                })
-                .on('postgres_changes', {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'messages',
-                    filter: `receiver_id=eq.${currentUserId}`
-                }, (payload) => {
-                    const updatedMsg = payload.new;
-                    if (!updatedMsg || !currentUserId) return;
-
-                    if (updatedMsg.deleted_at) {
-                        // Fixed: Only update last message for the specific friends involved
-                        updateLastMessageInChatList(updatedMsg.sender_id);
-                        updateLastMessageInChatList(updatedMsg.receiver_id);
-
-                        if (currentOpenChatId !== updatedMsg.sender_id) {
-                            updateUnseenCountForFriend(updatedMsg.sender_id);
-                        }
-                        return;
-                    }
-
-                    if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
-                        const senderId = updatedMsg.sender_id;
-                        if (currentOpenChatId !== senderId) {
+                        if (state.currentOpenChatId !== senderId) {
                             updateUnseenCountForFriend(senderId);
+                            updateLastMessage(senderId, newMsg.content, newMsg.created_at);
+
+                            try {
+                                const { data: senderProfile } = await client
+                                    .from("user_profiles")
+                                    .select("user_name, profile_image_url")
+                                    .eq("user_id", senderId)
+                                    .maybeSingle();
+
+                                const senderName = senderProfile?.user_name || "New Message";
+                                const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
+
+                                showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
+
+                                if (Notification.permission === "granted") {
+                                    const notif = new Notification(senderName, {
+                                        body: newMsg.content,
+                                        icon: senderAvatar,
+                                        data: { type: 'message', senderId, senderName }
+                                    });
+
+                                    notif.addEventListener('click', () => {
+                                        window.focus();
+                                        openSpecificChat(senderId);
+                                        notif.close();
+                                    });
+                                }
+                            } catch (err) {
+                                console.warn("Error sending message notification:", err);
+                            }
                         }
-                    }
-                })
-                .subscribe((status, err) => {
-                    if (status === 'SUBSCRIBED') {
-                        console.log('Successfully subscribed to global messages');
-                    } else if (status === 'CHANNEL_ERROR') {
-                        console.error('Error subscribing to global messages:', err);
-                    }
-                });
+                    })
+                    .on('postgres_changes', {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `receiver_id=eq.${state.currentUserId}`
+                    }, (payload) => {
+                        const updatedMsg = payload.new;
+                        if (!updatedMsg || !state.currentUserId) return;
+
+                        if (updatedMsg.deleted_at) {
+                            updateLastMessageInChatList(updatedMsg.sender_id);
+                            updateLastMessageInChatList(updatedMsg.receiver_id);
+
+                            if (state.currentOpenChatId !== updatedMsg.sender_id) {
+                                updateUnseenCountForFriend(updatedMsg.sender_id);
+                            }
+                            return;
+                        }
+
+                        if (updatedMsg.receiver_id === state.currentUserId && updatedMsg.seen === true) {
+                            const senderId = updatedMsg.sender_id;
+                            if (state.currentOpenChatId !== senderId) {
+                                updateUnseenCountForFriend(senderId);
+                            }
+                        }
+                    });
+            });
 
             // Friend requests channel
-            const friendRequestsChannel = client.channel(`friend-requests-${currentUserId}`);
+            await setupSubscriptionWithRetry(`friend-requests-${state.currentUserId}`, async (channel) => {
+                channel
+                    .on('postgres_changes', {
+                        event: '*',
+                        schema: 'public',
+                        table: 'requests',
+                        filter: `receiver_id=eq.${state.currentUserId}`
+                    }, async (payload) => {
+                        console.log("Friend request event received:", payload);
+                        const { eventType, new: newRecord } = payload;
 
-            friendRequestsChannel
-                .on('postgres_changes', {
-                    event: '*',
-                    schema: 'public',
-                    table: 'requests',
-                    filter: `receiver_id=eq.${currentUserId}`
-                }, async (payload) => {
-                    console.log("Friend request event received:", payload);
-                    const { eventType, new: newRecord } = payload;
+                        if (eventType === 'INSERT' && newRecord.status === "pending") {
+                            try {
+                                const { data: senderProfile } = await client
+                                    .from("user_profiles")
+                                    .select("user_name, profile_image_url")
+                                    .eq("user_id", newRecord.sender_id)
+                                    .maybeSingle();
 
-                    if (eventType === 'INSERT' && newRecord.status === "pending") {
-                        try {
-                            const { data: senderProfile } = await client
-                                .from("user_profiles")
-                                .select("user_name, profile_image_url")
-                                .eq("user_id", newRecord.sender_id)
-                                .maybeSingle();
+                                const senderName = senderProfile?.user_name || "Someone";
+                                const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
 
-                            const senderName = senderProfile?.user_name || "Someone";
-                            const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
-
-                            // Modified to show friend requests popup on click
-                            showTopRightPopup(`${senderName} sent you a friend request`, "info", senderAvatar, () => {
-                                document.getElementById("friend-requests-popup").classList.add("show");
-                            });
-
-                            if (Notification.permission === "granted") {
-                                const notif = new Notification("Friend Request 👥", {
-                                    body: `${senderName} sent you a request`,
-                                    icon: senderAvatar,
-                                    data: { type: 'friend_request', senderId: newRecord.sender_id }
-                                });
-
-                                // Modified to show friend requests popup on click
-                                notif.addEventListener('click', () => {
-                                    window.focus();
+                                showTopRightPopup(`${senderName} sent you a friend request`, "info", senderAvatar, () => {
                                     document.getElementById("friend-requests-popup").classList.add("show");
-                                    notif.close();
                                 });
-                            }
-                        } catch (err) {
-                            console.error("Error fetching sender profile for notification:", err);
-                        }
 
-                        fetchFriendRequests();
-                    } else if (eventType === 'UPDATE') {
-                        if (newRecord.status === "accepted") {
-                            if (newRecord.sender_id === currentUserId) {
-                                showTopRightPopup("Your friend request was accepted!", "success");
-                            } else {
-                                showTopRightPopup("You accepted a friend request!", "success");
+                                if (Notification.permission === "granted") {
+                                    const notif = new Notification("Friend Request 👥", {
+                                        body: `${senderName} sent you a request`,
+                                        icon: senderAvatar,
+                                        data: { type: 'friend_request', senderId: newRecord.sender_id }
+                                    });
+
+                                    notif.addEventListener('click', () => {
+                                        window.focus();
+                                        document.getElementById("friend-requests-popup").classList.add("show");
+                                        notif.close();
+                                    });
+                                }
+                            } catch (err) {
+                                console.error("Error fetching sender profile for notification:", err);
                             }
-                            fetchFriends();
-                        } else if (newRecord.status === "rejected") {
-                            if (newRecord.sender_id === currentUserId) {
-                                showTopRightPopup("Your friend request was rejected", "warning");
-                            } else {
-                                showTopRightPopup("You rejected a friend request", "info");
+
+                            fetchFriendRequests();
+                        } else if (eventType === 'UPDATE') {
+                            if (newRecord.status === "accepted") {
+                                if (newRecord.sender_id === state.currentUserId) {
+                                    showTopRightPopup("Your friend request was accepted!", "success");
+                                } else {
+                                    showTopRightPopup("You accepted a friend request!", "success");
+                                }
+                                fetchFriends();
+                            } else if (newRecord.status === "rejected") {
+                                if (newRecord.sender_id === state.currentUserId) {
+                                    showTopRightPopup("Your friend request was rejected", "warning");
+                                } else {
+                                    showTopRightPopup("You rejected a friend request", "info");
+                                }
                             }
+                            fetchFriendRequests();
                         }
-                        fetchFriendRequests();
-                    }
-                })
-                .subscribe((status, err) => {
-                    if (status === 'SUBSCRIBED') {
-                        console.log('Successfully subscribed to friend requests');
-                        fetchFriendRequests();
-                    } else if (status === 'CHANNEL_ERROR') {
-                        console.error('Error subscribing to friend requests:', err);
-                    }
-                });
+                    });
+            });
 
             // Friends updates channel
-            const friendsUpdatesChannel = client.channel('friends-updates');
+            await setupSubscriptionWithRetry('friends-updates', async (channel) => {
+                channel
+                    .on('postgres_changes', {
+                        event: '*',
+                        schema: 'public',
+                        table: 'friends'
+                    }, (payload) => {
+                        console.log("Friends update event received:", payload);
+                        const { eventType, new: newRecord } = payload;
 
-            friendsUpdatesChannel
-                .on('postgres_changes', {
-                    event: '*',
-                    schema: 'public',
-                    table: 'friends'
-                }, (payload) => {
-                    console.log("Friends update event received:", payload);
-                    const { eventType, new: newRecord } = payload;
+                        const isRelevant = newRecord && (
+                            newRecord.user1_id === state.currentUserId ||
+                            newRecord.user2_id === state.currentUserId
+                        );
 
-                    const isRelevant = newRecord && (
-                        newRecord.user1_id === currentUserId ||
-                        newRecord.user2_id === currentUserId
-                    );
+                        if (!isRelevant) return;
 
-                    if (!isRelevant) return;
-
-                    if (eventType === 'INSERT' || eventType === 'DELETE') {
-                        fetchFriends();
-                    }
-                })
-                .subscribe((status, err) => {
-                    if (status === 'SUBSCRIBED') {
-                        console.log('Successfully subscribed to friends updates');
-                    } else if (status === 'CHANNEL_ERROR') {
-                        console.error('Error subscribing to friends updates:', err);
-                    }
-                });
+                        if (eventType === 'INSERT' || eventType === 'DELETE') {
+                            fetchFriends();
+                        }
+                    });
+            });
 
             // User profiles updates channel
-            const userProfilesUpdatesChannel = client.channel('user-profiles-updates');
+            await setupSubscriptionWithRetry('user-profiles-updates', async (channel) => {
+                channel
+                    .on('postgres_changes', {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'user_profiles'
+                    }, (payload) => {
+                        const { new: newRecord } = payload;
 
-            userProfilesUpdatesChannel
-                .on('postgres_changes', {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'user_profiles'
-                }, (payload) => {
-                    const { new: newRecord } = payload;
+                        if (state.allFriends.has(newRecord.user_id)) {
+                            state.allFriends.set(newRecord.user_id, {
+                                ...state.allFriends.get(newRecord.user_id),
+                                ...newRecord
+                            });
+                            updateFriendUI(newRecord.user_id);
+                        }
 
-                    if (allFriends.has(newRecord.user_id)) {
-                        allFriends.set(newRecord.user_id, {
-                            ...allFriends.get(newRecord.user_id),
-                            ...newRecord
-                        });
-                        updateFriendUI(newRecord.user_id);
-                    }
-
-                    // Fixed: Update current user's status UI if it's the current user
-                    if (newRecord.user_id === currentUserId) {
-                        updateCurrentUserStatusUI(newRecord.is_online);
-                        fetchCurrentUserAvatar();
-                    }
-                })
-                .subscribe((status, err) => {
-                    if (status === 'SUBSCRIBED') {
-                        console.log('Successfully subscribed to user profiles updates');
-                    } else if (status === 'CHANNEL_ERROR') {
-                        console.error('Error subscribing to user profiles updates:', err);
-                    }
-                });
+                        if (newRecord.user_id === state.currentUserId) {
+                            updateCurrentUserStatusUI(newRecord.is_online);
+                            fetchCurrentUserAvatar();
+                        }
+                    });
+            });
 
             console.log("All real-time subscriptions set up successfully");
         } catch (error) {
