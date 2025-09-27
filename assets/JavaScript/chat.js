@@ -140,11 +140,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (error) {
                 console.error("Error creating user profile:", error);
-                if (error.code === '42501') {
-                    showToast("Permission denied. Please check your database policies.", "error");
-                } else {
-                    showToast("Failed to create user profile.", "error");
-                }
+                showToast("Failed to create user profile.", "error");
                 return false;
             }
 
