@@ -26,13 +26,11 @@ function showPopup(message, type = "info") {
 
 /* ------------------ COMMON FUNCTIONS FOR FORM VALIDATION ------------------ */
 
-// Function to check if all given input fields are filled
 function areInputsFilled(inputs) {
     const inputsArray = Array.isArray(inputs) ? inputs : Array.from(inputs);
     return inputsArray.every(input => input.value.trim() !== '');
 }
 
-// Function to handle the button's disabled state based on input
 function handleButtonState(inputs, button) {
     if (button) {
         button.disabled = !areInputsFilled(inputs);
@@ -56,7 +54,7 @@ async function signUp() {
         });
 
         if (error) {
-            showPopup("Error signing up: " + error.message);
+            showPopup("Error signing up: " + error.message, "error");
             return;
         }
 
@@ -70,24 +68,21 @@ async function signUp() {
                 }], { onConflict: "email" });
 
             if (upsertError) {
-                showPopup("Error saving user in private_users: " + upsertError.message);
+                showPopup("Error saving user in private_users: " + upsertError.message, "error");
                 return;
             }
         }
 
-        window.location.href = 'verify';
+        window.location.href = 'verify.html';
     } catch (err) {
-        showPopup("An unexpected error occurred during sign up: " + err.message);
+        showPopup("Unexpected error during sign up: " + err.message, "error");
     }
 }
 
 const signUpBtn = document.querySelector('.signUpBtn');
 const signUpInputs = document.querySelectorAll('#name, #email, #password');
-
-// Initially disable the button
 handleButtonState(signUpInputs, signUpBtn);
 
-// Add event listeners to input fields to check for changes
 signUpInputs.forEach(input => {
     input.addEventListener('input', () => handleButtonState(signUpInputs, signUpBtn));
 });
@@ -103,7 +98,7 @@ async function checkProfileAndRedirect() {
     try {
         const { data: { user }, error: userError } = await client.auth.getUser();
         if (userError || !user) {
-            showPopup("User not logged in.");
+            showPopup("User not logged in.", "error");
             return;
         }
 
@@ -114,17 +109,17 @@ async function checkProfileAndRedirect() {
             .maybeSingle();
 
         if (profileError) {
-            showPopup("Error checking profile: " + profileError.message);
+            showPopup("Error checking profile: " + profileError.message, "error");
             return;
         }
 
         if (!profile) {
-            window.location.href = "setupProfile";
+            window.location.href = "setupProfile.html";
         } else {
-            window.location.href = "dashboard";
+            window.location.href = "dashboard.html";
         }
     } catch (err) {
-        showPopup("An unexpected error occurred: " + err.message);
+        showPopup("Unexpected error: " + err.message, "error");
     }
 }
 
@@ -140,22 +135,19 @@ async function login() {
         });
 
         if (error) {
-            showPopup("Login failed: " + error.message);
+            showPopup("Login failed: " + error.message, "error");
         } else {
             await checkProfileAndRedirect();
         }
     } catch (err) {
-        showPopup("An unexpected error occurred during login: " + err.message);
+        showPopup("Unexpected error during login: " + err.message, "error");
     }
 }
 
 const loginBtn = document.querySelector('.signInBtn');
 const loginInputs = document.querySelectorAll('#loginEmail, #loginPassword');
-
-// Initially disable the button
 handleButtonState(loginInputs, loginBtn);
 
-// Add event listeners to input fields to check for changes
 loginInputs.forEach(input => {
     input.addEventListener('input', () => handleButtonState(loginInputs, loginBtn));
 });
@@ -174,7 +166,7 @@ async function handleGoogleAuth(redirectUrl) {
             options: { redirectTo: redirectUrl }
         });
     } catch (err) {
-        showPopup("Google authentication failed: " + err.message);
+        showPopup("Google authentication failed: " + err.message, "error");
     }
 }
 
@@ -198,13 +190,9 @@ const avatarInput = document.getElementById("avatar");
 const avatarPreview = document.getElementById("avatarPreview");
 let avatarFile = null;
 
-// New elements for profile setup
 const profileSetupInputs = document.querySelectorAll('#name, #username, #bio');
-
-// Initially disable the button
 handleButtonState(profileSetupInputs, setUpBtn);
 
-// Add event listeners to input fields to check for changes
 profileSetupInputs.forEach(input => {
     input.addEventListener('input', () => handleButtonState(profileSetupInputs, setUpBtn));
 });
@@ -225,40 +213,37 @@ async function setupProfile() {
         const user_name = document.getElementById("username").value.trim();
         const bio = document.getElementById("bio").value.trim();
 
-        // Validate required fields
         if (!full_name) {
             showPopup("Full name is required", "error");
             return;
         }
-
         if (!user_name) {
             showPopup("Username is required", "error");
             return;
         }
 
-        // get logged in user
         const { data: { user }, error: userError } = await client.auth.getUser();
         if (userError || !user) {
-            showPopup("User not logged in.");
+            showPopup("User not logged in.", "error");
             return;
         }
 
-        // upsert into private_users (optional, you had this in your code)
+        // upsert into private_users
         const { error: upsertError } = await client
             .from("private_users")
             .upsert([{
                 id: user.id,
-                name: user.user_metadata?.name || full_name || "",
+                name: user.user_metadata?.name || full_name,
                 email: user.email
             }], { onConflict: "email" });
 
         if (upsertError) {
-            showPopup("Error saving user in private_users: " + upsertError.message);
+            showPopup("Error saving user in private_users: " + upsertError.message, "error");
             return;
         }
 
         // handle avatar upload
-        let avatar_url = DEFAULT_AVATAR_URL; // Use default avatar as fallback
+        let avatar_url = DEFAULT_AVATAR_URL;
 
         if (avatarFile) {
             const fileName = `public/${user.id}-${Date.now()}-${avatarFile.name}`;
@@ -267,7 +252,7 @@ async function setupProfile() {
                 .upload(fileName, avatarFile, { cacheControl: '3600', upsert: true });
 
             if (uploadError) {
-                showPopup("Error uploading avatar: " + uploadError.message);
+                showPopup("Error uploading avatar: " + uploadError.message, "error");
                 return;
             }
 
@@ -275,7 +260,7 @@ async function setupProfile() {
             avatar_url = urlData.publicUrl;
         }
 
-        // Prepare profile data
+        // profile upsert
         const profileData = {
             user_id: user.id,
             full_name,
@@ -284,25 +269,21 @@ async function setupProfile() {
             profile_image_url: avatar_url
         };
 
-        console.log("Inserting profile data:", profileData);
-
         const { error: insertProfileError } = await client
             .from("user_profiles")
-            .insert([profileData]);
+            .upsert([profileData], { onConflict: "user_id" });
 
         if (insertProfileError) {
-            showPopup("Error saving profile: " + insertProfileError.message);
+            showPopup("Error saving profile: " + insertProfileError.message, "error");
             return;
         }
 
         showPopup("Profile saved successfully!", "success");
         setTimeout(() => {
-            window.location.href = "dashboard";
+            window.location.href = "dashboard.html";
         }, 1500);
     } catch (err) {
-        console.log(err.message);
-        
-        showPopup("An unexpected error occurred: " + err.message);
+        showPopup("Unexpected error: " + err.message, "error");
     } finally {
         if (setUpBtn) {
             setUpBtn.innerHTML = 'Set Up Profile';
