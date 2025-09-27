@@ -300,7 +300,7 @@ async function setupProfile() {
             window.location.href = "dashboard";
         }, 1500);
     } catch (err) {
-        console.log(err);
+        console.log(err.message);
         
         showPopup("An unexpected error occurred: " + err.message);
     } finally {
