@@ -1,13 +1,6 @@
 import { client } from "../../supabase.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
-    const AI_ASSISTANT_USERNAME = "AI_Assistant";
-    const AI_ASSISTANT_BIO = "I'm your AI assistant! Feel free to ask me anything.";
-    const AI_ASSISTANT_AVATAR = "./assets/icon/ai-avatar.png";
-    const GEMINI_API_KEY = "AIzaSyCVqoPntSjTMdrbkhaulp2jhE_i7vootUk";
-    const AI_ASSISTANT_ID = "00000000-0000-0000-0000-000000000001";
-    const AI_ASSISTANT_EMAIL = "ai-assistant@chatapp.com";
-
     const DEFAULT_PROFILE_IMG = "./assets/icon/download.jpeg";
     const ADMIN_USERNAME = "Saim_Malik88";
     const ADMIN_REQUEST_KEY = "adminRequestShown";
@@ -22,7 +15,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     let deletionTimeouts = {};
     let processingMessageIds = new Set();
     let allFriends = new Map();
-    let aiAssistantInitialized = false;
 
     // Helper function for retrying database operations
     async function withRetry(fn, maxRetries = 3, initialDelay = 500) {
@@ -49,148 +41,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         throw lastError;
     }
 
-    // Add this function to explicitly verify and create the AI assistant in the users table
-    async function verifyAndCreateAIAssistant() {
-        try {
-            // Check if AI assistant exists in users table
-            const { data: aiUser, error: checkError } = await client
-                .from("users")
-                .select("id")
-                .eq("id", AI_ASSISTANT_ID)
-                .maybeSingle();
-
-            if (checkError) {
-                console.error("Error checking AI assistant in users table:", checkError);
-                return false;
-            }
-
-            // If AI assistant doesn't exist, create it
-            if (!aiUser) {
-                console.log("AI assistant not found in users table, creating...");
-                const { error: insertError } = await client
-                    .from("users")
-                    .insert([{
-                        id: AI_ASSISTANT_ID,
-                        name: AI_ASSISTANT_USERNAME,
-                        email: AI_ASSISTANT_EMAIL
-                    }]);
-
-                if (insertError) {
-                    console.error("Error creating AI assistant in users table:", insertError);
-                    return false;
-                }
-
-                // Verify the AI assistant was actually created
-                const { data: verifyUser, error: verifyError } = await client
-                    .from("users")
-                    .select("id")
-                    .eq("id", AI_ASSISTANT_ID)
-                    .maybeSingle();
-
-                if (verifyError || !verifyUser) {
-                    console.error("AI assistant creation verification failed");
-                    return false;
-                }
-
-                console.log("AI assistant created in users table");
-            } else {
-                console.log("AI assistant already exists in users table");
-            }
-
-            return true;
-        } catch (err) {
-            console.error("Error in verifyAndCreateAIAssistant:", err);
-            return false;
-        }
-    }
-
-    // Initialize AI assistant
-    async function initializeAIAssistant() {
-        if (aiAssistantInitialized) return true;
-        showLoading("Setting up AI Assistant...");
-
-        try {
-            console.log("Initializing AI assistant...");
-
-            // First verify/create in users table
-            const userCreated = await verifyAndCreateAIAssistant();
-            if (!userCreated) {
-                throw new Error("Failed to create AI assistant in users table");
-            }
-
-            // Then check if AI assistant profile exists
-            const { data: existingProfile, error: fetchError } = await client
-                .from("user_profiles")
-                .select("user_id")
-                .eq("user_id", AI_ASSISTANT_ID)
-                .maybeSingle();
-
-            if (fetchError) {
-                console.error("Error checking AI assistant profile:", fetchError);
-                throw fetchError;
-            }
-
-            // If profile doesn't exist, create it
-            if (!existingProfile) {
-                console.log("AI assistant profile not found, creating...");
-                const { error: insertError } = await client
-                    .from("user_profiles")
-                    .insert({
-                        user_id: AI_ASSISTANT_ID,
-                        user_name: AI_ASSISTANT_USERNAME,
-                        profile_image_url: AI_ASSISTANT_AVATAR,
-                        bio: AI_ASSISTANT_BIO,
-                        is_online: true
-                    });
-
-                if (insertError) {
-                    console.error("Error creating AI assistant profile:", insertError);
-                    throw insertError;
-                }
-                console.log("AI assistant profile created successfully");
-            } else {
-                // Update existing profile
-                console.log("AI assistant profile already exists, updating...");
-                const { error: updateError } = await client
-                    .from("user_profiles")
-                    .update({
-                        user_name: AI_ASSISTANT_USERNAME,
-                        profile_image_url: AI_ASSISTANT_AVATAR,
-                        bio: AI_ASSISTANT_BIO,
-                        is_online: true
-                    })
-                    .eq("user_id", AI_ASSISTANT_ID);
-
-                if (updateError) {
-                    console.error("Error updating AI assistant profile:", updateError);
-                    throw updateError;
-                }
-                console.log("AI assistant profile updated successfully");
-            }
-
-            console.log("AI assistant initialized successfully");
-            aiAssistantInitialized = true;
-            return true;
-        } catch (err) {
-            console.error("Error initializing AI assistant:", err);
-            return false;
-        } finally {
-            hideLoading();
-        }
-    }
-
     // Ensure user exists in users table
     async function ensureUserExists(userId) {
         return withRetry(async () => {
-            // Special handling for AI assistant
-            if (userId === AI_ASSISTANT_ID) {
-                const success = await verifyAndCreateAIAssistant();
-                if (!success) {
-                    throw new Error("Failed to verify/create AI assistant");
-                }
-                return true;
-            }
-
             // Check if user exists
             const { data: existingUser, error: checkError } = await client
                 .from("users")
@@ -261,30 +114,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Insert message function with proper user existence checks
     async function insertMessage(senderId, receiverId, content) {
         try {
-            // Special handling for AI assistant
-            if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
-                // Use a more robust approach to ensure AI assistant exists
-                let aiVerified = false;
-                let attempts = 0;
-                const maxAttempts = 5;
-
-                while (!aiVerified && attempts < maxAttempts) {
-                    attempts++;
-                    aiVerified = await verifyAndCreateAIAssistant();
-
-                    if (!aiVerified) {
-                        console.log(`AI assistant verification failed (attempt ${attempts}/${maxAttempts}), retrying...`);
-                        // Wait before retrying
-                        await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
-                    }
-                }
-
-                if (!aiVerified) {
-                    console.error("Failed to verify/create AI assistant after multiple attempts");
-                    return false;
-                }
-            }
-
             // Ensure both users exist in the users table
             await ensureUserExists(senderId);
             await ensureUserExists(receiverId);
@@ -328,11 +157,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     // If it's a foreign key error, try to ensure the users exist again and retry
                     if (error.code === '23503') {
                         console.error("Foreign key error, retrying after ensuring users exist");
-
-                        // Special handling for AI assistant
-                        if (senderId === AI_ASSISTANT_ID || receiverId === AI_ASSISTANT_ID) {
-                            await verifyAndCreateAIAssistant();
-                        }
 
                         await ensureUserExists(senderId);
                         await ensureUserExists(receiverId);
@@ -396,31 +220,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Initialize app with proper AI assistant setup
+    // Initialize app
     try {
-        // First, ensure AI assistant is initialized before anything else
         console.log("Starting application initialization...");
-        
-        let aiInitialized = false;
-        let initAttempts = 0;
-        const maxInitAttempts = 5;
-        
-        while (!aiInitialized && initAttempts < maxInitAttempts) {
-            initAttempts++;
-            aiInitialized = await initializeAIAssistant();
-            
-            if (!aiInitialized) {
-                console.log(`AI assistant initialization failed (attempt ${initAttempts}/${maxInitAttempts}), retrying...`);
-                // Wait before retrying
-                await new Promise(resolve => setTimeout(resolve, 2000 * initAttempts));
-            }
-        }
-        
-        if (!aiInitialized) {
-            console.error("Critical error: Failed to initialize AI assistant after multiple attempts");
-            showToast("Failed to initialize application. Please refresh the page.", "error");
-            return;
-        }
 
         // Check and fix foreign key constraints
         await checkAndFixForeignKeys();
@@ -458,19 +260,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 try {
                                     let senderName, senderAvatar;
 
-                                    if (senderId === AI_ASSISTANT_ID) {
-                                        senderName = AI_ASSISTANT_USERNAME;
-                                        senderAvatar = AI_ASSISTANT_AVATAR;
-                                    } else {
-                                        const { data: senderProfile } = await client
-                                            .from("user_profiles")
-                                            .select("user_name, profile_image_url")
-                                            .eq("user_id", senderId)
-                                            .maybeSingle();
+                                    const { data: senderProfile } = await client
+                                        .from("user_profiles")
+                                        .select("user_name, profile_image_url")
+                                        .eq("user_id", senderId)
+                                        .maybeSingle();
 
-                                        senderName = senderProfile?.user_name || "New Message";
-                                        senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
-                                    }
+                                    senderName = senderProfile?.user_name || "New Message";
+                                    senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
 
                                     showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
 
@@ -1033,9 +830,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             await setUserOnlineStatus(true);
 
-            // Add AI assistant as friend for new users
-            await addAIAssistantAsFriend();
-
             // Check if we need to show admin friend request popup
             await checkAndShowAdminRequestPopup();
 
@@ -1531,40 +1325,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                 f.user1_id === currentUserId ? f.user2_id : f.user1_id
             ))];
 
-            if (!friendIds.includes(AI_ASSISTANT_ID)) {
-                friendIds.push(AI_ASSISTANT_ID);
-            }
-
             const { data: profiles } = await client
                 .from("user_profiles")
                 .select("user_id, user_name, profile_image_url, is_online")
-                .in("user_id", friendIds.filter(id => id !== AI_ASSISTANT_ID));
+                .in("user_id", friendIds);
 
             allFriends.clear();
             (profiles || []).forEach(p => {
                 allFriends.set(p.user_id, p);
             });
 
-            allFriends.set(AI_ASSISTANT_ID, {
-                user_id: AI_ASSISTANT_ID,
-                user_name: AI_ASSISTANT_USERNAME,
-                profile_image_url: AI_ASSISTANT_AVATAR,
-                is_online: true
-            });
-
             const friendDataPromises = friendIds.map(async (friendId) => {
                 let profile = allFriends.get(friendId) || {};
                 let friendName, avatarUrl, isOnline;
 
-                if (friendId === AI_ASSISTANT_ID) {
-                    friendName = AI_ASSISTANT_USERNAME;
-                    avatarUrl = AI_ASSISTANT_AVATAR;
-                    isOnline = true;
-                } else {
-                    friendName = profile.user_name || "Unknown";
-                    avatarUrl = profile.profile_image_url || DEFAULT_PROFILE_IMG;
-                    isOnline = profile.is_online || false;
-                }
+                friendName = profile.user_name || "Unknown";
+                avatarUrl = profile.profile_image_url || DEFAULT_PROFILE_IMG;
+                isOnline = profile.is_online || false;
 
                 const { data: lastMsgData } = await client
                     .from("messages")
@@ -2497,31 +2274,25 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.getElementById("user-modal-status").textContent = "Checking status...";
             document.getElementById("user-modal-status").className = "user-modal-status";
 
-            if (userId === AI_ASSISTANT_ID) {
-                document.getElementById("user-modal-bio").textContent = AI_ASSISTANT_BIO;
-                document.getElementById("user-modal-status").textContent = "Online";
-                document.getElementById("user-modal-status").className = "user-modal-status online";
-            } else {
-                getUserProfile(userId).then(profile => {
-                    if (profile) {
-                        document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
-                        const statusElement = document.getElementById("user-modal-status");
-                        statusElement.textContent = profile.is_online ? "Online" : "Offline";
-                        statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
-                    } else {
-                        document.getElementById("user-modal-bio").textContent = "No bio available.";
-                        const statusElement = document.getElementById("user-modal-status");
-                        statusElement.textContent = "Offline";
-                        statusElement.className = "user-modal-status offline";
-                    }
-                }).catch(err => {
-                    console.error("Error fetching user profile:", err);
-                    document.getElementById("user-modal-bio").textContent = "Error loading bio.";
+            getUserProfile(userId).then(profile => {
+                if (profile) {
+                    document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
+                    const statusElement = document.getElementById("user-modal-status");
+                    statusElement.textContent = profile.is_online ? "Online" : "Offline";
+                    statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
+                } else {
+                    document.getElementById("user-modal-bio").textContent = "No bio available.";
                     const statusElement = document.getElementById("user-modal-status");
                     statusElement.textContent = "Offline";
                     statusElement.className = "user-modal-status offline";
-                });
-            }
+                }
+            }).catch(err => {
+                console.error("Error fetching user profile:", err);
+                document.getElementById("user-modal-bio").textContent = "Error loading bio.";
+                const statusElement = document.getElementById("user-modal-status");
+                statusElement.textContent = "Offline";
+                statusElement.className = "user-modal-status offline";
+            });
 
             showModal("user-modal");
 
@@ -2540,15 +2311,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Get user profile data
     async function getUserProfile(userId) {
-        if (userId === AI_ASSISTANT_ID) {
-            return {
-                user_name: AI_ASSISTANT_USERNAME,
-                profile_image_url: AI_ASSISTANT_AVATAR,
-                bio: AI_ASSISTANT_BIO,
-                is_online: true
-            };
-        }
-
         try {
             const { data, error } = await client
                 .from("user_profiles")
@@ -2651,36 +2413,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function checkAndFixForeignKeys() {
         try {
             console.log("Checking foreign key constraints...");
-            
-            // Check if AI assistant exists in users table
-            const { data: aiUser, error: aiError } = await client
-                .from("users")
-                .select("id")
-                .eq("id", AI_ASSISTANT_ID)
-                .maybeSingle();
-                
-            if (aiError) {
-                console.error("Error checking AI assistant:", aiError);
-                return false;
-            }
-            
-            if (!aiUser) {
-                console.log("AI assistant not found in users table, creating...");
-                const { error: insertError } = await client
-                    .from("users")
-                    .insert([{
-                        id: AI_ASSISTANT_ID,
-                        name: AI_ASSISTANT_USERNAME,
-                        email: AI_ASSISTANT_EMAIL
-                    }]);
-
-                if (insertError) {
-                    console.error("Error creating AI assistant:", insertError);
-                    return false;
-                }
-                console.log("AI assistant created in users table");
-            }
-            
             return true;
         } catch (err) {
             console.error("Error in checkAndFixForeignKeys:", err);
@@ -2690,13 +2422,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Get user profile for chat
     async function getUserProfileForChat(userId) {
-        if (userId === AI_ASSISTANT_ID) {
-            return {
-                user_name: AI_ASSISTANT_USERNAME,
-                profile_image_url: AI_ASSISTANT_AVATAR
-            };
-        }
-
         try {
             const { data, error } = await client
                 .from("user_profiles")
@@ -2764,22 +2489,15 @@ document.addEventListener("DOMContentLoaded", async () => {
             const friendId = urlParams.get('chat');
 
             if (friendId && currentUserId) {
-                if (friendId === AI_ASSISTANT_ID) {
-                    openSpecificChat(friendId, {
-                        user_name: AI_ASSISTANT_USERNAME,
-                        profile_image_url: AI_ASSISTANT_AVATAR
+                client.from("user_profiles")
+                    .select("user_name, profile_image_url")
+                    .eq("user_id", friendId)
+                    .maybeSingle()
+                    .then(({ data, error }) => {
+                        if (!error && data) {
+                            openSpecificChat(friendId, data);
+                        }
                     });
-                } else {
-                    client.from("user_profiles")
-                        .select("user_name, profile_image_url")
-                        .eq("user_id", friendId)
-                        .maybeSingle()
-                        .then(({ data, error }) => {
-                            if (!error && data) {
-                                openSpecificChat(friendId, data);
-                            }
-                        });
-                }
             }
         } catch (error) {
             console.error("Error opening chat from URL:", error);
@@ -2790,14 +2508,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.openChatWithUser = async function (userId) {
         try {
             if (!currentUserId) return;
-
-            if (userId === AI_ASSISTANT_ID) {
-                openSpecificChat(userId, {
-                    user_name: AI_ASSISTANT_USERNAME,
-                    profile_image_url: AI_ASSISTANT_AVATAR
-                });
-                return;
-            }
 
             const { data: profile, error } = await client
                 .from("user_profiles")
@@ -2837,30 +2547,20 @@ document.addEventListener("DOMContentLoaded", async () => {
                 f.user1_id === currentUserId ? f.user2_id : f.user1_id
             ))];
 
-            if (!friendIds.includes(AI_ASSISTANT_ID)) {
-                friendIds.push(AI_ASSISTANT_ID);
-            }
-
             const { data: profiles, error: profilesError } = await client
                 .from("user_profiles")
                 .select("user_id, user_name, profile_image_url, is_online")
-                .in("user_id", friendIds.filter(id => id !== AI_ASSISTANT_ID));
+                .in("user_id", friendIds);
 
             if (profilesError) throw profilesError;
 
             const recentChatsPromises = friendIds.map(async (friendId) => {
                 let profile, user_name, avatar_url, is_online;
 
-                if (friendId === AI_ASSISTANT_ID) {
-                    user_name = AI_ASSISTANT_USERNAME;
-                    avatar_url = AI_ASSISTANT_AVATAR;
-                    is_online = true;
-                } else {
-                    profile = profiles?.find(p => p.user_id === friendId);
-                    user_name = profile?.user_name || "Unknown";
-                    avatar_url = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
-                    is_online = profile?.is_online || false;
-                }
+                profile = profiles?.find(p => p.user_id === friendId);
+                user_name = profile?.user_name || "Unknown";
+                avatar_url = profile?.profile_image_url || DEFAULT_PROFILE_IMG;
+                is_online = profile?.is_online || false;
 
                 const { data: lastMessage } = await client
                     .from("messages")
@@ -3058,17 +2758,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             inputSafe.value = "";
             sendBtnSafe.disabled = true;
 
-            if (friendId === AI_ASSISTANT_ID) {
-                typingIndicator.textContent = "Online";
-            } else {
-                const { data: profile } = await client
-                    .from("user_profiles")
-                    .select("is_online")
-                    .eq("user_id", friendId)
-                    .maybeSingle();
+            const { data: profile } = await client
+                .from("user_profiles")
+                .select("is_online")
+                .eq("user_id", friendId)
+                .maybeSingle();
 
-                typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
-            }
+            typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
 
             const oldMessages = await fetchMessages(friendId);
             renderChatMessages(chatBox, oldMessages, friendAvatar);
@@ -3222,16 +2918,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 typingIndicator.textContent = `${payload.userName || "Friend"} is typing...`;
                                 setTimeout(async () => {
                                     try {
-                                        if (friendId === AI_ASSISTANT_ID) {
-                                            typingIndicator.textContent = "Online";
-                                        } else {
-                                            const { data: profile } = await client
-                                                .from("user_profiles")
-                                                .select("is_online")
-                                                .eq("user_id", friendId)
-                                                .maybeSingle();
-                                            typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
-                                        }
+                                        const { data: profile } = await client
+                                            .from("user_profiles")
+                                            .select("is_online")
+                                            .eq("user_id", friendId)
+                                            .maybeSingle();
+                                        typingIndicator.textContent = profile?.is_online ? "Online" : "Offline";
                                     } catch (err) {
                                         typingIndicator.textContent = "Offline";
                                     }
@@ -3305,10 +2997,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 await sendMessage(friendId, content);
                 inputSafe.value = "";
                 sendBtnSafe.disabled = true;
-
-                if (friendId === AI_ASSISTANT_ID) {
-                    handleAIResponse(content, friendId);
-                }
             }
 
             sendBtnSafe.addEventListener("click", handleSend);
@@ -3383,18 +3071,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Update friend UI in real-time
     function updateFriendUI(friendId) {
         try {
-            let friendData;
-
-            if (friendId === AI_ASSISTANT_ID) {
-                friendData = {
-                    user_name: AI_ASSISTANT_USERNAME,
-                    profile_image_url: AI_ASSISTANT_AVATAR,
-                    is_online: true
-                };
-            } else {
-                friendData = allFriends.get(friendId);
-            }
-
+            let friendData = allFriends.get(friendId);
             if (!friendData) return;
 
             const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
@@ -3448,141 +3125,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     function handleNotificationRedirect() {
         try {
             if (!currentOpenChatId && notificationData.type === 'message' && notificationData.senderId) {
-                if (notificationData.senderId === AI_ASSISTANT_ID) {
-                    openChat(notificationData.senderId, AI_ASSISTANT_USERNAME, AI_ASSISTANT_AVATAR, true);
-                } else {
-                    client
-                        .from("user_profiles")
-                        .select("user_name, profile_image_url")
-                        .eq("user_id", notificationData.senderId)
-                        .maybeSingle()
-                        .then(({ data, error }) => {
-                            if (!error && data) {
-                                openChat(notificationData.senderId, data.user_name, data.profile_image_url, true);
-                            }
-                        });
-                }
+                client
+                    .from("user_profiles")
+                    .select("user_name, profile_image_url")
+                    .eq("user_id", notificationData.senderId)
+                    .maybeSingle()
+                    .then(({ data, error }) => {
+                        if (!error && data) {
+                            openChat(notificationData.senderId, data.user_name, data.profile_image_url, true);
+                        }
+                    });
             }
 
             notificationData = {};
         } catch (error) {
             console.error("Error handling notification redirect:", error);
-        }
-    }
-
-    // Ensure AI assistant exists (deprecated, use initializeAIAssistant instead)
-    async function ensureAIAssistantExists() {
-        return await initializeAIAssistant();
-    }
-
-    // Add AI assistant as a friend
-    async function addAIAssistantAsFriend() {
-        if (!currentUserId) return;
-
-        try {
-            // Make sure AI assistant is initialized
-            const aiExists = await initializeAIAssistant();
-            if (!aiExists) {
-                console.error("Failed to initialize AI assistant");
-                return;
-            }
-
-            const alreadyFriends = await isAlreadyFriend(AI_ASSISTANT_ID);
-            if (alreadyFriends) {
-                console.log("AI assistant is already a friend");
-                return;
-            }
-
-            const { error } = await client
-                .from("friends")
-                .insert([{
-                    user1_id: currentUserId,
-                    user2_id: AI_ASSISTANT_ID
-                }]);
-
-            if (error) {
-                console.error("Error adding AI assistant as friend:", error);
-            } else {
-                console.log("AI assistant added as friend");
-                fetchFriends();
-
-                setTimeout(async () => {
-                    try {
-                        await insertMessage(
-                            AI_ASSISTANT_ID,
-                            currentUserId,
-                            "Hello! I'm your AI assistant. I'm here to help you with anything you need. How can I assist you today?"
-                        );
-                    } catch (err) {
-                        console.error("Error sending welcome message:", err);
-                    }
-                }, 1000);
-            }
-        } catch (err) {
-            console.error("Error in addAIAssistantAsFriend:", err);
-        }
-    }
-
-    // Call Gemini API
-    async function callGeminiAPI(message) {
-        try {
-            if (!GEMINI_API_KEY || GEMINI_API_KEY === "YOUR_GEMINI_API_KEY") {
-                throw new Error("Invalid Gemini API key");
-            }
-
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: `You are a helpful AI assistant in a chat app. Keep your responses friendly, concise, and helpful. User message: ${message}`
-                        }]
-                    }]
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error("Gemini API error:", errorData);
-                throw new Error(`Gemini API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
-            }
-
-            const data = await response.json();
-            return data.candidates[0].content.parts[0].text;
-        } catch (error) {
-            console.error("Error calling Gemini API:", error);
-            return "I'm sorry, I'm having trouble responding right now. Please try again later.";
-        }
-    }
-
-    // Handle AI response
-    async function handleAIResponse(userMessage, friendId) {
-        try {
-            if (friendId === AI_ASSISTANT_ID) {
-                const typingIndicator = document.querySelector("#typing-indicator");
-                if (typingIndicator) {
-                    typingIndicator.textContent = "AI is typing...";
-                }
-
-                const aiResponse = await callGeminiAPI(userMessage);
-
-                const success = await insertMessage(AI_ASSISTANT_ID, currentUserId, aiResponse);
-
-                if (success) {
-                    if (typingIndicator) {
-                        typingIndicator.textContent = "Online";
-                    }
-                } else {
-                    console.error("Failed to insert AI response");
-                    showToast("Failed to send AI response", "error");
-                }
-            }
-        } catch (error) {
-            console.error("Error handling AI response:", error);
-            showToast("Error processing AI response", "error");
         }
     }
 
