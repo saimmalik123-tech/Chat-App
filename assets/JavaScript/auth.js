@@ -1,6 +1,5 @@
 import { client } from "../../supabase.js";
 
-/* ------------------ POPUP HANDLER ------------------ */
 function showPopup(message, type = "info") {
     const popup = document.getElementById("popup");
     const messageEl = document.getElementById("popup-message");
@@ -22,14 +21,19 @@ function showPopup(message, type = "info") {
     }
 }
 
-/* ------------------ COMMON FUNCTIONS ------------------ */
+/* ------------------ COMMON FUNCTIONS FOR FORM VALIDATION ------------------ */
+
+// Function to check if all given input fields are filled
 function areInputsFilled(inputs) {
     const inputsArray = Array.isArray(inputs) ? inputs : Array.from(inputs);
     return inputsArray.every(input => input.value.trim() !== '');
 }
 
+// Function to handle the button's disabled state based on input
 function handleButtonState(inputs, button) {
-    if (button) button.disabled = !areInputsFilled(inputs);
+    if (button) {
+        button.disabled = !areInputsFilled(inputs);
+    }
 }
 
 /* ------------------ SIGN UP ------------------ */
@@ -47,7 +51,10 @@ async function signUp() {
         }
     });
 
-    if (error) return showPopup("Error signing up: " + error.message);
+    if (error) {
+        showPopup("Error signing up: " + error.message);
+        return;
+    }
 
     if (data?.user) {
         const { error: upsertError } = await client
@@ -58,7 +65,10 @@ async function signUp() {
                 email: signEmail
             }], { onConflict: "email" });
 
-        if (upsertError) return showPopup("Error saving user in private_users: " + upsertError.message);
+        if (upsertError) {
+            showPopup("Error saving user in private_users: " + upsertError.message);
+            return;
+        }
     }
 
     window.location.href = 'verify.html';
@@ -66,8 +76,15 @@ async function signUp() {
 
 const signUpBtn = document.querySelector('.signUpBtn');
 const signUpInputs = document.querySelectorAll('#name, #email, #password');
+
+// Initially disable the button
 handleButtonState(signUpInputs, signUpBtn);
-signUpInputs.forEach(input => input.addEventListener('input', () => handleButtonState(signUpInputs, signUpBtn)));
+
+// Add event listeners to input fields to check for changes
+signUpInputs.forEach(input => {
+    input.addEventListener('input', () => handleButtonState(signUpInputs, signUpBtn));
+});
+
 signUpBtn?.addEventListener('click', async e => {
     e.preventDefault();
     signUpBtn.innerHTML = '<div class="loader"></div>';
@@ -77,7 +94,10 @@ signUpBtn?.addEventListener('click', async e => {
 /* ------------------ CHECK PROFILE & REDIRECT ------------------ */
 async function checkProfileAndRedirect() {
     const { data: { user }, error: userError } = await client.auth.getUser();
-    if (userError || !user) return showPopup("User not logged in.");
+    if (userError || !user) {
+        showPopup("User not logged in.");
+        return;
+    }
 
     const { data: profile, error: profileError } = await client
         .from("user_profiles")
@@ -85,7 +105,10 @@ async function checkProfileAndRedirect() {
         .eq("user_id", user.id)
         .maybeSingle();
 
-    if (profileError) return showPopup("Error checking profile: " + profileError.message);
+    if (profileError) {
+        showPopup("Error checking profile: " + profileError.message);
+        return;
+    }
 
     if (!profile) {
         window.location.href = "setupProfile.html";
@@ -113,15 +136,22 @@ async function login() {
 
 const loginBtn = document.querySelector('.signInBtn');
 const loginInputs = document.querySelectorAll('#loginEmail, #loginPassword');
+
+// Initially disable the button
 handleButtonState(loginInputs, loginBtn);
-loginInputs.forEach(input => input.addEventListener('input', () => handleButtonState(loginInputs, loginBtn)));
+
+// Add event listeners to input fields to check for changes
+loginInputs.forEach(input => {
+    input.addEventListener('input', () => handleButtonState(loginInputs, loginBtn));
+});
+
 loginBtn?.addEventListener('click', async e => {
     e.preventDefault();
     loginBtn.innerHTML = '<div class="loader"></div>';
     await login();
 });
 
-/* ------------------ GOOGLE AUTH ------------------ */
+/* ------------------ GOOGLE SIGN UP / LOGIN ------------------ */
 async function handleGoogleAuth(redirectUrl) {
     await client.auth.signInWithOAuth({
         provider: 'google',
@@ -149,9 +179,16 @@ const avatarInput = document.getElementById("avatar");
 const avatarPreview = document.getElementById("avatarPreview");
 let avatarFile = null;
 
+// New elements for profile setup
 const profileSetupInputs = document.querySelectorAll('#name, #username, #bio');
+
+// Initially disable the button
 handleButtonState(profileSetupInputs, setUpBtn);
-profileSetupInputs.forEach(input => input.addEventListener('input', () => handleButtonState(profileSetupInputs, setUpBtn)));
+
+// Add event listeners to input fields to check for changes
+profileSetupInputs.forEach(input => {
+    input.addEventListener('input', () => handleButtonState(profileSetupInputs, setUpBtn));
+});
 
 avatarInput?.addEventListener("change", e => {
     avatarFile = e.target.files[0];
@@ -169,9 +206,12 @@ async function setupProfile() {
     const bio = document.getElementById("bio").value.trim();
 
     const { data: { user }, error: userError } = await client.auth.getUser();
-    if (userError || !user) return showPopup("User not logged in.");
+    if (userError || !user) {
+        showPopup("User not logged in.");
+        return;
+    }
 
-    const { error: upsertPrivateError } = await client
+    const { error: upsertError } = await client
         .from("private_users")
         .upsert([{
             id: user.id,
@@ -179,7 +219,10 @@ async function setupProfile() {
             email: user.email
         }], { onConflict: "email" });
 
-    if (upsertPrivateError) return showPopup("Error saving user in private_users: " + upsertPrivateError.message);
+    if (upsertError) {
+        showPopup("Error saving user in private_users: " + upsertError.message);
+        return;
+    }
 
     let avatar_url = null;
     if (avatarFile) {
@@ -188,25 +231,31 @@ async function setupProfile() {
             .from("avatars")
             .upload(fileName, avatarFile, { cacheControl: '3600', upsert: true });
 
-        if (uploadError) return showPopup("Error uploading avatar: " + uploadError.message);
+        if (uploadError) {
+            showPopup("Error uploading avatar: " + uploadError.message);
+            return;
+        }
 
         const { data: urlData } = client.storage.from("avatars").getPublicUrl(fileName);
         avatar_url = urlData.publicUrl;
     }
 
-    const { error: upsertProfileError } = await client
+    const { error: insertProfileError } = await client
         .from("user_profiles")
-        .upsert([{
+        .insert([{
             user_id: user.id,
             full_name,
             user_name,
             bio,
             profile_image_url: avatar_url
-        }], { onConflict: "user_id" });
+        }]);
 
-    if (upsertProfileError) return showPopup("Error saving profile: " + upsertProfileError.message);
+    if (insertProfileError) {
+        showPopup("Error saving profile: " + insertProfileError.message);
+        return;
+    }
 
-    showPopup("Profile saved successfully!", "success");
+    showPopup("Profile saved successfully!");
     window.location.href = "dashboard.html";
 }
 
