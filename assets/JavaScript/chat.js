@@ -16,6 +16,77 @@ document.addEventListener("DOMContentLoaded", async () => {
     let allFriends = new Map();
     let onlineStatusInterval = null;
 
+    // Initialize database schema
+    async function initializeDatabaseSchema() {
+        try {
+            console.log("Initializing database schema...");
+            
+            // Create tables if they don't exist
+            const { error: tablesError } = await client.rpc('exec_sql', {
+                sql: `
+                    -- Create user_profiles table if it doesn't exist
+                    CREATE TABLE IF NOT EXISTS public.user_profiles (
+                        user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL PRIMARY KEY,
+                        user_name TEXT,
+                        full_name TEXT,
+                        bio TEXT,
+                        profile_image_url TEXT,
+                        is_online BOOLEAN DEFAULT false,
+                        last_seen TIMESTAMP WITH TIME ZONE,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+                    );
+                    
+                    -- Enable RLS
+                    ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+                    
+                    -- Drop existing policies if they exist
+                    DROP POLICY IF EXISTS "Users can view own profile" ON public.user_profiles;
+                    DROP POLICY IF EXISTS "Users can insert own profile" ON public.user_profiles;
+                    DROP POLICY IF EXISTS "Users can update own profile" ON public.user_profiles;
+                    
+                    -- Create policies
+                    CREATE POLICY "Users can view own profile" ON public.user_profiles
+                        FOR SELECT USING (auth.uid() = user_id);
+                        
+                    CREATE POLICY "Users can insert own profile" ON public.user_profiles
+                        FOR INSERT WITH CHECK (auth.uid() = user_id);
+                        
+                    CREATE POLICY "Users can update own profile" ON public.user_profiles
+                        FOR UPDATE USING (auth.uid() = user_id);
+                `
+            });
+            
+            if (tablesError) {
+                console.error("Error creating tables:", tablesError);
+                return false;
+            }
+            
+            // Create a function to execute SQL if it doesn't exist
+            try {
+                await client.rpc('exec_sql', {
+                    sql: `
+                        CREATE OR REPLACE FUNCTION public.handle_updated_at()
+                        RETURNS TRIGGER AS $$
+                        BEGIN
+                            NEW.updated_at = now();
+                            RETURN NEW;
+                        END;
+                        $$ LANGUAGE plpgsql;
+                    `
+                });
+            } catch (err) {
+                console.log("Function already exists or error creating it:", err);
+            }
+            
+            console.log("Database schema initialized successfully");
+            return true;
+        } catch (err) {
+            console.error("Error initializing database schema:", err);
+            return false;
+        }
+    }
+
     // Helper function for retrying database operations
     async function withRetry(fn, maxRetries = 3, initialDelay = 500) {
         let lastError;
@@ -35,6 +106,47 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         throw lastError;
+    }
+
+    // Ensure user profile exists
+    async function ensureUserProfileExists(userId) {
+        try {
+            const { data: existingProfile } = await client
+                .from("user_profiles")
+                .select("user_id")
+                .eq("user_id", userId)
+                .maybeSingle();
+                
+            if (existingProfile) return true;
+            
+            console.log(`User profile ${userId} not found, creating...`);
+            
+            const { data: { user } } = await client.auth.getUser();
+            if (!user) return false;
+            
+            const { error } = await client
+                .from("user_profiles")
+                .insert([{
+                    user_id: userId,
+                    user_name: user.user_metadata?.full_name || user.email?.split('@')[0] || "User",
+                    full_name: user.user_metadata?.full_name || "",
+                    bio: "",
+                    profile_image_url: user.user_metadata?.avatar_url || "",
+                    is_online: true,
+                    last_seen: new Date().toISOString()
+                }]);
+                
+            if (error) {
+                console.error("Error creating user profile:", error);
+                return false;
+            }
+            
+            console.log(`User profile ${userId} created successfully`);
+            return true;
+        } catch (err) {
+            console.error("Error ensuring user profile exists:", err);
+            return false;
+        }
     }
 
     // Ensure user exists in private_users table
@@ -146,47 +258,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Initialize database schema
-    async function initializeDatabaseSchema() {
-        try {
-            console.log("Initializing database schema...");
-
-            // Add deleted_at column if it doesn't exist
-            try {
-                await client.rpc('exec_sql', {
-                    sql: "ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;"
-                });
-                console.log("Successfully added deleted_at column");
-            } catch (err) {
-                console.error("Exception when adding deleted_at column:", err);
-            }
-
-            // Check and add foreign key constraints
-            const addConstraint = async (constraintName, sql) => {
-                try {
-                    await client.rpc('exec_sql', { sql });
-                    console.log(`${constraintName} foreign key constraint added successfully`);
-                } catch (err) {
-                    if (err.code === '42710') {
-                        console.log(`${constraintName} foreign key constraint already exists`);
-                    } else {
-                        console.error(`Error adding ${constraintName} foreign key constraint:`, err);
-                    }
-                }
-            };
-
-            await addConstraint('sender_id',
-                `ALTER TABLE messages ADD CONSTRAINT sender_id FOREIGN KEY (sender_id) REFERENCES private_users(id) ON DELETE CASCADE;`);
-            await addConstraint('receiver_id',
-                `ALTER TABLE messages ADD CONSTRAINT receiver_id FOREIGN KEY (receiver_id) REFERENCES private_users(id) ON DELETE CASCADE;`);
-
-            return true;
-        } catch (err) {
-            console.error("Error initializing database schema:", err);
-            return false;
-        }
-    }
-
     // Fixed: Update last message only for specific friend
     function updateLastMessage(friendId, content, createdAt) {
         try {
@@ -286,267 +357,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             }
         }, 30000);
-    }
-
-    // Initialize app
-    try {
-        console.log("Starting application initialization...");
-
-        const me = await getCurrentUser();
-        if (me) {
-            await ensureCurrentUserInPrivateUsersTable();
-            await initializeDatabaseSchema();
-            await fetchFriends();
-            await fetchFriendRequests();
-
-            // Set up periodic online status check
-            setupOnlineStatusCheck();
-
-            const setupRealtimeSubscriptions = async () => {
-                try {
-                    // Global messages channel
-                    const globalMessagesChannel = client.channel('global-messages');
-
-                    globalMessagesChannel
-                        .on('postgres_changes', {
-                            event: 'INSERT',
-                            schema: 'public',
-                            table: 'messages',
-                            filter: `receiver_id=eq.${currentUserId}`
-                        }, async (payload) => {
-                            const newMsg = payload.new;
-                            if (!newMsg || !currentUserId) return;
-
-                            const senderId = newMsg.sender_id;
-
-                            if (currentOpenChatId !== senderId) {
-                                updateUnseenCountForFriend(senderId);
-                                // Fixed: Only update last message for the specific friend
-                                updateLastMessage(senderId, newMsg.content, newMsg.created_at);
-
-                                try {
-                                    const { data: senderProfile } = await client
-                                        .from("user_profiles")
-                                        .select("user_name, profile_image_url")
-                                        .eq("user_id", senderId)
-                                        .maybeSingle();
-
-                                    const senderName = senderProfile?.user_name || "New Message";
-                                    const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
-
-                                    showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
-
-                                    if (Notification.permission === "granted") {
-                                        const notif = new Notification(senderName, {
-                                            body: newMsg.content,
-                                            icon: senderAvatar,
-                                            data: { type: 'message', senderId, senderName }
-                                        });
-
-                                        notif.addEventListener('click', () => {
-                                            window.focus();
-                                            openSpecificChat(senderId);
-                                            notif.close();
-                                        });
-                                    }
-                                } catch (err) {
-                                    console.warn("Error sending message notification:", err);
-                                }
-                            }
-                        })
-                        .on('postgres_changes', {
-                            event: 'UPDATE',
-                            schema: 'public',
-                            table: 'messages',
-                            filter: `receiver_id=eq.${currentUserId}`
-                        }, (payload) => {
-                            const updatedMsg = payload.new;
-                            if (!updatedMsg || !currentUserId) return;
-
-                            if (updatedMsg.deleted_at) {
-                                // Fixed: Only update last message for the specific friends involved
-                                updateLastMessageInChatList(updatedMsg.sender_id);
-                                updateLastMessageInChatList(updatedMsg.receiver_id);
-
-                                if (currentOpenChatId !== updatedMsg.sender_id) {
-                                    updateUnseenCountForFriend(updatedMsg.sender_id);
-                                }
-                                return;
-                            }
-
-                            if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
-                                const senderId = updatedMsg.sender_id;
-                                if (currentOpenChatId !== senderId) {
-                                    updateUnseenCountForFriend(senderId);
-                                }
-                            }
-                        })
-                        .subscribe((status, err) => {
-                            if (status === 'SUBSCRIBED') {
-                                console.log('Successfully subscribed to global messages');
-                            } else if (status === 'CHANNEL_ERROR') {
-                                console.error('Error subscribing to global messages:', err);
-                            }
-                        });
-
-                    // Friend requests channel
-                    const friendRequestsChannel = client.channel(`friend-requests-${currentUserId}`);
-
-                    friendRequestsChannel
-                        .on('postgres_changes', {
-                            event: '*',
-                            schema: 'public',
-                            table: 'requests',
-                            filter: `receiver_id=eq.${currentUserId}`
-                        }, async (payload) => {
-                            console.log("Friend request event received:", payload);
-                            const { eventType, new: newRecord } = payload;
-
-                            if (eventType === 'INSERT' && newRecord.status === "pending") {
-                                try {
-                                    const { data: senderProfile } = await client
-                                        .from("user_profiles")
-                                        .select("user_name, profile_image_url")
-                                        .eq("user_id", newRecord.sender_id)
-                                        .maybeSingle();
-
-                                    const senderName = senderProfile?.user_name || "Someone";
-                                    const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
-
-                                    // Modified to show friend requests popup on click
-                                    showTopRightPopup(`${senderName} sent you a friend request`, "info", senderAvatar, () => {
-                                        document.getElementById("friend-requests-popup").classList.add("show");
-                                    });
-
-                                    if (Notification.permission === "granted") {
-                                        const notif = new Notification("Friend Request 👥", {
-                                            body: `${senderName} sent you a request`,
-                                            icon: senderAvatar,
-                                            data: { type: 'friend_request', senderId: newRecord.sender_id }
-                                        });
-
-                                        // Modified to show friend requests popup on click
-                                        notif.addEventListener('click', () => {
-                                            window.focus();
-                                            document.getElementById("friend-requests-popup").classList.add("show");
-                                            notif.close();
-                                        });
-                                    }
-                                } catch (err) {
-                                    console.error("Error fetching sender profile for notification:", err);
-                                }
-
-                                fetchFriendRequests();
-                            } else if (eventType === 'UPDATE') {
-                                if (newRecord.status === "accepted") {
-                                    if (newRecord.sender_id === currentUserId) {
-                                        showTopRightPopup("Your friend request was accepted!", "success");
-                                    } else {
-                                        showTopRightPopup("You accepted a friend request!", "success");
-                                    }
-                                    fetchFriends();
-                                } else if (newRecord.status === "rejected") {
-                                    if (newRecord.sender_id === currentUserId) {
-                                        showTopRightPopup("Your friend request was rejected", "warning");
-                                    } else {
-                                        showTopRightPopup("You rejected a friend request", "info");
-                                    }
-                                }
-                                fetchFriendRequests();
-                            }
-                        })
-                        .subscribe((status, err) => {
-                            if (status === 'SUBSCRIBED') {
-                                console.log('Successfully subscribed to friend requests');
-                                fetchFriendRequests();
-                            } else if (status === 'CHANNEL_ERROR') {
-                                console.error('Error subscribing to friend requests:', err);
-                            }
-                        });
-
-                    // Friends updates channel
-                    const friendsUpdatesChannel = client.channel('friends-updates');
-
-                    friendsUpdatesChannel
-                        .on('postgres_changes', {
-                            event: '*',
-                            schema: 'public',
-                            table: 'friends'
-                        }, (payload) => {
-                            console.log("Friends update event received:", payload);
-                            const { eventType, new: newRecord } = payload;
-
-                            const isRelevant = newRecord && (
-                                newRecord.user1_id === currentUserId ||
-                                newRecord.user2_id === currentUserId
-                            );
-
-                            if (!isRelevant) return;
-
-                            if (eventType === 'INSERT' || eventType === 'DELETE') {
-                                fetchFriends();
-                            }
-                        })
-                        .subscribe((status, err) => {
-                            if (status === 'SUBSCRIBED') {
-                                console.log('Successfully subscribed to friends updates');
-                            } else if (status === 'CHANNEL_ERROR') {
-                                console.error('Error subscribing to friends updates:', err);
-                            }
-                        });
-
-                    // User profiles updates channel
-                    const userProfilesUpdatesChannel = client.channel('user-profiles-updates');
-
-                    userProfilesUpdatesChannel
-                        .on('postgres_changes', {
-                            event: 'UPDATE',
-                            schema: 'public',
-                            table: 'user_profiles'
-                        }, (payload) => {
-                            const { new: newRecord } = payload;
-
-                            if (allFriends.has(newRecord.user_id)) {
-                                allFriends.set(newRecord.user_id, {
-                                    ...allFriends.get(newRecord.user_id),
-                                    ...newRecord
-                                });
-                                updateFriendUI(newRecord.user_id);
-                            }
-
-                            // Fixed: Update current user's status UI if it's the current user
-                            if (newRecord.user_id === currentUserId) {
-                                updateCurrentUserStatusUI(newRecord.is_online);
-                                fetchCurrentUserAvatar();
-                            }
-                        })
-                        .subscribe((status, err) => {
-                            if (status === 'SUBSCRIBED') {
-                                console.log('Successfully subscribed to user profiles updates');
-                            } else if (status === 'CHANNEL_ERROR') {
-                                console.error('Error subscribing to user profiles updates:', err);
-                            }
-                        });
-
-                    console.log("All real-time subscriptions set up successfully");
-                } catch (error) {
-                    console.error("Error setting up real-time subscriptions:", error);
-                    setTimeout(setupRealtimeSubscriptions, 5000);
-                }
-            };
-
-            await setupRealtimeSubscriptions();
-            await fetchRecentChats();
-
-            if (Object.keys(notificationData).length > 0) {
-                handleNotificationRedirect();
-            }
-
-            openChatFromUrl();
-        }
-    } catch (error) {
-        console.error("Error initializing app:", error);
-        showToast("Failed to initialize application. Please refresh the page.", "error");
     }
 
     // UI Helper Functions
@@ -783,9 +593,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         return null;
     }
 
-    // Initialize notifications
-    await requestNotificationPermission();
-
     // User profile functions
     async function fetchCurrentUserAvatar(profileImageSelector = '.profile-pic') {
         try {
@@ -854,6 +661,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             currentUserId = user.id;
             console.log("Current user ID:", currentUserId);
 
+            await ensureUserProfileExists(currentUserId);
             await ensureCurrentUserInPrivateUsersTable();
             await setUserOnlineStatus(true);
             await checkAndShowAdminRequestPopup();
@@ -3013,4 +2821,301 @@ document.addEventListener("DOMContentLoaded", async () => {
             return false;
         }
     }
+
+    // Initialize app
+    async function initializeApp() {
+        try {
+            console.log("Starting application initialization...");
+            
+            // Initialize database schema
+            await initializeDatabaseSchema();
+            
+            // Get current user
+            const { data: { user }, error: userError } = await client.auth.getUser();
+            if (userError || !user) {
+                showToast("User not logged in", "error");
+                window.location.href = 'signup.html';
+                return;
+            }
+            
+            currentUserId = user.id;
+            console.log("Current user ID:", currentUserId);
+            
+            // Ensure user exists in all necessary tables
+            await ensureUserProfileExists(currentUserId);
+            await ensureCurrentUserInPrivateUsersTable();
+            
+            // Set user online status
+            await setUserOnlineStatus(true);
+            
+            // Set up periodic online status check
+            setupOnlineStatusCheck();
+            
+            // Fetch initial data
+            await fetchFriends();
+            await fetchFriendRequests();
+            
+            // Set up real-time subscriptions
+            await setupRealtimeSubscriptions();
+            
+            // Fetch recent chats
+            await fetchRecentChats();
+            
+            // Check for admin request
+            await checkAndShowAdminRequestPopup();
+            
+            // Handle notification redirects
+            if (Object.keys(notificationData).length > 0) {
+                handleNotificationRedirect();
+            }
+            
+            // Open chat from URL if present
+            openChatFromUrl();
+            
+            // Request notification permissions
+            await requestNotificationPermission();
+            
+            console.log("App initialized successfully");
+        } catch (error) {
+            console.error("Error initializing app:", error);
+            showToast("Failed to initialize application. Please refresh the page.", "error");
+        }
+    }
+
+    // Setup real-time subscriptions
+    async function setupRealtimeSubscriptions() {
+        try {
+            // Global messages channel
+            const globalMessagesChannel = client.channel('global-messages');
+
+            globalMessagesChannel
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `receiver_id=eq.${currentUserId}`
+                }, async (payload) => {
+                    const newMsg = payload.new;
+                    if (!newMsg || !currentUserId) return;
+
+                    const senderId = newMsg.sender_id;
+
+                    if (currentOpenChatId !== senderId) {
+                        updateUnseenCountForFriend(senderId);
+                        // Fixed: Only update last message for the specific friend
+                        updateLastMessage(senderId, newMsg.content, newMsg.created_at);
+
+                        try {
+                            const { data: senderProfile } = await client
+                                .from("user_profiles")
+                                .select("user_name, profile_image_url")
+                                .eq("user_id", senderId)
+                                .maybeSingle();
+
+                            const senderName = senderProfile?.user_name || "New Message";
+                            const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
+
+                            showTopRightPopup(`New message from ${senderName}`, "info", senderAvatar);
+
+                            if (Notification.permission === "granted") {
+                                const notif = new Notification(senderName, {
+                                    body: newMsg.content,
+                                    icon: senderAvatar,
+                                    data: { type: 'message', senderId, senderName }
+                                });
+
+                                notif.addEventListener('click', () => {
+                                    window.focus();
+                                    openSpecificChat(senderId);
+                                    notif.close();
+                                });
+                            }
+                        } catch (err) {
+                            console.warn("Error sending message notification:", err);
+                        }
+                    }
+                })
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `receiver_id=eq.${currentUserId}`
+                }, (payload) => {
+                    const updatedMsg = payload.new;
+                    if (!updatedMsg || !currentUserId) return;
+
+                    if (updatedMsg.deleted_at) {
+                        // Fixed: Only update last message for the specific friends involved
+                        updateLastMessageInChatList(updatedMsg.sender_id);
+                        updateLastMessageInChatList(updatedMsg.receiver_id);
+
+                        if (currentOpenChatId !== updatedMsg.sender_id) {
+                            updateUnseenCountForFriend(updatedMsg.sender_id);
+                        }
+                        return;
+                    }
+
+                    if (updatedMsg.receiver_id === currentUserId && updatedMsg.seen === true) {
+                        const senderId = updatedMsg.sender_id;
+                        if (currentOpenChatId !== senderId) {
+                            updateUnseenCountForFriend(senderId);
+                        }
+                    }
+                })
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Successfully subscribed to global messages');
+                    } else if (status === 'CHANNEL_ERROR') {
+                        console.error('Error subscribing to global messages:', err);
+                    }
+                });
+
+            // Friend requests channel
+            const friendRequestsChannel = client.channel(`friend-requests-${currentUserId}`);
+
+            friendRequestsChannel
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'requests',
+                    filter: `receiver_id=eq.${currentUserId}`
+                }, async (payload) => {
+                    console.log("Friend request event received:", payload);
+                    const { eventType, new: newRecord } = payload;
+
+                    if (eventType === 'INSERT' && newRecord.status === "pending") {
+                        try {
+                            const { data: senderProfile } = await client
+                                .from("user_profiles")
+                                .select("user_name, profile_image_url")
+                                .eq("user_id", newRecord.sender_id)
+                                .maybeSingle();
+
+                            const senderName = senderProfile?.user_name || "Someone";
+                            const senderAvatar = senderProfile?.profile_image_url || DEFAULT_PROFILE_IMG;
+
+                            // Modified to show friend requests popup on click
+                            showTopRightPopup(`${senderName} sent you a friend request`, "info", senderAvatar, () => {
+                                document.getElementById("friend-requests-popup").classList.add("show");
+                            });
+
+                            if (Notification.permission === "granted") {
+                                const notif = new Notification("Friend Request 👥", {
+                                    body: `${senderName} sent you a request`,
+                                    icon: senderAvatar,
+                                    data: { type: 'friend_request', senderId: newRecord.sender_id }
+                                });
+
+                                // Modified to show friend requests popup on click
+                                notif.addEventListener('click', () => {
+                                    window.focus();
+                                    document.getElementById("friend-requests-popup").classList.add("show");
+                                    notif.close();
+                                });
+                            }
+                        } catch (err) {
+                            console.error("Error fetching sender profile for notification:", err);
+                        }
+
+                        fetchFriendRequests();
+                    } else if (eventType === 'UPDATE') {
+                        if (newRecord.status === "accepted") {
+                            if (newRecord.sender_id === currentUserId) {
+                                showTopRightPopup("Your friend request was accepted!", "success");
+                            } else {
+                                showTopRightPopup("You accepted a friend request!", "success");
+                            }
+                            fetchFriends();
+                        } else if (newRecord.status === "rejected") {
+                            if (newRecord.sender_id === currentUserId) {
+                                showTopRightPopup("Your friend request was rejected", "warning");
+                            } else {
+                                showTopRightPopup("You rejected a friend request", "info");
+                            }
+                        }
+                        fetchFriendRequests();
+                    }
+                })
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Successfully subscribed to friend requests');
+                        fetchFriendRequests();
+                    } else if (status === 'CHANNEL_ERROR') {
+                        console.error('Error subscribing to friend requests:', err);
+                    }
+                });
+
+            // Friends updates channel
+            const friendsUpdatesChannel = client.channel('friends-updates');
+
+            friendsUpdatesChannel
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'friends'
+                }, (payload) => {
+                    console.log("Friends update event received:", payload);
+                    const { eventType, new: newRecord } = payload;
+
+                    const isRelevant = newRecord && (
+                        newRecord.user1_id === currentUserId ||
+                        newRecord.user2_id === currentUserId
+                    );
+
+                    if (!isRelevant) return;
+
+                    if (eventType === 'INSERT' || eventType === 'DELETE') {
+                        fetchFriends();
+                    }
+                })
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Successfully subscribed to friends updates');
+                    } else if (status === 'CHANNEL_ERROR') {
+                        console.error('Error subscribing to friends updates:', err);
+                    }
+                });
+
+            // User profiles updates channel
+            const userProfilesUpdatesChannel = client.channel('user-profiles-updates');
+
+            userProfilesUpdatesChannel
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'user_profiles'
+                }, (payload) => {
+                    const { new: newRecord } = payload;
+
+                    if (allFriends.has(newRecord.user_id)) {
+                        allFriends.set(newRecord.user_id, {
+                            ...allFriends.get(newRecord.user_id),
+                            ...newRecord
+                        });
+                        updateFriendUI(newRecord.user_id);
+                    }
+
+                    // Fixed: Update current user's status UI if it's the current user
+                    if (newRecord.user_id === currentUserId) {
+                        updateCurrentUserStatusUI(newRecord.is_online);
+                        fetchCurrentUserAvatar();
+                    }
+                })
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Successfully subscribed to user profiles updates');
+                    } else if (status === 'CHANNEL_ERROR') {
+                        console.error('Error subscribing to user profiles updates:', err);
+                    }
+                });
+
+            console.log("All real-time subscriptions set up successfully");
+        } catch (error) {
+            console.error("Error setting up real-time subscriptions:", error);
+            setTimeout(setupRealtimeSubscriptions, 5000);
+        }
+    }
+
+    // Call initializeApp when DOM is loaded
+    initializeApp();
 });
