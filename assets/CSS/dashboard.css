@@ -313,7 +313,7 @@ nav h2 a {
   border-bottom-left-radius: 2px;
   display: flex;
   justify-content: flex-start;
-  align-items: center;
+  align-items: start;
   column-gap: 10px;
 }
 
