@@ -83,6 +83,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Ensure AI Assistant exists in database
         async ensureAIAssistantExists() {
             try {
+                // First ensure users table exists
+                await database.ensureUsersTableExists();
+
                 // Check if AI Assistant exists in users table
                 const { data: existingUser, error: userError } = await client
                     .from("users")
@@ -598,6 +601,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                             console.log("Message inserted successfully on retry");
                             return true;
+                        } else if (error.code === '42501') {
+                            // Row-level security policy violation
+                            console.error("Row-level security policy violation:", error);
+                            return false;
                         } else {
                             console.error("Error inserting message:", error);
                             return false;
@@ -2760,43 +2767,51 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
+        // Ensure users table exists
+        ensureUsersTableExists: async () => {
+            try {
+                const { data, error } = await client.rpc('exec_sql', {
+                    sql: "SELECT to_regclass('public.users') as table_exists;"
+                });
+
+                if (error || !data || !data[0] || !data[0].table_exists) {
+                    console.log("Users table doesn't exist, creating it...");
+
+                    // Create users table
+                    const { error: createError } = await client.rpc('exec_sql', {
+                        sql: `
+                            CREATE TABLE IF NOT EXISTS users (
+                                id UUID PRIMARY KEY,
+                                name TEXT,
+                                email TEXT,
+                                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                            );
+                        `
+                    });
+
+                    if (createError) {
+                        console.error("Error creating users table:", createError);
+                        return false;
+                    }
+
+                    console.log("Users table created successfully");
+                    return true;
+                }
+
+                return true;
+            } catch (err) {
+                console.error("Exception when checking users table:", err);
+                return false;
+            }
+        },
+
         // Check and fix database schema
         checkAndFixDatabaseSchema: async () => {
             try {
                 console.log("Checking database schema...");
 
-                // First check if users table exists
-                try {
-                    const { data, error } = await client.rpc('exec_sql', {
-                        sql: "SELECT to_regclass('public.users') as table_exists;"
-                    });
-
-                    if (error || !data || !data[0] || !data[0].table_exists) {
-                        console.log("Users table doesn't exist, creating it...");
-
-                        // Create users table
-                        const { error: createError } = await client.rpc('exec_sql', {
-                            sql: `
-                                CREATE TABLE IF NOT EXISTS users (
-                                    id UUID PRIMARY KEY,
-                                    name TEXT,
-                                    email TEXT,
-                                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                                );
-                            `
-                        });
-
-                        if (createError) {
-                            console.error("Error creating users table:", createError);
-                            return false;
-                        }
-
-                        console.log("Users table created successfully");
-                    }
-                } catch (err) {
-                    console.error("Exception when checking users table:", err);
-                    return false;
-                }
+                // First ensure users table exists
+                await database.ensureUsersTableExists();
 
                 // Now try to add the constraints
                 try {
