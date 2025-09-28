@@ -110,6 +110,7 @@ async function checkProfileAndRedirect() {
         return;
     }
 
+    // FIXED: Only redirect to dashboard if profile exists
     if (!profile) {
         window.location.href = "setupProfile.html";
     } else {
@@ -130,6 +131,7 @@ async function login() {
     if (error) {
         showPopup("Login failed: " + error.message);
     } else {
+        // FIXED: Ensure we check profile after login
         await checkProfileAndRedirect();
     }
 }
@@ -263,4 +265,32 @@ setUpBtn?.addEventListener("click", async e => {
     e.preventDefault();
     setUpBtn.innerHTML = '<div class="loader"></div>';
     await setupProfile();
+});
+
+// FIXED: Add this to ensure profile check on page load for protected pages
+document.addEventListener('DOMContentLoaded', async () => {
+    // Only run this check on pages that require authentication
+    if (window.location.pathname.includes('dashboard.html') ||
+        window.location.pathname.includes('setupProfile.html')) {
+
+        const { data: { user }, error: userError } = await client.auth.getUser();
+
+        if (userError || !user) {
+            window.location.href = 'index.html'; // Redirect to login if not authenticated
+            return;
+        }
+
+        // If on dashboard but no profile, redirect to setup
+        if (window.location.pathname.includes('dashboard.html')) {
+            const { data: profile, error: profileError } = await client
+                .from("user_profiles")
+                .select("*")
+                .eq("user_id", user.id)
+                .maybeSingle();
+
+            if (profileError || !profile) {
+                window.location.href = "setupProfile.html";
+            }
+        }
+    }
 });
