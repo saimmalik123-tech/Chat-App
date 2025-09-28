@@ -26,18 +26,17 @@ async function handleGoogleAuth() {
     showLoader();
 
     try {
-        // 1. Check for active session after OAuth redirect
         const { data: { session }, error: sessionError } = await client.auth.getSession();
 
         if (sessionError || !session) {
             showPopup("No active session. Redirecting to login...");
-            setTimeout(() => (window.location.href = "login.html"), 1500);
+            setTimeout(() => (window.location.href = "index.html"), 1500);
             return;
         }
 
         const user = session.user;
 
-        // 2. Ensure user exists in private_users
+        // Ensure user exists in private_users
         const { data: existingUser, error: userCheckError } = await client
             .from("private_users")
             .select("id")
@@ -64,10 +63,10 @@ async function handleGoogleAuth() {
             }
         }
 
-        // 3. Ensure profile exists in user_profiles
+        // Ensure profile exists in user_profiles
         const { data: profile, error: profileError } = await client
             .from("user_profiles")
-            .select("*")
+            .select("user_id")
             .eq("user_id", user.id)
             .maybeSingle();
 
@@ -84,7 +83,10 @@ async function handleGoogleAuth() {
                     full_name: user.user_metadata?.full_name || user.user_metadata?.name || "",
                     user_name: user.user_metadata?.user_name || "",
                     bio: "",
-                    profile_image_url: user.user_metadata?.avatar_url || ""
+                    profile_image_url: user.user_metadata?.avatar_url || "",
+                    is_online: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
                 }]);
 
             if (insertProfileError) {
@@ -92,12 +94,10 @@ async function handleGoogleAuth() {
                 return;
             }
 
-            // Send them to setup profile page
             window.location.href = "setupProfile.html";
             return;
         }
 
-        // 4. Redirect based on profile existence
         window.location.href = "dashboard.html";
 
     } catch (err) {
@@ -106,7 +106,6 @@ async function handleGoogleAuth() {
     } finally {
         hideLoader();
     }
-
-
 }
+
 document.addEventListener('DOMContentLoaded', handleGoogleAuth);

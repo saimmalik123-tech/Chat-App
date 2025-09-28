@@ -1,5 +1,6 @@
 import { client } from "../../supabase.js";
 
+/* ------------------ POPUP ------------------ */
 function showPopup(message, type = "info") {
     const popup = document.getElementById("popup");
     const messageEl = document.getElementById("popup-message");
@@ -21,8 +22,7 @@ function showPopup(message, type = "info") {
     }
 }
 
-/* ------------------ COMMON FUNCTIONS FOR FORM VALIDATION ------------------ */
-
+/* ------------------ FORM VALIDATION ------------------ */
 function areInputsFilled(inputs) {
     const inputsArray = Array.isArray(inputs) ? inputs : Array.from(inputs);
     return inputsArray.every(input => input.value.trim() !== '');
@@ -35,20 +35,17 @@ function handleButtonState(inputs, button) {
 }
 
 /* ------------------ AUTHENTICATION CHECK ------------------ */
-// This function will be called on page load for protected pages
 async function checkAuthentication() {
     const { data: { user }, error: userError } = await client.auth.getUser();
-    
+
     if (userError || !user) {
-        // If not authenticated, redirect to login
-        if (!window.location.pathname.includes('index.html') && 
+        if (!window.location.pathname.includes('index.html') &&
             !window.location.pathname.includes('signup.html')) {
             window.location.href = 'index.html';
         }
         return { user: null, profile: null };
     }
-    
-    // Check if user has a profile
+
     const { data: profile, error: profileError } = await client
         .from("user_profiles")
         .select("*")
@@ -79,7 +76,7 @@ async function signUp() {
     });
 
     if (error) {
-        showPopup("Error signing up: " + error.message);
+        showPopup("Error signing up: " + error.message, "error");
         return;
     }
 
@@ -90,27 +87,21 @@ async function signUp() {
                 id: data.user.id,
                 name: signName,
                 email: signEmail
-            }], { onConflict: "email" });
+            }], { onConflict: "id" });
 
         if (upsertError) {
-            showPopup("Error saving user in private_users: " + upsertError.message);
+            showPopup("Error saving user in private_users: " + upsertError.message, "error");
             return;
         }
     }
 
-    showPopup("Signup successful! Please check your email to verify your account.");
-    // Don't redirect immediately - wait for email verification
+    showPopup("Signup successful! Please check your email to verify your account.", "success");
 }
 
 const signUpBtn = document.querySelector('.signUpBtn');
 const signUpInputs = document.querySelectorAll('#name, #email, #password');
-
 handleButtonState(signUpInputs, signUpBtn);
-
-signUpInputs.forEach(input => {
-    input.addEventListener('input', () => handleButtonState(signUpInputs, signUpBtn));
-});
-
+signUpInputs.forEach(input => input.addEventListener('input', () => handleButtonState(signUpInputs, signUpBtn)));
 signUpBtn?.addEventListener('click', async e => {
     e.preventDefault();
     signUpBtn.innerHTML = '<div class="loader"></div>';
@@ -128,11 +119,10 @@ async function login() {
     });
 
     if (error) {
-        showPopup("Login failed: " + error.message);
+        showPopup("Login failed: " + error.message, "error");
         return;
     }
 
-    // Check if user has a profile
     const { data: profile, error: profileError } = await client
         .from("user_profiles")
         .select("*")
@@ -140,11 +130,10 @@ async function login() {
         .maybeSingle();
 
     if (profileError) {
-        showPopup("Error checking profile: " + profileError.message);
+        showPopup("Error checking profile: " + profileError.message, "error");
         return;
     }
 
-    // Redirect based on profile existence
     if (profile) {
         window.location.href = "dashboard.html";
     } else {
@@ -154,20 +143,15 @@ async function login() {
 
 const loginBtn = document.querySelector('.signInBtn');
 const loginInputs = document.querySelectorAll('#loginEmail, #loginPassword');
-
 handleButtonState(loginInputs, loginBtn);
-
-loginInputs.forEach(input => {
-    input.addEventListener('input', () => handleButtonState(loginInputs, loginBtn));
-});
-
+loginInputs.forEach(input => input.addEventListener('input', () => handleButtonState(loginInputs, loginBtn)));
 loginBtn?.addEventListener('click', async e => {
     e.preventDefault();
     loginBtn.innerHTML = '<div class="loader"></div>';
     await login();
 });
 
-/* ------------------ GOOGLE SIGN UP / LOGIN ------------------ */
+/* ------------------ GOOGLE AUTH (REDIRECT HANDLER) ------------------ */
 async function handleGoogleAuth() {
     const { data, error } = await client.auth.signInWithOAuth({
         provider: 'google',
@@ -177,21 +161,17 @@ async function handleGoogleAuth() {
     });
 
     if (error) {
-        showPopup("Google authentication failed: " + error.message);
+        showPopup("Google authentication failed: " + error.message, "error");
     }
 }
 
-const googleSignUpBtn = document.querySelector('.googleSignUpBtn');
-googleSignUpBtn?.addEventListener('click', async e => {
+document.querySelector('.googleSignUpBtn')?.addEventListener('click', async e => {
     e.preventDefault();
-    googleSignUpBtn.innerHTML = '<div class="loader"></div>';
     await handleGoogleAuth();
 });
 
-const googleLoginBtn = document.querySelector('.googleLoginBtn');
-googleLoginBtn?.addEventListener('click', async e => {
+document.querySelector('.googleLoginBtn')?.addEventListener('click', async e => {
     e.preventDefault();
-    googleLoginBtn.innerHTML = '<div class="loader"></div>';
     await handleGoogleAuth();
 });
 
@@ -202,12 +182,8 @@ const avatarPreview = document.getElementById("avatarPreview");
 let avatarFile = null;
 
 const profileSetupInputs = document.querySelectorAll('#name, #username, #bio');
-
 handleButtonState(profileSetupInputs, setUpBtn);
-
-profileSetupInputs.forEach(input => {
-    input.addEventListener('input', () => handleButtonState(profileSetupInputs, setUpBtn));
-});
+profileSetupInputs.forEach(input => input.addEventListener('input', () => handleButtonState(profileSetupInputs, setUpBtn)));
 
 avatarInput?.addEventListener("change", e => {
     avatarFile = e.target.files[0];
@@ -226,7 +202,7 @@ async function setupProfile() {
 
     const { data: { user }, error: userError } = await client.auth.getUser();
     if (userError || !user) {
-        showPopup("User not logged in.");
+        showPopup("User not logged in.", "error");
         return;
     }
 
@@ -236,10 +212,10 @@ async function setupProfile() {
             id: user.id,
             name: user.user_metadata?.name || full_name || "",
             email: user.email
-        }], { onConflict: "email" });
+        }], { onConflict: "id" });
 
     if (upsertError) {
-        showPopup("Error saving user in private_users: " + upsertError.message);
+        showPopup("Error saving user in private_users: " + upsertError.message, "error");
         return;
     }
 
@@ -251,7 +227,7 @@ async function setupProfile() {
             .upload(fileName, avatarFile, { cacheControl: '3600', upsert: true });
 
         if (uploadError) {
-            showPopup("Error uploading avatar: " + uploadError.message);
+            showPopup("Error uploading avatar: " + uploadError.message, "error");
             return;
         }
 
@@ -259,22 +235,54 @@ async function setupProfile() {
         avatar_url = urlData.publicUrl;
     }
 
-    const { error: insertProfileError } = await client
+    const { data: existingProfile, error: profileCheckError } = await client
         .from("user_profiles")
-        .insert([{
-            user_id: user.id,
-            full_name,
-            user_name,
-            bio,
-            profile_image_url: avatar_url
-        }]);
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-    if (insertProfileError) {
-        showPopup("Error saving profile: " + insertProfileError.message);
+    if (profileCheckError) {
+        showPopup("Error checking profile: " + profileCheckError.message, "error");
         return;
     }
 
-    showPopup("Profile saved successfully!");
+    if (existingProfile) {
+        const { error: updateError } = await client
+            .from("user_profiles")
+            .update({
+                full_name,
+                user_name,
+                bio,
+                profile_image_url: avatar_url,
+                updated_at: new Date().toISOString()
+            })
+            .eq("user_id", user.id);
+
+        if (updateError) {
+            showPopup("Error updating profile: " + updateError.message, "error");
+            return;
+        }
+    } else {
+        const { error: insertError } = await client
+            .from("user_profiles")
+            .insert([{
+                user_id: user.id,
+                full_name,
+                user_name,
+                bio,
+                profile_image_url: avatar_url,
+                is_online: false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            }]);
+
+        if (insertError) {
+            showPopup("Error saving profile: " + insertError.message, "error");
+            return;
+        }
+    }
+
+    showPopup("Profile saved successfully!", "success");
     window.location.href = "dashboard.html";
 }
 
@@ -284,23 +292,17 @@ setUpBtn?.addEventListener("click", async e => {
     await setupProfile();
 });
 
-/* ------------------ PAGE LOAD AUTHENTICATION CHECK ------------------ */
+/* ------------------ PAGE LOAD AUTH CHECK ------------------ */
 document.addEventListener('DOMContentLoaded', async () => {
-    // Only run auth check on protected pages
-    const isProtectedPage = window.location.pathname.includes('dashboard.html') || 
-                          window.location.pathname.includes('setupProfile.html');
-    
+    const isProtectedPage = window.location.pathname.includes('dashboard.html') ||
+        window.location.pathname.includes('setupProfile.html');
+
     if (isProtectedPage) {
         const { user, profile } = await checkAuthentication();
-        
-        if (!user) return; // Already redirected to login
-        
-        // If on dashboard but no profile, redirect to setup
+        if (!user) return;
         if (window.location.pathname.includes('dashboard.html') && !profile) {
             window.location.href = "setupProfile.html";
         }
-        
-        // If on setup profile but already has profile, redirect to dashboard
         if (window.location.pathname.includes('setupProfile.html') && profile) {
             window.location.href = "dashboard.html";
         }
