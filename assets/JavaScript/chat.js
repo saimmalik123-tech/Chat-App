@@ -448,34 +448,45 @@ document.addEventListener("DOMContentLoaded", async () => {
                             )
                         ]);
 
-                        // Create a unique ID for this AI message to track it
-                        const aiMsgId = 'ai-msg-' + Date.now();
+                        // Create AI message object
+                        const aiMsg = {
+                            id: 'ai-' + Date.now(), // temporary ID
+                            sender_id: AI_ASSISTANT_ID,
+                            receiver_id: state.currentUserId,
+                            content: aiResponse,
+                            created_at: new Date().toISOString(),
+                            seen: false
+                        };
 
-                        // Add to processing set to prevent duplicate handling
-                        state.aiMessageProcessing.add(aiMsgId);
+                        // Append AI message to UI immediately
+                        ui.appendMessage(chatBox, aiMsg, false);
+                        ui.updateLastMessage(AI_ASSISTANT_ID, aiResponse, aiMsg.created_at);
 
-                        // Insert AI response to database
-                        const aiMsgSaved = await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, aiResponse);
+                        // Insert AI response to database in the background
+                        utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, aiResponse)
+                            .then(success => {
+                                if (!success) {
+                                    // If insertion failed, show an error
+                                    const errorMsg = {
+                                        id: 'error-' + Date.now(),
+                                        sender_id: AI_ASSISTANT_ID,
+                                        receiver_id: state.currentUserId,
+                                        content: AI_ERROR_MESSAGE,
+                                        created_at: new Date().toISOString(),
+                                        seen: false
+                                    };
+                                    // Replace the AI message with error message
+                                    const aiMsgElement = chatBox.querySelector(`[data-message-id="${aiMsg.id}"]`);
+                                    if (aiMsgElement) {
+                                        aiMsgElement.querySelector('.msg-text').innerHTML = utils.linkify(AI_ERROR_MESSAGE);
+                                    }
+                                    ui.updateLastMessage(AI_ASSISTANT_ID, AI_ERROR_MESSAGE, errorMsg.created_at);
+                                }
+                            })
+                            .catch(err => {
+                                console.error("Error inserting AI message:", err);
+                            });
 
-                        if (aiMsgSaved) {
-                            // The real-time subscription will handle displaying the message
-                            console.log("AI response sent");
-                        } else {
-                            // Show error message if insertion failed
-                            const errorMsg = {
-                                id: 'error-' + Date.now(),
-                                sender_id: AI_ASSISTANT_ID,
-                                receiver_id: state.currentUserId,
-                                content: AI_ERROR_MESSAGE,
-                                created_at: new Date().toISOString(),
-                                seen: false
-                            };
-                            ui.appendMessage(chatBox, errorMsg, false);
-                            ui.updateLastMessage(AI_ASSISTANT_ID, AI_ERROR_MESSAGE, errorMsg.created_at);
-
-                            // Remove from processing set
-                            state.aiMessageProcessing.delete(aiMsgId);
-                        }
                     } catch (error) {
                         console.error("Error in handleSend:", error);
                         ui.showToast("Error sending message", "error");
