@@ -436,9 +436,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                             throw new Error("Failed to save user message");
                         }
 
-                        // Remove temporary message
+                        // Update the temporary message with the real message ID
                         const tempElement = chatBox.querySelector(`[data-message-id="${tempMsgId}"]`);
-                        if (tempElement) tempElement.remove();
+                        if (tempElement) {
+                            tempElement.setAttribute('data-message-id', userMsgSaved.id);
+                            const seenStatus = tempElement.querySelector('.seen-status');
+                            if (seenStatus) {
+                                seenStatus.textContent = '✓'; // Not seen yet
+                            }
+                        }
 
                         // Get AI response
                         const aiResponse = await Promise.race([
@@ -696,7 +702,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         }
 
                         console.log("Message inserted successfully on retry");
-                        return true;
+                        return retryData;
                     } else if (error.code === '42501') {
                         console.error("Row-level security policy violation:", error);
                         return false;
@@ -707,7 +713,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
 
                 console.log("Message inserted successfully with ID:", data.id);
-                return true;
+                return data;
             } catch (err) {
                 console.error("Exception in insertMessage:", err);
                 return false;
@@ -721,10 +727,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 await utils.ensureUserExists(state.currentUserId);
                 await utils.ensureUserExists(friendId);
 
-                const success = await utils.insertMessage(state.currentUserId, friendId, content);
+                const messageData = await utils.insertMessage(state.currentUserId, friendId, content);
 
-                if (success) {
-                    ui.updateLastMessage(friendId, content, new Date().toISOString());
+                if (messageData) {
+                    ui.updateLastMessage(friendId, content, messageData.created_at);
                 } else {
                     ui.showToast("Message failed to send. Please try again.", "error");
                 }
@@ -2754,7 +2760,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                     ui.updateLastMessage(friendId, content, tempMsg.created_at);
 
                     try {
-                        await utils.sendMessage(friendId, content);
+                        const messageData = await utils.insertMessage(state.currentUserId, friendId, content);
+
+                        // Update the temporary message with the real message ID
+                        const tempElement = chatBox.querySelector(`[data-message-id="${tempMsg.id}"]`);
+                        if (tempElement && messageData) {
+                            tempElement.setAttribute('data-message-id', messageData.id);
+                            const seenStatus = tempElement.querySelector('.seen-status');
+                            if (seenStatus) {
+                                seenStatus.textContent = '✓'; // Not seen yet
+                            }
+                        }
                     } catch (error) {
                         console.error("Error in handleSend:", error);
                         ui.showToast("Error sending message", "error");
