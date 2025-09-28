@@ -7,11 +7,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     const ADMIN_REQUEST_KEY = "adminRequestShown";
     const MAX_BIO_LENGTH = 150;
     const MAX_USERNAME_LENGTH = 20;
-    const MESSAGE_DELETION_DELAY = 24 * 60 * 60 * 1000; // Changed to 24 hours
+    const MESSAGE_DELETION_DELAY = 24 * 60 * 60 * 1000;
     const RETRY_MAX_ATTEMPTS = 3;
     const RETRY_INITIAL_DELAY = 500;
 
-    // AI Assistant Constants - Using valid UUID
+    // AI Assistant Constants
     const AI_ASSISTANT_ID = '00000000-0000-0000-0000-000000000000';
     const AI_ASSISTANT_NAME = 'AI Assistant';
     const AI_ASSISTANT_AVATAR = './assets/icon/ai-avatar.jpg';
@@ -37,20 +37,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             chat: null,
             typing: null,
             status: null
-        }
+        },
+        statusInterval: null
     };
 
     // AI Assistant Module
     const aiAssistant = {
-        // Initialize Gemini API
         initializeGeminiAPI() {
-            // Replace with your actual Gemini 2.0 API key
             this.apiKey = 'AIzaSyCVqoPntSjTMdrbkhaulp2jhE_i7vootUk';
             this.apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${this.apiKey}`;
             console.log("Gemini API initialized");
         },
 
-        // Send message to Gemini and get response
         async sendMessageToGemini(message) {
             try {
                 const response = await fetch(this.apiUrl, {
@@ -80,13 +78,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Ensure AI Assistant exists in database
         async ensureAIAssistantExists() {
             try {
-                // First ensure users table exists
                 await database.ensureUsersTableExists();
 
-                // Check if AI Assistant exists in users table
                 const { data: existingUser, error: userError } = await client
                     .from("users")
                     .select("id")
@@ -96,7 +91,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (userError) throw userError;
 
                 if (!existingUser) {
-                    // Create AI Assistant in users table
                     const { error: insertError } = await client
                         .from("users")
                         .insert([{
@@ -109,7 +103,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     console.log("AI Assistant user created");
                 }
 
-                // Check if AI Assistant profile exists
                 const { data: existingProfile, error: profileError } = await client
                     .from("user_profiles")
                     .select("user_id")
@@ -119,7 +112,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (profileError) throw profileError;
 
                 if (!existingProfile) {
-                    // Create AI Assistant profile
                     const { error: profileInsertError } = await client
                         .from("user_profiles")
                         .insert([{
@@ -139,10 +131,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Add AI Assistant to friends list
         async addAIAssistantToFriendsList() {
             try {
-                // Check if AI Assistant is already a friend
                 const { data: existingFriend, error: friendError } = await client
                     .from("friends")
                     .select("*")
@@ -152,7 +142,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (friendError) throw friendError;
 
                 if (!existingFriend) {
-                    // Add AI Assistant as friend
                     const { error: insertError } = await client
                         .from("friends")
                         .insert([{
@@ -169,13 +158,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Render AI Assistant in friends list
         renderInFriendsList() {
             try {
                 const chatList = document.querySelector(".chat-list");
                 if (!chatList) return;
 
-                // Check if AI Assistant is already in the list
                 const existingAI = chatList.querySelector(`.chat[data-friend-id="${AI_ASSISTANT_ID}"]`);
                 if (existingAI) return;
 
@@ -210,12 +197,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Open AI chat
         async openAIChat() {
             try {
-                if (state.currentOpenChatId === AI_ASSISTANT_ID) {
-                    return;
-                }
+                if (state.currentOpenChatId === AI_ASSISTANT_ID) return;
 
                 state.currentOpenChatId = AI_ASSISTANT_ID;
 
@@ -304,10 +288,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 typingIndicator.textContent = "Online";
 
-                // Fetch previous AI messages
                 const oldMessages = await chat.fetchMessages(AI_ASSISTANT_ID);
 
-                // Mark AI messages as seen and update unseen count
                 const unseenAIMessages = oldMessages.filter(msg =>
                     msg.sender_id === AI_ASSISTANT_ID &&
                     msg.receiver_id === state.currentUserId &&
@@ -315,14 +297,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 );
 
                 if (unseenAIMessages.length > 0) {
-                    // Update seen status in database
                     const unseenIds = unseenAIMessages.map(msg => msg.id);
                     await client
                         .from("messages")
                         .update({ seen: true })
                         .in("id", unseenIds);
 
-                    // Update messages in local array
                     unseenAIMessages.forEach(msg => {
                         const index = oldMessages.findIndex(m => m.id === msg.id);
                         if (index !== -1) {
@@ -330,14 +310,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                         }
                     });
 
-                    // Update unseen count
                     state.unseenCounts[AI_ASSISTANT_ID] = 0;
                     ui.updateUnseenBadge(AI_ASSISTANT_ID, 0);
                 }
 
                 ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
 
-                // Add welcome message if no messages exist
                 if (oldMessages.length === 0) {
                     const welcomeMsg = {
                         id: 'welcome-' + Date.now(),
@@ -350,12 +328,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                     oldMessages.push(welcomeMsg);
                     ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
 
-                    // Save welcome message to database
                     await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, AI_WELCOME_MESSAGE);
                 }
 
-                // Set up real-time subscription for AI chat messages
-                const chatChannelName = `chat:${[state.currentUserId, AI_ASSISTANT_ID].sort().join(":")}`;
+                const chatChannelName = `ai-chat:${state.currentUserId}`;
                 state.channels.chat = client.channel(chatChannelName);
 
                 state.channels.chat
@@ -363,14 +339,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                         event: 'INSERT',
                         schema: 'public',
                         table: 'messages',
-                        filter: `sender_id=eq.${state.currentUserId}`
+                        filter: `and(sender_id=eq.${state.currentUserId},receiver_id=eq.${AI_ASSISTANT_ID})`
                     }, (payload) => {
                         const newMsg = payload.new;
-                        if (newMsg.receiver_id !== AI_ASSISTANT_ID) return;
-
-                        if (state.processingMessageIds.has(newMsg.id)) {
-                            return;
-                        }
+                        if (state.processingMessageIds.has(newMsg.id)) return;
                         state.processingMessageIds.add(newMsg.id);
 
                         oldMessages.push(newMsg);
@@ -385,21 +357,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                         event: 'INSERT',
                         schema: 'public',
                         table: 'messages',
-                        filter: `sender_id=eq.${AI_ASSISTANT_ID}`
+                        filter: `and(sender_id=eq.${AI_ASSISTANT_ID},receiver_id=eq.${state.currentUserId})`
                     }, (payload) => {
                         const newMsg = payload.new;
-                        if (newMsg.receiver_id !== state.currentUserId) return;
-
-                        if (state.processingMessageIds.has(newMsg.id)) {
-                            return;
-                        }
+                        if (state.processingMessageIds.has(newMsg.id)) return;
                         state.processingMessageIds.add(newMsg.id);
 
                         oldMessages.push(newMsg);
                         ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
                         ui.updateLastMessage(AI_ASSISTANT_ID, newMsg.content, newMsg.created_at);
 
-                        // Mark as seen immediately since we are in the chat
                         try {
                             client
                                 .from("messages")
@@ -432,49 +399,57 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const content = inputSafe.value.trim();
                     if (!content) return;
 
-                    // Add user message to UI
-                    const userMsg = {
-                        id: 'user-' + Date.now(),
-                        sender_id: state.currentUserId,
-                        receiver_id: AI_ASSISTANT_ID,
-                        content: content,
-                        created_at: new Date().toISOString(),
-                        seen: false
-                    };
-                    oldMessages.push(userMsg);
-                    ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
-
-                    // Clear input
-                    inputSafe.value = "";
                     sendBtnSafe.disabled = true;
+                    
+                    try {
+                        const userMsgSaved = await utils.insertMessage(state.currentUserId, AI_ASSISTANT_ID, content);
+                        
+                        if (userMsgSaved) {
+                            const userMsg = {
+                                id: 'user-' + Date.now(),
+                                sender_id: state.currentUserId,
+                                receiver_id: AI_ASSISTANT_ID,
+                                content: content,
+                                created_at: new Date().toISOString(),
+                                seen: false
+                            };
+                            oldMessages.push(userMsg);
+                            ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+                            
+                            inputSafe.value = "";
+                            typingIndicator.textContent = "AI is typing...";
 
-                    // Show typing indicator
-                    typingIndicator.textContent = "AI is typing...";
-
-                    // Get AI response
-                    const aiResponse = await aiAssistant.sendMessageToGemini(content);
-
-                    // Add AI response to UI
-                    const aiMsg = {
-                        id: 'ai-' + Date.now(),
-                        sender_id: AI_ASSISTANT_ID,
-                        receiver_id: state.currentUserId,
-                        content: aiResponse,
-                        created_at: new Date().toISOString(),
-                        seen: false
-                    };
-                    oldMessages.push(aiMsg);
-                    ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
-
-                    // Reset typing indicator
-                    typingIndicator.textContent = "Online";
-
-                    // Save messages to database
-                    await utils.insertMessage(state.currentUserId, AI_ASSISTANT_ID, content);
-                    await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, aiResponse);
-
-                    // Update last message in friends list
-                    ui.updateLastMessage(AI_ASSISTANT_ID, content, new Date().toISOString());
+                            const aiResponse = await aiAssistant.sendMessageToGemini(content);
+                            
+                            const aiMsgSaved = await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, aiResponse);
+                            
+                            if (aiMsgSaved) {
+                                const aiMsg = {
+                                    id: 'ai-' + Date.now(),
+                                    sender_id: AI_ASSISTANT_ID,
+                                    receiver_id: state.currentUserId,
+                                    content: aiResponse,
+                                    created_at: new Date().toISOString(),
+                                    seen: false
+                                };
+                                oldMessages.push(aiMsg);
+                                ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+                                
+                                ui.updateLastMessage(AI_ASSISTANT_ID, content, new Date().toISOString());
+                            } else {
+                                ui.showToast("Failed to save AI response", "error");
+                            }
+                        } else {
+                            ui.showToast("Failed to send message", "error");
+                        }
+                    } catch (error) {
+                        console.error("Error in handleSend:", error);
+                        ui.showToast("Error sending message", "error");
+                    } finally {
+                        typingIndicator.textContent = "Online";
+                        sendBtnSafe.disabled = false;
+                        inputSafe.focus();
+                    }
                 }
 
                 sendBtnSafe.addEventListener("click", handleSend);
@@ -492,7 +467,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     backClone.addEventListener("click", async () => {
                         state.currentOpenChatId = null;
 
-                        // Remove the chat channel
                         if (state.channels.chat) {
                             await client.removeChannel(state.channels.chat);
                             state.channels.chat = null;
@@ -520,18 +494,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Initialize AI Assistant
         async initialize() {
             try {
-                // Initialize Gemini API
                 this.initializeGeminiAPI();
-
-                // Ensure AI Assistant exists in database
                 await this.ensureAIAssistantExists();
-
-                // Add AI Assistant to friends list
                 await this.addAIAssistantToFriendsList();
-
                 console.log("AI Assistant initialized successfully");
             } catch (error) {
                 console.error("Error initializing AI Assistant:", error);
@@ -541,7 +508,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Utility functions
     const utils = {
-        // Retry mechanism with exponential backoff
         withRetry: async (fn, maxRetries = RETRY_MAX_ATTEMPTS, initialDelay = RETRY_INITIAL_DELAY) => {
             let lastError;
 
@@ -554,7 +520,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     if (attempt === maxRetries) break;
 
-                    // Exponential backoff with jitter
                     const delay = initialDelay * Math.pow(2, attempt - 1) + Math.random() * 200;
                     console.log(`Retrying in ${delay}ms...`);
                     await new Promise(resolve => setTimeout(resolve, delay));
@@ -564,12 +529,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             throw lastError;
         },
 
-        // Ensure user exists in users table
         ensureUserExists: async (userId) => {
             return utils.withRetry(async () => {
-                // Special handling for AI Assistant
                 if (userId === AI_ASSISTANT_ID) {
-                    // Check if AI Assistant exists
                     const { data: existingUser, error: checkError } = await client
                         .from("users")
                         .select("id")
@@ -580,7 +542,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     if (existingUser) return true;
 
-                    // Create AI Assistant
                     const { error: insertError } = await client
                         .from("users")
                         .insert([{
@@ -594,7 +555,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     return true;
                 }
 
-                // Regular user handling
                 const { data: existingUser, error: checkError } = await client
                     .from("users")
                     .select("id")
@@ -605,7 +565,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 if (existingUser) return true;
 
-                // User doesn't exist, get profile information and create them
                 console.log(`User ${userId} not found, attempting to create...`);
 
                 const { data: profile, error: profileError } = await client
@@ -617,7 +576,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (profileError) throw profileError;
                 if (!profile) throw new Error("User profile not found");
 
-                // Create the user
                 const { error: insertError } = await client
                     .from("users")
                     .insert([{
@@ -628,7 +586,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 if (insertError) throw insertError;
 
-                // Verify the user was actually created
                 const { data: verifyUser, error: verifyError } = await client
                     .from("users")
                     .select("id")
@@ -642,106 +599,78 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         },
 
-        // Insert message with proper user existence checks
         insertMessage: async (senderId, receiverId, content) => {
             try {
-                // Ensure both users exist in the users table
-                await utils.ensureUserExists(senderId);
-                await utils.ensureUserExists(receiverId);
-
-                // Double-check that both users exist before inserting
-                const { data: senderCheck, error: senderCheckError } = await client
-                    .from("users")
-                    .select("id")
-                    .eq("id", senderId)
-                    .maybeSingle();
-
-                if (senderCheckError || !senderCheck) {
-                    console.error("Sender verification failed:", senderCheckError);
+                console.log(`Inserting message from ${senderId} to ${receiverId}`);
+                
+                const senderExists = await utils.ensureUserExists(senderId);
+                const receiverExists = await utils.ensureUserExists(receiverId);
+                
+                if (!senderExists || !receiverExists) {
+                    console.error("Sender or receiver does not exist in users table");
                     return false;
                 }
 
-                const { data: receiverCheck, error: receiverCheckError } = await client
-                    .from("users")
-                    .select("id")
-                    .eq("id", receiverId)
-                    .maybeSingle();
+                const { data, error } = await client
+                    .from("messages")
+                    .insert([{
+                        sender_id: senderId,
+                        receiver_id: receiverId,
+                        content
+                    }])
+                    .select()
+                    .single();
 
-                if (receiverCheckError || !receiverCheck) {
-                    console.error("Receiver verification failed:", receiverCheckError);
-                    return false;
-                }
-
-                // Insert the message with retry logic for foreign key errors
-                try {
-                    const { data, error } = await client
-                        .from("messages")
-                        .insert([{
-                            sender_id: senderId,
-                            receiver_id: receiverId,
-                            content
-                        }])
-                        .select()
-                        .single();
-
-                    if (error) {
-                        // If it's a foreign key error, try to ensure the users exist again and retry
-                        if (error.code === '23503') {
-                            console.error("Foreign key error, retrying after ensuring users exist");
-
-                            await utils.ensureUserExists(senderId);
-                            await utils.ensureUserExists(receiverId);
-
-                            // Retry insertion
-                            const { data: retryData, error: retryError } = await client
-                                .from("messages")
-                                .insert([{
-                                    sender_id: senderId,
-                                    receiver_id: receiverId,
-                                    content
-                                }])
-                                .select()
-                                .single();
-
-                            if (retryError) {
-                                console.error("Error inserting message on retry:", retryError);
-                                return false;
-                            }
-
-                            console.log("Message inserted successfully on retry");
-                            return true;
-                        } else if (error.code === '42501') {
-                            // Row-level security policy violation
-                            console.error("Row-level security policy violation:", error);
-                            return false;
-                        } else {
-                            console.error("Error inserting message:", error);
+                if (error) {
+                    console.error("Error inserting message:", error);
+                    
+                    if (error.code === '23503') {
+                        console.log("Foreign key error, retrying after ensuring users exist");
+                        
+                        await utils.ensureUserExists(senderId);
+                        await utils.ensureUserExists(receiverId);
+                        
+                        const { data: retryData, error: retryError } = await client
+                            .from("messages")
+                            .insert([{
+                                sender_id: senderId,
+                                receiver_id: receiverId,
+                                content
+                            }])
+                            .select()
+                            .single();
+                        
+                        if (retryError) {
+                            console.error("Error inserting message on retry:", retryError);
                             return false;
                         }
+                        
+                        console.log("Message inserted successfully on retry");
+                        return true;
+                    } else if (error.code === '42501') {
+                        console.error("Row-level security policy violation:", error);
+                        return false;
+                    } else {
+                        console.error("Error inserting message:", error);
+                        return false;
                     }
-
-                    console.log("Message inserted successfully");
-                    return true;
-                } catch (err) {
-                    console.error("Exception in insertMessage:", err);
-                    return false;
                 }
+
+                console.log("Message inserted successfully with ID:", data.id);
+                return true;
             } catch (err) {
-                console.error("Error in insertMessage:", err);
+                console.error("Exception in insertMessage:", err);
                 return false;
             }
         },
 
-        // Send message with proper error handling
         sendMessage: async (friendId, content) => {
             if (!content || !content.trim()) return;
 
             try {
-                // Ensure both users exist in the users table
                 await utils.ensureUserExists(state.currentUserId);
                 await utils.ensureUserExists(friendId);
 
-                // Insert the message
                 const success = await utils.insertMessage(state.currentUserId, friendId, content);
 
                 if (success) {
@@ -755,7 +684,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Check if user is already a friend
         isAlreadyFriend: async (userId) => {
             if (!state.currentUserId || !userId) return false;
 
@@ -778,7 +706,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Get user profile data
         getUserProfile: async (userId) => {
             try {
                 const { data, error } = await client
@@ -795,7 +722,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Get user profile for chat
         getUserProfileForChat: async (userId) => {
             try {
                 const { data, error } = await client
@@ -816,7 +742,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Check if user exists in users table
         userExistsInUsersTable: async (userId) => {
             try {
                 const { data, error } = await client
@@ -837,18 +762,15 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Ensure current user exists in users table
         ensureCurrentUserInUsersTable: async () => {
             if (!state.currentUserId) return false;
 
             try {
-                // Check if user exists in users table
                 const userExists = await utils.userExistsInUsersTable(state.currentUserId);
 
                 if (!userExists) {
                     console.log("Current user not found in users table, adding...");
 
-                    // Get user data from auth
                     const { data: { user }, error: authError } = await client.auth.getUser();
 
                     if (authError || !user) {
@@ -856,7 +778,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         return false;
                     }
 
-                    // Add user to users table with email
                     const { error: insertError } = await client
                         .from("users")
                         .insert([{
@@ -880,7 +801,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Set user online status
         setUserOnlineStatus: async (isOnline) => {
             if (!state.currentUserId) return;
             try {
@@ -891,7 +811,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Schedule message deletion
         scheduleMessageDeletion: (messageId, friendId, delay = MESSAGE_DELETION_DELAY) => {
             try {
                 if (state.deletionTimeouts[messageId]) {
@@ -922,7 +841,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Delete seen messages for chat
         deleteSeenMessagesForChat: async (friendId) => {
             if (!state.currentUserId) return;
 
@@ -966,7 +884,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Linkify function to make URLs clickable
         linkify: (text) => {
             try {
                 const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -979,7 +896,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Generate chat link
         generateChatLink: (friendId) => {
             try {
                 const baseUrl = window.location.origin + window.location.pathname;
@@ -990,7 +906,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Request notification permission
         requestNotificationPermission: async () => {
             if (!("Notification" in window)) {
                 console.warn("Browser does not support notifications.");
@@ -1017,7 +932,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Function to show notification with fallback to in-app notification
         showNotification: async (title, options = {}) => {
             const hasPermission = await utils.requestNotificationPermission();
 
@@ -1037,7 +951,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // UI functions
     const ui = {
-        // Show modal with animation
         showModal: (modalId) => {
             try {
                 const modal = document.getElementById(modalId);
@@ -1054,7 +967,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Hide modal with animation
         hideModal: (modalId) => {
             try {
                 const modal = document.getElementById(modalId);
@@ -1072,7 +984,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Show toast notification
         showToast: (message, type = "info") => {
             try {
                 const toast = document.getElementById("toast-notification");
@@ -1103,7 +1014,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Show loading overlay
         showLoading: (message = 'Loading...') => {
             try {
                 const overlay = document.getElementById("loading-overlay");
@@ -1122,7 +1032,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Hide loading overlay
         hideLoading: () => {
             try {
                 const overlay = document.getElementById("loading-overlay");
@@ -1138,10 +1047,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Track active popups
         activePopups: new Set(),
 
-        // Top-right popup function
         showTopRightPopup: (message, type = "info", image = null) => {
             try {
                 const popupKey = `${message}-${type}-${image || ''}`;
@@ -1235,7 +1142,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Show copy popup
         showCopyPopup: (element) => {
             try {
                 const popup = document.createElement("div");
@@ -1275,7 +1181,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Create loader
         createLoader: () => {
             const loader = document.createElement('div');
             loader.className = 'btn-loader';
@@ -1289,7 +1194,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             return loader;
         },
 
-        // Update unseen badge
         updateUnseenBadge: (friendId, count) => {
             try {
                 const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
@@ -1314,7 +1218,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Update unseen count for friend
         updateUnseenCountForFriend: async (friendId) => {
             try {
                 const { count, error } = await client
@@ -1338,7 +1241,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Update last message in chat list
         updateLastMessageInChatList: async (friendId) => {
             try {
                 const { data: lastMsgData } = await client
@@ -1366,7 +1268,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Update last message
         updateLastMessage: (friendId, content, createdAt) => {
             try {
                 const chatLi = document.querySelector(`.chat[data-friend-id="${friendId}"]`);
@@ -1390,7 +1291,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Update message seen status
         updateMessageSeenStatus: (chatBox, messageId) => {
             try {
                 const chatMessage = chatBox.querySelector(`.message[data-message-id="${messageId}"] .seen-status`);
@@ -1402,7 +1302,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Render chat messages
         renderChatMessages: (chatBox, msgs, friendAvatar) => {
             try {
                 if (!chatBox) return;
@@ -1440,7 +1339,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     msgBubble.appendChild(msgText);
                     msgBubble.appendChild(msgMeta);
 
-                    // Add copy icon
                     const copyIcon = document.createElement("span");
                     copyIcon.className = "copy-icon";
                     copyIcon.innerHTML = `
@@ -1450,7 +1348,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         </svg>
                     `;
 
-                    // Set color based on message type
                     const iconColor = isMe ? "#fff" : "#666";
                     copyIcon.style.cssText = `
                         position: relative;
@@ -1464,7 +1361,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     msgBubble.appendChild(copyIcon);
 
-                    // Show copy icon on hover
                     msgBubble.addEventListener("mouseenter", () => {
                         copyIcon.style.opacity = "1";
                     });
@@ -1473,7 +1369,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         copyIcon.style.opacity = "0";
                     });
 
-                    // Copy message text on click
                     copyIcon.addEventListener("click", (e) => {
                         e.stopPropagation();
                         navigator.clipboard.writeText(msg.content).then(() => {
@@ -1503,7 +1398,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Update friend UI in real-time
         updateFriendUI: (friendId) => {
             try {
                 let friendData = state.allFriends.get(friendId);
@@ -1556,7 +1450,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Show confirm popup
         showConfirmPopup: (message, onConfirm, onCancel) => {
             try {
                 const popup = document.getElementById("notification-popup");
@@ -1624,7 +1517,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // User modal function
         showUserModal: (userId, userName, userAvatar) => {
             try {
                 const modal = document.getElementById("user-modal");
@@ -1675,7 +1567,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Enable friend search
         enableFriendSearch: () => {
             try {
                 const searchInput = document.getElementById("search-friends");
@@ -1724,7 +1615,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Render friend requests
         renderFriendRequests: () => {
             try {
                 const messageList = document.getElementById("friend-requests-list");
@@ -1780,7 +1670,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Render recent chats
         renderRecentChats: (chats) => {
             try {
                 const recentChatsContainer = document.getElementById('recent-chats');
@@ -1834,7 +1723,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Friend request functions
     const friendRequests = {
-        // Accept friend request
         acceptRequest: async (requestId, senderId) => {
             try {
                 const alreadyFriends = await utils.isAlreadyFriend(senderId);
@@ -1877,7 +1765,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Reject friend request
         rejectRequest: async (requestId) => {
             try {
                 const { error } = await client
@@ -1899,7 +1786,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Send friend request
         sendFriendRequest: async (username) => {
             if (!username) return ui.showToast("Enter a username.", "error");
 
@@ -1993,7 +1879,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Fetch friend requests
         fetchFriendRequests: async () => {
             if (!state.currentUserId) return;
 
@@ -2064,7 +1949,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Friends functions
     const friends = {
-        // Fetch friends
         fetchFriends: async () => {
             ui.showLoading("Fetching friends...");
             if (!state.currentUserId) {
@@ -2178,7 +2062,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     state.unseenCounts[friendId] = unseenCount || 0;
                 });
 
-                // Add AI Assistant to friends list
                 aiAssistant.renderInFriendsList();
 
                 ui.enableFriendSearch();
@@ -2190,7 +2073,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Fetch recent chats
         fetchRecentChats: async () => {
             try {
                 const { data: friends, error: friendsError } = await client
@@ -2245,7 +2127,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 let recentChats = await Promise.all(recentChatsPromises);
 
-                // Add AI Assistant to recent chats if there are messages
                 const { data: aiMessages } = await client
                     .from("messages")
                     .select("content, created_at")
@@ -2282,7 +2163,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Chat functions
     const chat = {
-        // Fetch messages between current user and friend
         fetchMessages: async (friendId) => {
             if (!state.currentUserId || !friendId) return [];
 
@@ -2306,7 +2186,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Mark messages as seen
         markMessagesAsSeen: async (friendId, chatBox, messages, friendAvatar) => {
             if (!state.currentUserId || !friendId) return;
 
@@ -2349,7 +2228,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Open specific chat
         openSpecificChat: async (userId, profile = null) => {
             try {
                 if (!state.currentUserId) {
@@ -2364,7 +2242,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     return;
                 }
 
-                // Check if this is the AI Assistant
                 if (userId === AI_ASSISTANT_ID) {
                     return aiAssistant.openAIChat();
                 }
@@ -2384,10 +2261,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Open chat function
         openChat: async (friendId, friendName, friendAvatar, fromNotification = false) => {
             try {
-                // Don't open regular chat for AI Assistant
                 if (friendId === AI_ASSISTANT_ID) {
                     return aiAssistant.openAIChat();
                 }
@@ -2427,7 +2302,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     chatContainer.style.display = "flex";
                     defaultScreen.style.display = 'none';
                 } else {
-                    if (messageCon) messageCon.style.display = "flex";
+                    if (messageCon) messageCon.display = "flex";
                     chatContainer.style.display = "flex";
                 }
 
@@ -2763,7 +2638,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Open chat from URL
         openChatFromUrl: () => {
             try {
                 const urlParams = new URLSearchParams(window.location.search);
@@ -2789,7 +2663,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Handle notification redirect
         handleNotificationRedirect: () => {
             try {
                 if (!state.currentOpenChatId && state.notificationData.type === 'message' && state.notificationData.senderId) {
@@ -2818,7 +2691,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Auth functions
     const auth = {
-        // Get current user
         getCurrentUser: async () => {
             try {
                 const { data: { user }, error } = await client.auth.getUser();
@@ -2830,12 +2702,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 state.currentUserId = user.id;
                 console.log("Current user ID:", state.currentUserId);
 
-                // Ensure user exists in users table
                 await utils.ensureCurrentUserInUsersTable();
 
                 await utils.setUserOnlineStatus(true);
 
-                // Check if we need to show admin friend request popup
                 await auth.checkAndShowAdminRequestPopup();
 
                 return user;
@@ -2846,7 +2716,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Show admin friend request popup for new users
         checkAndShowAdminRequestPopup: async () => {
             if (localStorage.getItem(ADMIN_REQUEST_KEY) === 'true') return;
 
@@ -2896,7 +2765,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Fetch current user avatar
         fetchCurrentUserAvatar: async (profileImageSelector = '.profile-pic') => {
             try {
                 const profileImage = document.querySelector(profileImageSelector);
@@ -2929,7 +2797,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Database functions
     const database = {
-        // Initialize database schema
         initializeDatabaseSchema: async () => {
             try {
                 const { data, error } = await client
@@ -2960,7 +2827,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Ensure users table exists
         ensureUsersTableExists: async () => {
             try {
                 const { data, error } = await client.rpc('exec_sql', {
@@ -2970,7 +2836,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (error || !data || !data[0] || !data[0].table_exists) {
                     console.log("Users table doesn't exist, creating it...");
 
-                    // Create users table
                     const { error: createError } = await client.rpc('exec_sql', {
                         sql: `
                             CREATE TABLE IF NOT EXISTS users (
@@ -2998,15 +2863,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Check and fix database schema
         checkAndFixDatabaseSchema: async () => {
             try {
                 console.log("Checking database schema...");
 
-                // First ensure users table exists
                 await database.ensureUsersTableExists();
 
-                // Now try to add the constraints
                 try {
                     console.log("Attempting to add sender foreign key constraint...");
                     const { error: senderError } = await client.rpc('exec_sql', {
@@ -3044,7 +2906,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // Check and fix foreign key constraints
         checkAndFixForeignKeys: async () => {
             try {
                 console.log("Checking foreign key constraints...");
@@ -3058,10 +2919,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Realtime functions
     const realtime = {
-        // Setup realtime subscriptions
         setupRealtimeSubscriptions: async () => {
             try {
-                // Global messages channel
                 state.channels.globalMessages = client.channel('global-messages');
 
                 state.channels.globalMessages
@@ -3151,7 +3010,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         }
                     });
 
-                // Friend requests channel
                 state.channels.friendRequests = client.channel(`friend-requests-${state.currentUserId}`);
 
                 state.channels.friendRequests
@@ -3230,7 +3088,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         }
                     });
 
-                // Friends updates channel
                 state.channels.friendsUpdates = client.channel('friends-updates');
 
                 state.channels.friendsUpdates
@@ -3269,7 +3126,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         }
                     });
 
-                // User profiles updates channel
                 state.channels.userProfilesUpdates = client.channel('user-profiles-updates');
 
                 state.channels.userProfilesUpdates
@@ -3313,9 +3169,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Profile management functions
     const profile = {
-        // Setup profile elements
         setupProfileElements: () => {
-            // Profile elements
             const profilePic = document.querySelector(".profile-pic");
             const profilePopup = document.getElementById("profile-popup");
             const closeProfile = document.getElementById("close-profile");
@@ -3333,7 +3187,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             const saveUsernameBtn = document.getElementById("save-username");
             const newUsernameInput = document.getElementById("new-username");
 
-            // SVG icons for buttons
             if (closeProfile) {
                 closeProfile.innerHTML = `
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -3405,7 +3258,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 `;
             }
 
-            // Bio character count and clear button
             const bioCharCount = document.getElementById("bio-char-count");
             const clearBioBtn = document.getElementById("clear-bio");
 
@@ -3480,7 +3332,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 });
             }
 
-            // Username character count
             const nameCharCount = document.getElementById("name-char-count");
 
             if (newUsernameInput && !nameCharCount) {
@@ -3527,7 +3378,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 });
             }
 
-            // Profile pic click handler
             profilePic?.addEventListener("click", async () => {
                 try {
                     if (!profilePopup) return;
@@ -3779,7 +3629,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Event listeners setup
     const setupEventListeners = () => {
-        // Message notification click handler
         document.getElementById("message-notification")?.addEventListener("click", () => {
             try {
                 const popup = document.getElementById("friend-requests-popup");
@@ -3795,7 +3644,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
 
-        // Close message popup when clicking outside
         document.addEventListener("click", (e) => {
             try {
                 const messageIcon = document.getElementById("message-notification");
@@ -3808,7 +3656,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
 
-        // Submit friend request
         document.querySelector(".submit-friend")?.addEventListener("click", () => {
             try {
                 const username = document.querySelector(".friend-input")?.value.trim();
@@ -3818,7 +3665,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
 
-        // Add friend button
         document.querySelector(".addFriends")?.addEventListener("click", () => {
             try {
                 ui.showModal("friendModal");
@@ -3827,7 +3673,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
 
-        // Close friend modal
         document.querySelector("#friendModal .close")?.addEventListener("click", () => {
             try {
                 ui.hideModal("friendModal");
@@ -3836,7 +3681,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
 
-        // Close friend requests popup
         document.querySelector("#friend-requests-popup .popup-close")?.addEventListener("click", () => {
             try {
                 document.getElementById("friend-requests-popup").classList.remove("show");
@@ -3845,14 +3689,28 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
 
-        // Before unload event
         window.addEventListener('beforeunload', () => {
             utils.setUserOnlineStatus(false);
             Object.values(state.deletionTimeouts).forEach(timeoutId => clearTimeout(timeoutId));
+            
+            Object.values(state.channels).forEach(channel => {
+                if (channel) client.removeChannel(channel);
+            });
+            
+            if (state.statusInterval) {
+                clearInterval(state.statusInterval);
+            }
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                utils.setUserOnlineStatus(true);
+            } else {
+                utils.setUserOnlineStatus(false);
+            }
         });
     };
 
-    // Global function to open chat with user
     window.openChatWithUser = async function (userId) {
         try {
             if (!state.currentUserId) return;
@@ -3881,23 +3739,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     };
 
-    // Initialize app
     const initializeApp = async () => {
         try {
             console.log("Starting application initialization...");
 
-            // Check and fix foreign key constraints
             await database.checkAndFixForeignKeys();
 
             const me = await auth.getCurrentUser();
             if (me) {
-                // Ensure current user exists in users table
                 await utils.ensureCurrentUserInUsersTable();
 
                 await database.checkAndFixDatabaseSchema();
                 await database.initializeDatabaseSchema();
 
-                // Initialize AI Assistant
                 await aiAssistant.initialize();
 
                 await friends.fetchFriends();
@@ -3911,6 +3765,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
 
                 chat.openChatFromUrl();
+                
+                const updateOnlineStatus = async () => {
+                    try {
+                        await utils.setUserOnlineStatus(true);
+                        console.log("Online status updated");
+                    } catch (error) {
+                        console.error("Error updating online status:", error);
+                    }
+                };
+
+                state.statusInterval = setInterval(updateOnlineStatus, 30000);
             }
         } catch (error) {
             console.error("Error initializing app:", error);
@@ -3918,18 +3783,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     };
 
-    // Setup profile elements
     profile.setupProfileElements();
-
-    // Setup event listeners
     setupEventListeners();
-
-    // Initialize notifications
     await utils.requestNotificationPermission();
-
-    // Fetch current user avatar
     auth.fetchCurrentUserAvatar();
-
-    // Initialize the app
     initializeApp();
 });
