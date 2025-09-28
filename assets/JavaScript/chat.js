@@ -7,7 +7,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const ADMIN_REQUEST_KEY = "adminRequestShown";
     const MAX_BIO_LENGTH = 150;
     const MAX_USERNAME_LENGTH = 20;
-    const MESSAGE_DELETION_DELAY = 30 * 1000; // Changed from 24 hours to 30 seconds
+    const MESSAGE_DELETION_DELAY = 30 * 1000;
     const RETRY_MAX_ATTEMPTS = 1;
     const RETRY_INITIAL_DELAY = 100;
 
@@ -39,7 +39,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             status: null
         },
         statusInterval: null,
-        messageQueue: new Map() // For message queuing
+        messageQueue: new Map(),
+        aiMessageProcessing: new Set() // Track AI messages being processed
     };
 
     // AI Assistant Module
@@ -57,7 +58,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const timeoutId = setTimeout(() => {
                     controller.abort();
                     reject(new Error('AI response timeout'));
-                }, 5000); // 5 second timeout
+                }, 8000); // Increased timeout
 
                 fetch(this.apiUrl, {
                     method: 'POST',
@@ -323,7 +324,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (index !== -1) {
                             oldMessages[index].seen = true;
                         }
-                        // Schedule deletion 30 seconds after being seen
                         utils.scheduleMessageDeletion(msg.id, AI_ASSISTANT_ID);
                     });
 
@@ -348,6 +348,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, AI_WELCOME_MESSAGE);
                 }
 
+                // Setup real-time subscription for AI messages only
                 const chatChannelName = `ai-chat:${state.currentUserId}`;
                 state.channels.chat = client.channel(chatChannelName);
 
@@ -356,58 +357,41 @@ document.addEventListener("DOMContentLoaded", async () => {
                         event: 'INSERT',
                         schema: 'public',
                         table: 'messages',
-                        filter: `and(sender_id=eq.${state.currentUserId},receiver_id=eq.${AI_ASSISTANT_ID})`
+                        filter: `and(sender_id.eq.${AI_ASSISTANT_ID},receiver_id.eq.${state.currentUserId})`
                     }, (payload) => {
                         const newMsg = payload.new;
-                        if (state.processingMessageIds.has(newMsg.id)) return;
-                        state.processingMessageIds.add(newMsg.id);
 
-                        // Optimized: Append only the new message instead of re-rendering all
-                        ui.appendMessage(chatBox, newMsg, true);
-                        // Only update last message for this specific chat
-                        ui.updateLastMessage(AI_ASSISTANT_ID, newMsg.content, newMsg.created_at);
-
-                        setTimeout(() => {
-                            state.processingMessageIds.delete(newMsg.id);
-                        }, 1000);
-                    })
-                    .on('postgres_changes', {
-                        event: 'INSERT',
-                        schema: 'public',
-                        table: 'messages',
-                        filter: `and(sender_id=eq.${AI_ASSISTANT_ID},receiver_id=eq.${state.currentUserId})`
-                    }, (payload) => {
-                        const newMsg = payload.new;
-                        if (state.processingMessageIds.has(newMsg.id)) return;
-                        state.processingMessageIds.add(newMsg.id);
-
-                        // Optimized: Append only the new message instead of re-rendering all
-                        ui.appendMessage(chatBox, newMsg, false);
-                        // Only update last message for this specific chat
-                        ui.updateLastMessage(AI_ASSISTANT_ID, newMsg.content, newMsg.created_at);
-
-                        try {
-                            client
-                                .from("messages")
-                                .update({ seen: true })
-                                .eq("id", newMsg.id)
-                                .then(() => {
-                                    const idx = oldMessages.findIndex(m => m.id === newMsg.id);
-                                    if (idx !== -1) {
-                                        oldMessages[idx].seen = true;
-                                    }
-                                    // Update just the seen status instead of re-rendering
-                                    ui.updateMessageSeenStatus(chatBox, newMsg.id);
-                                    // Schedule deletion 30 seconds after being seen
-                                    utils.scheduleMessageDeletion(newMsg.id, AI_ASSISTANT_ID);
-                                });
-                        } catch (err) {
-                            console.error("Error marking AI message as seen:", err);
+                        // Skip if we're already processing this AI message
+                        if (state.aiMessageProcessing.has(newMsg.id)) {
+                            state.aiMessageProcessing.delete(newMsg.id);
+                            return;
                         }
 
-                        setTimeout(() => {
-                            state.processingMessageIds.delete(newMsg.id);
-                        }, 1000);
+                        // Add to processing set to prevent duplicate handling
+                        state.aiMessageProcessing.add(newMsg.id);
+
+                        // Append the message to UI
+                        ui.appendMessage(chatBox, newMsg, false);
+                        ui.updateLastMessage(AI_ASSISTANT_ID, newMsg.content, newMsg.created_at);
+
+                        // Mark as seen and schedule deletion
+                        client
+                            .from("messages")
+                            .update({ seen: true })
+                            .eq("id", newMsg.id)
+                            .then(() => {
+                                ui.updateMessageSeenStatus(chatBox, newMsg.id);
+                                utils.scheduleMessageDeletion(newMsg.id, AI_ASSISTANT_ID);
+                            })
+                            .catch(err => {
+                                console.error("Error marking AI message as seen:", err);
+                            })
+                            .finally(() => {
+                                // Remove from processing set after a delay
+                                setTimeout(() => {
+                                    state.aiMessageProcessing.delete(newMsg.id);
+                                }, 1000);
+                            });
                     })
                     .subscribe((status, err) => {
                         if (status === 'SUBSCRIBED') {
@@ -426,8 +410,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                     inputSafe.value = "";
 
                     // Create temporary message for immediate UI feedback
+                    const tempMsgId = 'temp-' + Date.now();
                     const tempMsg = {
-                        id: 'temp-' + Date.now(),
+                        id: tempMsgId,
                         sender_id: state.currentUserId,
                         receiver_id: AI_ASSISTANT_ID,
                         content: content,
@@ -438,45 +423,65 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     // Add to UI immediately
                     ui.appendMessage(chatBox, tempMsg, true);
-                    // Only update last message for this specific chat
                     ui.updateLastMessage(AI_ASSISTANT_ID, content, tempMsg.created_at);
 
                     // Show AI is typing
                     typingIndicator.textContent = "AI is typing...";
 
                     try {
-                        // Send message in background
+                        // Send user message to database
                         const userMsgSaved = await utils.insertMessage(state.currentUserId, AI_ASSISTANT_ID, content);
 
-                        if (userMsgSaved) {
-                            // Get AI response
-                            const aiResponse = await Promise.race([
-                                aiAssistant.sendMessageToGemini(content),
-                                new Promise((_, reject) =>
-                                    setTimeout(() => reject(new Error('AI timeout')), 8000)
-                                )
-                            ]);
+                        if (!userMsgSaved) {
+                            throw new Error("Failed to save user message");
+                        }
 
-                            // Insert AI response
-                            const aiMsgSaved = await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, aiResponse);
+                        // Remove temporary message
+                        const tempElement = chatBox.querySelector(`[data-message-id="${tempMsgId}"]`);
+                        if (tempElement) tempElement.remove();
 
-                            if (aiMsgSaved) {
-                                // AI message will be added via real-time subscription
-                                console.log("AI response sent");
-                            } else {
-                                ui.showToast("Failed to save AI response", "error");
-                            }
+                        // Get AI response
+                        const aiResponse = await Promise.race([
+                            aiAssistant.sendMessageToGemini(content),
+                            new Promise((_, reject) =>
+                                setTimeout(() => reject(new Error('AI timeout')), 10000)
+                            )
+                        ]);
+
+                        // Create a unique ID for this AI message to track it
+                        const aiMsgId = 'ai-msg-' + Date.now();
+
+                        // Add to processing set to prevent duplicate handling
+                        state.aiMessageProcessing.add(aiMsgId);
+
+                        // Insert AI response to database
+                        const aiMsgSaved = await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, aiResponse);
+
+                        if (aiMsgSaved) {
+                            // The real-time subscription will handle displaying the message
+                            console.log("AI response sent");
                         } else {
-                            ui.showToast("Failed to send message", "error");
-                            // Remove temporary message
-                            const tempElement = chatBox.querySelector(`[data-message-id="${tempMsg.id}"]`);
-                            if (tempElement) tempElement.remove();
+                            // Show error message if insertion failed
+                            const errorMsg = {
+                                id: 'error-' + Date.now(),
+                                sender_id: AI_ASSISTANT_ID,
+                                receiver_id: state.currentUserId,
+                                content: AI_ERROR_MESSAGE,
+                                created_at: new Date().toISOString(),
+                                seen: false
+                            };
+                            ui.appendMessage(chatBox, errorMsg, false);
+                            ui.updateLastMessage(AI_ASSISTANT_ID, AI_ERROR_MESSAGE, errorMsg.created_at);
+
+                            // Remove from processing set
+                            state.aiMessageProcessing.delete(aiMsgId);
                         }
                     } catch (error) {
                         console.error("Error in handleSend:", error);
                         ui.showToast("Error sending message", "error");
-                        // Remove temporary message
-                        const tempElement = chatBox.querySelector(`[data-message-id="${tempMsg.id}"]`);
+
+                        // Remove temporary message if still exists
+                        const tempElement = chatBox.querySelector(`[data-message-id="${tempMsgId}"]`);
                         if (tempElement) tempElement.remove();
                     } finally {
                         typingIndicator.textContent = "Online";
@@ -708,7 +713,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const success = await utils.insertMessage(state.currentUserId, friendId, content);
 
                 if (success) {
-                    // Only update last message for this specific chat
                     ui.updateLastMessage(friendId, content, new Date().toISOString());
                 } else {
                     ui.showToast("Message failed to send. Please try again.", "error");
@@ -863,7 +867,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                             console.error("Error deleting message:", error);
                         } else {
                             console.log(`Message ${messageId} deleted after timeout`);
-                            // Only update last message for this specific chat
                             ui.updateLastMessageInChatList(friendId);
                         }
                     } catch (err) {
@@ -913,7 +916,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     console.error("Error deleting seen messages for chat:", updateError);
                 } else {
                     console.log(`Deleted ${messageIds.length} seen messages for chat with ${friendId}`);
-                    // Only update last message for this specific chat
                     ui.updateLastMessageInChatList(friendId);
                 }
             } catch (err) {
@@ -1339,7 +1341,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // NEW: Optimized function to append a single message instead of re-rendering all
         appendMessage: (chatBox, message, isMe) => {
             try {
                 if (!chatBox) return;
@@ -1357,7 +1358,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
-        // NEW: Helper function to create a single message element
         createMessageElement: (message, isMe, friendAvatar) => {
             const msgDiv = document.createElement("div");
             msgDiv.className = `message ${isMe ? "sent" : "received"}`;
@@ -2354,7 +2354,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (msgIndex !== -1) {
                             messages[msgIndex].seen = true;
                         }
-                        // Schedule deletion 30 seconds after being seen
                         utils.scheduleMessageDeletion(unseenMsg.id, friendId);
                     });
 
@@ -2518,9 +2517,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 }
                                 state.processingMessageIds.add(newMsg.id);
 
-                                // Optimized: Append only the new message instead of re-rendering all
                                 ui.appendMessage(chatBox, newMsg, true);
-                                // Only update last message for this specific chat
                                 ui.updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
                                 setTimeout(() => {
@@ -2539,9 +2536,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 }
                                 state.processingMessageIds.add(newMsg.id);
 
-                                // Optimized: Append only the new message instead of re-rendering all
                                 ui.appendMessage(chatBox, newMsg, false);
-                                // Only update last message for this specific chat
                                 ui.updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
                                 if (newMsg.receiver_id === state.currentUserId) {
@@ -2555,12 +2550,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                                         if (idx !== -1) {
                                             oldMessages[idx].seen = true;
                                         }
-                                        // Update just the seen status instead of re-rendering
                                         ui.updateMessageSeenStatus(chatBox, newMsg.id);
 
                                         state.unseenCounts[newMsg.sender_id] = 0;
                                         ui.updateUnseenBadge(newMsg.sender_id, 0);
-                                        // Schedule deletion 30 seconds after being seen
                                         utils.scheduleMessageDeletion(newMsg.id, friendId);
                                     } catch (err) {
                                         console.error("Error marking message as seen:", err);
@@ -2584,11 +2577,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                                     if (idx !== -1) {
                                         oldMessages.splice(idx, 1);
                                     }
-                                    // Remove the message element instead of re-rendering all
                                     const messageElement = chatBox.querySelector(`.message[data-message-id="${updated.id}"]`);
                                     if (messageElement) messageElement.remove();
 
-                                    // Only update last message for this specific chat
                                     ui.updateLastMessageInChatList(updated.sender_id);
                                     ui.updateLastMessageInChatList(updated.receiver_id);
 
@@ -2620,11 +2611,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                                     if (idx !== -1) {
                                         oldMessages.splice(idx, 1);
                                     }
-                                    // Remove the message element instead of re-rendering all
                                     const messageElement = chatBox.querySelector(`.message[data-message-id="${updated.id}"]`);
                                     if (messageElement) messageElement.remove();
 
-                                    // Only update last message for this specific chat
                                     ui.updateLastMessageInChatList(updated.sender_id);
                                     ui.updateLastMessageInChatList(updated.receiver_id);
 
@@ -2733,7 +2722,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     }
                 });
 
-                // Optimized message sending with immediate UI feedback
                 async function handleSend() {
                     const content = inputSafe.value.trim();
                     if (!content) return;
@@ -2741,7 +2729,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     sendBtnSafe.disabled = true;
                     inputSafe.value = "";
 
-                    // Create temporary message for immediate UI feedback
                     const tempMsg = {
                         id: 'temp-' + Date.now(),
                         sender_id: state.currentUserId,
@@ -2752,9 +2739,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         temp: true
                     };
 
-                    // Add to UI immediately
                     ui.appendMessage(chatBox, tempMsg, true);
-                    // Only update last message for this specific chat
                     ui.updateLastMessage(friendId, content, tempMsg.created_at);
 
                     try {
@@ -2762,7 +2747,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     } catch (error) {
                         console.error("Error in handleSend:", error);
                         ui.showToast("Error sending message", "error");
-                        // Remove temporary message
                         const tempElement = chatBox.querySelector(`[data-message-id="${tempMsg.id}"]`);
                         if (tempElement) tempElement.remove();
                     } finally {
@@ -3115,7 +3099,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         if (state.currentOpenChatId !== senderId) {
                             ui.updateUnseenCountForFriend(senderId);
-                            // Only update last message for this specific chat
                             ui.updateLastMessage(senderId, newMsg.content, newMsg.created_at);
 
                             try {
@@ -3164,7 +3147,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (!updatedMsg || !state.currentUserId) return;
 
                         if (updatedMsg.deleted_at) {
-                            // Only update last message for this specific chat
                             ui.updateLastMessageInChatList(updatedMsg.sender_id);
                             ui.updateLastMessageInChatList(updatedMsg.receiver_id);
 
