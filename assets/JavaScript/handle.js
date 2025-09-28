@@ -28,7 +28,7 @@ async function handleGoogleAuth() {
     try {
         // 1. Check for active session after OAuth redirect
         const { data: { session }, error: sessionError } = await client.auth.getSession();
-        
+
         if (sessionError || !session) {
             showPopup("No active session. Redirecting to login...");
             setTimeout(() => (window.location.href = "login.html"), 1500);
@@ -36,20 +36,19 @@ async function handleGoogleAuth() {
         }
 
         const user = session.user;
-        
-        // 2. Check if user exists in private_users table (create if not exists)
+
+        // 2. Ensure user exists in private_users
         const { data: existingUser, error: userCheckError } = await client
             .from("private_users")
             .select("id")
             .eq("id", user.id)
             .maybeSingle();
-            
+
         if (userCheckError) {
             showPopup("Error checking user: " + userCheckError.message);
             return;
         }
-        
-        // Create user in private_users if not exists
+
         if (!existingUser) {
             const { error: insertUserError } = await client
                 .from("private_users")
@@ -58,14 +57,14 @@ async function handleGoogleAuth() {
                     name: user.user_metadata?.full_name || user.user_metadata?.name || "",
                     email: user.email
                 }]);
-                
+
             if (insertUserError) {
                 showPopup("Error creating user record: " + insertUserError.message);
                 return;
             }
         }
 
-        // 3. Check if profile exists in user_profiles
+        // 3. Ensure profile exists in user_profiles
         const { data: profile, error: profileError } = await client
             .from("user_profiles")
             .select("*")
@@ -77,19 +76,37 @@ async function handleGoogleAuth() {
             return;
         }
 
-        // 4. Redirect based on profile existence
-        if (profile) {
-            window.location.href = "dashboard.html";
-        } else {
+        if (!profile) {
+            const { error: insertProfileError } = await client
+                .from("user_profiles")
+                .insert([{
+                    user_id: user.id,
+                    full_name: user.user_metadata?.full_name || user.user_metadata?.name || "",
+                    user_name: user.user_metadata?.user_name || "",
+                    bio: "",
+                    profile_image_url: user.user_metadata?.avatar_url || ""
+                }]);
+
+            if (insertProfileError) {
+                showPopup("Error creating profile: " + insertProfileError.message);
+                return;
+            }
+
+            // Send them to setup profile page
             window.location.href = "setupProfile.html";
+            return;
         }
+
+        // 4. Redirect based on profile existence
+        window.location.href = "dashboard.html";
+
     } catch (err) {
         showPopup("Unexpected error: " + err.message);
         console.error(err);
     } finally {
         hideLoader();
     }
-}
 
-// Wait for DOM to be fully loaded before executing
+
+}
 document.addEventListener('DOMContentLoaded', handleGoogleAuth);
