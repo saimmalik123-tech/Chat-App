@@ -300,6 +300,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 inputSafe.value = "";
                 sendBtnSafe.disabled = true;
 
+                // Set AI as always online
                 typingIndicator.textContent = "Online";
 
                 // Fetch previous AI messages
@@ -467,6 +468,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (saveError) {
                         console.error("Error saving user message:", saveError);
                         state.processingMessageIds.delete(tempId);
+                        typingIndicator.textContent = "Online";
                         return;
                     }
 
@@ -480,22 +482,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     // Get AI response
                     const aiResponse = await aiAssistant.sendMessageToGemini(content);
-
-                    // Generate a unique ID for AI message
-                    const aiTempId = `ai-temp-${Date.now()}`;
-                    state.processingMessageIds.add(aiTempId);
-
-                    // Add AI response to UI
-                    const aiMsg = {
-                        id: aiTempId,
-                        sender_id: AI_ASSISTANT_ID,
-                        receiver_id: state.currentUserId,
-                        content: aiResponse,
-                        created_at: new Date().toISOString(),
-                        seen: false
-                    };
-                    oldMessages.push(aiMsg);
-                    ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
 
                     // Reset typing indicator
                     typingIndicator.textContent = "Online";
@@ -513,20 +499,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     if (aiSaveError) {
                         console.error("Error saving AI message:", aiSaveError);
-                        state.processingMessageIds.delete(aiTempId);
                         return;
                     }
 
-                    // Replace temporary AI message with the saved one
-                    const aiIndex = oldMessages.findIndex(m => m.id === aiTempId);
-                    if (aiIndex !== -1) {
-                        oldMessages[aiIndex] = savedAIMsg;
-                        ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
-                    }
-                    state.processingMessageIds.delete(aiTempId);
-
-                    // Update last message in friends list with AI response
-                    ui.updateLastMessage(AI_ASSISTANT_ID, aiResponse, new Date().toISOString());
+                    // The real-time subscription will handle displaying the AI message
                 }
 
                 // Remove existing event listeners and add new ones
@@ -1612,7 +1588,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                     }
 
                     if (typingIndicator) {
-                        typingIndicator.textContent = friendData.is_online ? "Online" : "Offline";
+                        // Special handling for AI assistant - always online
+                        if (friendId === AI_ASSISTANT_ID) {
+                            typingIndicator.textContent = "Online";
+                        } else {
+                            typingIndicator.textContent = friendData.is_online ? "Online" : "Offline";
+                        }
                     }
                 }
             } catch (error) {
@@ -1704,8 +1685,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (profile) {
                         document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
                         const statusElement = document.getElementById("user-modal-status");
-                        statusElement.textContent = profile.is_online ? "Online" : "Offline";
-                        statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
+                        // Special handling for AI assistant - always online
+                        if (userId === AI_ASSISTANT_ID) {
+                            statusElement.textContent = "Online";
+                            statusElement.className = "user-modal-status online";
+                        } else {
+                            statusElement.textContent = profile.is_online ? "Online" : "Offline";
+                            statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
+                        }
                     } else {
                         document.getElementById("user-modal-bio").textContent = "No bio available.";
                         const statusElement = document.getElementById("user-modal-status");
@@ -3150,6 +3137,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         const senderId = newMsg.sender_id;
 
+                        // If the message is from the AI and we are currently in the AI chat, don't show notification
+                        if (senderId === AI_ASSISTANT_ID && state.currentOpenChatId === AI_ASSISTANT_ID) {
+                            return;
+                        }
+
                         if (state.currentOpenChatId !== senderId) {
                             ui.updateUnseenCountForFriend(senderId);
                             ui.updateLastMessage(senderId, newMsg.content, newMsg.created_at);
@@ -3355,6 +3347,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                         console.log("User profile update event received:", payload);
 
                         const { new: newRecord } = payload;
+
+                        // Skip if it's the AI Assistant
+                        if (newRecord.user_id === AI_ASSISTANT_ID) {
+                            return;
+                        }
 
                         if (state.allFriends.has(newRecord.user_id)) {
                             state.allFriends.set(newRecord.user_id, {

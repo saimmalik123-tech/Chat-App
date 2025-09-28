@@ -154,7 +154,6 @@ async function login() {
         return;
     }
 
-    // If profile doesn't exist, create a basic one and redirect to setup
     if (!profile) {
         const { error: insertProfileError } = await client
             .from("user_profiles")
@@ -178,7 +177,6 @@ async function login() {
         return;
     }
 
-    // If profile exists but is incomplete (no username), redirect to setup
     if (!profile.user_name || profile.user_name.trim() === "") {
         window.location.href = "setupProfile.html";
         return;
@@ -197,7 +195,7 @@ loginBtn?.addEventListener('click', async e => {
     await login();
 });
 
-/* ------------------ GOOGLE AUTH (REDIRECT HANDLER) ------------------ */
+/* ------------------ GOOGLE AUTH ------------------ */
 async function handleGoogleAuth() {
     const { data, error } = await client.auth.signInWithOAuth({
         provider: 'google',
@@ -252,6 +250,24 @@ async function setupProfile() {
         return;
     }
 
+    // Check if username is already taken
+    const { data: existingUserName, error: userNameError } = await client
+        .from("user_profiles")
+        .select("user_id")
+        .eq("user_name", user_name)
+        .maybeSingle();
+
+    if (userNameError) {
+        showPopup("Error checking username: " + userNameError.message, "error");
+        return;
+    }
+
+    if (existingUserName && existingUserName.user_id !== user.id) {
+        showPopup("Username already taken. Please choose another.", "error");
+        return;
+    }
+
+    // Save to private_users
     const { error: upsertError } = await client
         .from("private_users")
         .upsert([{
@@ -281,6 +297,7 @@ async function setupProfile() {
         avatar_url = urlData.publicUrl;
     }
 
+    // Update or insert profile
     const { data: existingProfile, error: profileCheckError } = await client
         .from("user_profiles")
         .select("user_id")
@@ -347,13 +364,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         const { user, profile } = await checkAuthentication();
         if (!user) return;
 
-        // If on dashboard but no profile or incomplete profile, redirect to setup
         if (window.location.pathname.includes('dashboard.html') &&
             (!profile || !profile.user_name || profile.user_name.trim() === "")) {
             window.location.href = "setupProfile.html";
         }
 
-        // If on setup page but already has complete profile, redirect to dashboard
         if (window.location.pathname.includes('setupProfile.html') &&
             profile && profile.user_name && profile.user_name.trim() !== "") {
             window.location.href = "dashboard.html";
