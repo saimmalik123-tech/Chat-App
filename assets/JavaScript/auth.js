@@ -154,8 +154,32 @@ async function login() {
         return;
     }
 
-    // Always redirect to setup profile if no profile exists
+    // If profile doesn't exist, create a basic one and redirect to setup
     if (!profile) {
+        const { error: insertProfileError } = await client
+            .from("user_profiles")
+            .insert([{
+                user_id: data.user.id,
+                full_name: data.user.user_metadata?.name || "",
+                user_name: "",
+                bio: "",
+                profile_image_url: "",
+                is_online: false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            }]);
+
+        if (insertProfileError) {
+            showPopup("Error creating profile: " + insertProfileError.message, "error");
+            return;
+        }
+
+        window.location.href = "setupProfile.html";
+        return;
+    }
+
+    // If profile exists but is incomplete (no username), redirect to setup
+    if (!profile.user_name || profile.user_name.trim() === "") {
         window.location.href = "setupProfile.html";
         return;
     }
@@ -322,10 +346,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (isProtectedPage) {
         const { user, profile } = await checkAuthentication();
         if (!user) return;
-        if (window.location.pathname.includes('dashboard.html') && !profile) {
+
+        // If on dashboard but no profile or incomplete profile, redirect to setup
+        if (window.location.pathname.includes('dashboard.html') &&
+            (!profile || !profile.user_name || profile.user_name.trim() === "")) {
             window.location.href = "setupProfile.html";
         }
-        if (window.location.pathname.includes('setupProfile.html') && profile) {
+
+        // If on setup page but already has complete profile, redirect to dashboard
+        if (window.location.pathname.includes('setupProfile.html') &&
+            profile && profile.user_name && profile.user_name.trim() !== "") {
             window.location.href = "dashboard.html";
         }
     }

@@ -66,7 +66,7 @@ async function handleGoogleAuth() {
         // Check if user has a profile
         const { data: profile, error: profileError } = await client
             .from("user_profiles")
-            .select("user_id")
+            .select("*")
             .eq("user_id", user.id)
             .maybeSingle();
 
@@ -75,8 +75,32 @@ async function handleGoogleAuth() {
             return;
         }
 
-        // Always redirect to setup profile if no profile exists
+        // If profile doesn't exist, create a basic one and redirect to setup
         if (!profile) {
+            const { error: insertProfileError } = await client
+                .from("user_profiles")
+                .insert([{
+                    user_id: user.id,
+                    full_name: user.user_metadata?.full_name || user.user_metadata?.name || "",
+                    user_name: "",
+                    bio: "",
+                    profile_image_url: user.user_metadata?.avatar_url || "",
+                    is_online: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }]);
+
+            if (insertProfileError) {
+                showPopup("Error creating profile: " + insertProfileError.message);
+                return;
+            }
+
+            window.location.href = "setupProfile.html";
+            return;
+        }
+
+        // If profile exists but is incomplete (no username), redirect to setup
+        if (!profile.user_name || profile.user_name.trim() === "") {
             window.location.href = "setupProfile.html";
             return;
         }
