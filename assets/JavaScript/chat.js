@@ -269,23 +269,25 @@ document.addEventListener("DOMContentLoaded", async () => {
                     throw new Error("Missing chat controls (input/send button/messages container)");
                 }
 
-                // Use original elements instead of replacing them
-                const emojiBtnSafe = emojiBtn;
-                const emojiPickerSafe = emojiPicker;
-                const inputSafe = input;
-                const sendBtnSafe = sendBtn;
+                function replaceElement(selector) {
+                    const el = chatContainer.querySelector(selector);
+                    if (!el) return null;
+                    const clone = el.cloneNode(true);
+                    el.parentNode.replaceChild(clone, el);
+                    return clone;
+                }
+
+                const emojiBtnSafe = emojiBtn ? replaceElement("#emoji-btn") : null;
+                const emojiPickerSafe = emojiPicker ? replaceElement("#emoji-picker") : null;
+                const inputSafe = replaceElement("input[type='text']") || input;
+                const sendBtnSafe = replaceElement(".sendBtn") || sendBtn;
 
                 if (emojiBtnSafe && emojiPickerSafe) {
-                    // Remove existing event listeners
-                    const newEmojiBtn = emojiBtnSafe.cloneNode(true);
-                    emojiBtnSafe.parentNode.replaceChild(newEmojiBtn, emojiBtnSafe);
-
-                    newEmojiBtn.addEventListener("click", (e) => {
+                    emojiBtnSafe.addEventListener("click", (e) => {
                         e.stopPropagation();
                         emojiPickerSafe.style.display =
                             emojiPickerSafe.style.display === "block" ? "none" : "block";
                     });
-
                     emojiPickerSafe.addEventListener("click", (e) => e.stopPropagation());
                     window.addEventListener("click", () => {
                         if (emojiPickerSafe) emojiPickerSafe.style.display = "none";
@@ -300,7 +302,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 inputSafe.value = "";
                 sendBtnSafe.disabled = true;
 
-                // Set AI as always online
                 typingIndicator.textContent = "Online";
 
                 // Fetch previous AI messages
@@ -431,13 +432,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const content = inputSafe.value.trim();
                     if (!content) return;
 
-                    // Generate a unique ID for this message to track it
-                    const tempId = `temp-${Date.now()}`;
-                    state.processingMessageIds.add(tempId);
-
                     // Add user message to UI
                     const userMsg = {
-                        id: tempId,
+                        id: 'user-' + Date.now(),
                         sender_id: state.currentUserId,
                         receiver_id: AI_ASSISTANT_ID,
                         content: content,
@@ -454,75 +451,38 @@ document.addEventListener("DOMContentLoaded", async () => {
                     // Show typing indicator
                     typingIndicator.textContent = "AI is typing...";
 
-                    // Save user message to database
-                    const { data: savedUserMsg, error: saveError } = await client
-                        .from("messages")
-                        .insert([{
-                            sender_id: state.currentUserId,
-                            receiver_id: AI_ASSISTANT_ID,
-                            content: content
-                        }])
-                        .select()
-                        .single();
-
-                    if (saveError) {
-                        console.error("Error saving user message:", saveError);
-                        state.processingMessageIds.delete(tempId);
-                        typingIndicator.textContent = "Online";
-                        return;
-                    }
-
-                    // Replace temporary message with the saved one
-                    const index = oldMessages.findIndex(m => m.id === tempId);
-                    if (index !== -1) {
-                        oldMessages[index] = savedUserMsg;
-                        ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
-                    }
-                    state.processingMessageIds.delete(tempId);
-
                     // Get AI response
                     const aiResponse = await aiAssistant.sendMessageToGemini(content);
+
+                    // Add AI response to UI
+                    const aiMsg = {
+                        id: 'ai-' + Date.now(),
+                        sender_id: AI_ASSISTANT_ID,
+                        receiver_id: state.currentUserId,
+                        content: aiResponse,
+                        created_at: new Date().toISOString(),
+                        seen: false
+                    };
+                    oldMessages.push(aiMsg);
+                    ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
 
                     // Reset typing indicator
                     typingIndicator.textContent = "Online";
 
-                    // Save AI message to database
-                    const { data: savedAIMsg, error: aiSaveError } = await client
-                        .from("messages")
-                        .insert([{
-                            sender_id: AI_ASSISTANT_ID,
-                            receiver_id: state.currentUserId,
-                            content: aiResponse
-                        }])
-                        .select()
-                        .single();
+                    // Save messages to database
+                    await utils.insertMessage(state.currentUserId, AI_ASSISTANT_ID, content);
+                    await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, aiResponse);
 
-                    if (aiSaveError) {
-                        console.error("Error saving AI message:", aiSaveError);
-                        return;
-                    }
-
-                    // The real-time subscription will handle displaying the AI message
+                    // Update last message in friends list
+                    ui.updateLastMessage(AI_ASSISTANT_ID, content, new Date().toISOString());
                 }
 
-                // Remove existing event listeners and add new ones
-                const newSendBtn = sendBtnSafe.cloneNode(true);
-                sendBtnSafe.parentNode.replaceChild(newSendBtn, sendBtnSafe);
-
-                newSendBtn.addEventListener("click", handleSend);
-
-                const newInput = inputSafe.cloneNode(true);
-                inputSafe.parentNode.replaceChild(newInput, inputSafe);
-
-                newInput.addEventListener("keypress", (e) => {
+                sendBtnSafe.addEventListener("click", handleSend);
+                inputSafe.addEventListener("keypress", (e) => {
                     if (e.key === "Enter") {
                         e.preventDefault();
                         handleSend();
                     }
-                });
-
-                newInput.addEventListener("input", () => {
-                    newSendBtn.disabled = !newInput.value.trim();
                 });
 
                 const backBtn = chatContainer.querySelector(".backBtn");
@@ -1588,12 +1548,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     }
 
                     if (typingIndicator) {
-                        // Special handling for AI assistant - always online
-                        if (friendId === AI_ASSISTANT_ID) {
-                            typingIndicator.textContent = "Online";
-                        } else {
-                            typingIndicator.textContent = friendData.is_online ? "Online" : "Offline";
-                        }
+                        typingIndicator.textContent = friendData.is_online ? "Online" : "Offline";
                     }
                 }
             } catch (error) {
@@ -1685,14 +1640,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (profile) {
                         document.getElementById("user-modal-bio").textContent = profile.bio || "No bio available.";
                         const statusElement = document.getElementById("user-modal-status");
-                        // Special handling for AI assistant - always online
-                        if (userId === AI_ASSISTANT_ID) {
-                            statusElement.textContent = "Online";
-                            statusElement.className = "user-modal-status online";
-                        } else {
-                            statusElement.textContent = profile.is_online ? "Online" : "Offline";
-                            statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
-                        }
+                        statusElement.textContent = profile.is_online ? "Online" : "Offline";
+                        statusElement.className = `user-modal-status ${profile.is_online ? 'online' : 'offline'}`;
                     } else {
                         document.getElementById("user-modal-bio").textContent = "No bio available.";
                         const statusElement = document.getElementById("user-modal-status");
@@ -1918,7 +1867,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ui.showTopRightPopup("Friend request accepted!", "success");
 
                 await friendRequests.fetchFriendRequests();
-                // Removed explicit friends.fetchFriends() to prevent duplicates
+                await friends.fetchFriends();
                 await chat.openSpecificChat(senderId);
                 await friends.fetchRecentChats();
 
@@ -2191,11 +2140,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 friendData.forEach(data => {
                     const { friendId, friendName, avatarUrl, isOnline, lastMessageText, lastMessageTime, unseenCount } = data;
-
-                    // Skip if friend is already in the list (prevents duplicates)
-                    if (chatList.querySelector(`.chat[data-friend-id="${friendId}"]`)) {
-                        return;
-                    }
 
                     const li = document.createElement("li");
                     li.classList.add("chat");
@@ -2500,23 +2444,25 @@ document.addEventListener("DOMContentLoaded", async () => {
                     throw new Error("Missing chat controls (input/send button/messages container)");
                 }
 
-                // Use original elements instead of replacing them
-                const emojiBtnSafe = emojiBtn;
-                const emojiPickerSafe = emojiPicker;
-                const inputSafe = input;
-                const sendBtnSafe = sendBtn;
+                function replaceElement(selector) {
+                    const el = chatContainer.querySelector(selector);
+                    if (!el) return null;
+                    const clone = el.cloneNode(true);
+                    el.parentNode.replaceChild(clone, el);
+                    return clone;
+                }
+
+                const emojiBtnSafe = emojiBtn ? replaceElement("#emoji-btn") : null;
+                const emojiPickerSafe = emojiPicker ? replaceElement("#emoji-picker") : null;
+                const inputSafe = replaceElement("input[type='text']") || input;
+                const sendBtnSafe = replaceElement(".sendBtn") || sendBtn;
 
                 if (emojiBtnSafe && emojiPickerSafe) {
-                    // Remove existing event listeners
-                    const newEmojiBtn = emojiBtnSafe.cloneNode(true);
-                    emojiBtnSafe.parentNode.replaceChild(newEmojiBtn, emojiBtnSafe);
-
-                    newEmojiBtn.addEventListener("click", (e) => {
+                    emojiBtnSafe.addEventListener("click", (e) => {
                         e.stopPropagation();
                         emojiPickerSafe.style.display =
                             emojiPickerSafe.style.display === "block" ? "none" : "block";
                     });
-
                     emojiPickerSafe.addEventListener("click", (e) => e.stopPropagation());
                     window.addEventListener("click", () => {
                         if (emojiPickerSafe) emojiPickerSafe.style.display = "none";
@@ -2745,12 +2691,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ui.updateUnseenBadge(friendId, 0);
                 state.unseenCounts[friendId] = 0;
 
-                // Remove existing event listeners and add new ones
-                const newInput = inputSafe.cloneNode(true);
-                inputSafe.parentNode.replaceChild(newInput, inputSafe);
-
-                newInput.addEventListener("input", () => {
-                    sendBtnSafe.disabled = !newInput.value.trim();
+                inputSafe.addEventListener("input", () => {
+                    sendBtnSafe.disabled = !inputSafe.value.trim();
                     try {
                         if (state.channels.typing) {
                             state.channels.typing.send({
@@ -2768,19 +2710,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                 });
 
                 async function handleSend() {
-                    const content = newInput.value.trim();
+                    const content = inputSafe.value.trim();
                     if (!content) return;
 
                     await utils.sendMessage(friendId, content);
-                    newInput.value = "";
+                    inputSafe.value = "";
                     sendBtnSafe.disabled = true;
                 }
 
-                const newSendBtn = sendBtnSafe.cloneNode(true);
-                sendBtnSafe.parentNode.replaceChild(newSendBtn, sendBtnSafe);
-
-                newSendBtn.addEventListener("click", handleSend);
-                newInput.addEventListener("keypress", (e) => {
+                sendBtnSafe.addEventListener("click", handleSend);
+                inputSafe.addEventListener("keypress", (e) => {
                     if (e.key === "Enter") {
                         e.preventDefault();
                         handleSend();
@@ -3137,11 +3076,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         const senderId = newMsg.sender_id;
 
-                        // If the message is from the AI and we are currently in the AI chat, don't show notification
-                        if (senderId === AI_ASSISTANT_ID && state.currentOpenChatId === AI_ASSISTANT_ID) {
-                            return;
-                        }
-
                         if (state.currentOpenChatId !== senderId) {
                             ui.updateUnseenCountForFriend(senderId);
                             ui.updateLastMessage(senderId, newMsg.content, newMsg.created_at);
@@ -3347,11 +3281,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         console.log("User profile update event received:", payload);
 
                         const { new: newRecord } = payload;
-
-                        // Skip if it's the AI Assistant
-                        if (newRecord.user_id === AI_ASSISTANT_ID) {
-                            return;
-                        }
 
                         if (state.allFriends.has(newRecord.user_id)) {
                             state.allFriends.set(newRecord.user_id, {
