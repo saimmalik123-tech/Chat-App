@@ -8,8 +8,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const MAX_BIO_LENGTH = 150;
     const MAX_USERNAME_LENGTH = 20;
     const MESSAGE_DELETION_DELAY = 24 * 60 * 60 * 1000;
-    const RETRY_MAX_ATTEMPTS = 3;
-    const RETRY_INITIAL_DELAY = 500;
+    const RETRY_MAX_ATTEMPTS = 1; // Reduced from 3
+    const RETRY_INITIAL_DELAY = 100; // Reduced from 500
 
     // AI Assistant Constants
     const AI_ASSISTANT_ID = '00000000-0000-0000-0000-000000000000';
@@ -38,7 +38,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             typing: null,
             status: null
         },
-        statusInterval: null
+        statusInterval: null,
+        messageQueue: new Map() // For message queuing
     };
 
     // AI Assistant Module
@@ -49,9 +50,16 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.log("Gemini API initialized");
         },
 
-        async sendMessageToGemini(message) {
-            try {
-                const response = await fetch(this.apiUrl, {
+        // Optimized to use Promise with timeout
+        sendMessageToGemini(message) {
+            return new Promise((resolve, reject) => {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => {
+                    controller.abort();
+                    reject(new Error('AI response timeout'));
+                }, 5000); // 5 second timeout
+
+                fetch(this.apiUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -62,20 +70,27 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 text: message
                             }]
                         }]
-                    })
+                    }),
+                    signal: controller.signal
+                })
+                .then(response => {
+                    clearTimeout(timeoutId);
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.candidates && data.candidates.length > 0) {
+                        resolve(data.candidates[0].content.parts[0].text);
+                    } else {
+                        reject(new Error('No response from Gemini'));
+                    }
+                })
+                .catch(error => {
+                    clearTimeout(timeoutId);
+                    console.error('Error calling Gemini API:', error);
+                    reject(error);
                 });
-
-                const data = await response.json();
-
-                if (data.candidates && data.candidates.length > 0) {
-                    return data.candidates[0].content.parts[0].text;
-                } else {
-                    throw new Error('No response from Gemini');
-                }
-            } catch (error) {
-                console.error('Error calling Gemini API:', error);
-                return AI_ERROR_MESSAGE;
-            }
+            });
         },
 
         async ensureAIAssistantExists() {
@@ -345,8 +360,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (state.processingMessageIds.has(newMsg.id)) return;
                         state.processingMessageIds.add(newMsg.id);
 
-                        oldMessages.push(newMsg);
-                        ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+                        // Optimized: Append only the new message instead of re-rendering all
+                        ui.appendMessage(chatBox, newMsg, true);
                         ui.updateLastMessage(AI_ASSISTANT_ID, newMsg.content, newMsg.created_at);
 
                         setTimeout(() => {
@@ -363,8 +378,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (state.processingMessageIds.has(newMsg.id)) return;
                         state.processingMessageIds.add(newMsg.id);
 
-                        oldMessages.push(newMsg);
-                        ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+                        // Optimized: Append only the new message instead of re-rendering all
+                        ui.appendMessage(chatBox, newMsg, false);
                         ui.updateLastMessage(AI_ASSISTANT_ID, newMsg.content, newMsg.created_at);
 
                         try {
@@ -377,7 +392,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                                     if (idx !== -1) {
                                         oldMessages[idx].seen = true;
                                     }
-                                    ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+                                    // Update just the seen status instead of re-rendering
+                                    ui.updateMessageSeenStatus(chatBox, newMsg.id);
                                 });
                         } catch (err) {
                             console.error("Error marking AI message as seen:", err);
@@ -395,56 +411,66 @@ document.addEventListener("DOMContentLoaded", async () => {
                         }
                     });
 
+                // Optimized message sending with immediate UI feedback
                 async function handleSend() {
                     const content = inputSafe.value.trim();
                     if (!content) return;
 
                     sendBtnSafe.disabled = true;
+                    inputSafe.value = "";
                     
+                    // Create temporary message for immediate UI feedback
+                    const tempMsg = {
+                        id: 'temp-' + Date.now(),
+                        sender_id: state.currentUserId,
+                        receiver_id: AI_ASSISTANT_ID,
+                        content: content,
+                        created_at: new Date().toISOString(),
+                        seen: false,
+                        temp: true
+                    };
+                    
+                    // Add to UI immediately
+                    ui.appendMessage(chatBox, tempMsg, true);
+                    ui.updateLastMessage(AI_ASSISTANT_ID, content, tempMsg.created_at);
+                    
+                    // Show AI is typing
+                    typingIndicator.textContent = "AI is typing...";
+
                     try {
+                        // Send message in background
                         const userMsgSaved = await utils.insertMessage(state.currentUserId, AI_ASSISTANT_ID, content);
                         
                         if (userMsgSaved) {
-                            const userMsg = {
-                                id: 'user-' + Date.now(),
-                                sender_id: state.currentUserId,
-                                receiver_id: AI_ASSISTANT_ID,
-                                content: content,
-                                created_at: new Date().toISOString(),
-                                seen: false
-                            };
-                            oldMessages.push(userMsg);
-                            ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+                            // Get AI response
+                            const aiResponse = await Promise.race([
+                                aiAssistant.sendMessageToGemini(content),
+                                new Promise((_, reject) => 
+                                    setTimeout(() => reject(new Error('AI timeout')), 8000)
+                                )
+                            ]);
                             
-                            inputSafe.value = "";
-                            typingIndicator.textContent = "AI is typing...";
-
-                            const aiResponse = await aiAssistant.sendMessageToGemini(content);
-                            
+                            // Insert AI response
                             const aiMsgSaved = await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, aiResponse);
                             
                             if (aiMsgSaved) {
-                                const aiMsg = {
-                                    id: 'ai-' + Date.now(),
-                                    sender_id: AI_ASSISTANT_ID,
-                                    receiver_id: state.currentUserId,
-                                    content: aiResponse,
-                                    created_at: new Date().toISOString(),
-                                    seen: false
-                                };
-                                oldMessages.push(aiMsg);
-                                ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
-                                
-                                ui.updateLastMessage(AI_ASSISTANT_ID, content, new Date().toISOString());
+                                // AI message will be added via real-time subscription
+                                console.log("AI response sent");
                             } else {
                                 ui.showToast("Failed to save AI response", "error");
                             }
                         } else {
                             ui.showToast("Failed to send message", "error");
+                            // Remove temporary message
+                            const tempElement = chatBox.querySelector(`[data-message-id="${tempMsg.id}"]`);
+                            if (tempElement) tempElement.remove();
                         }
                     } catch (error) {
                         console.error("Error in handleSend:", error);
                         ui.showToast("Error sending message", "error");
+                        // Remove temporary message
+                        const tempElement = chatBox.querySelector(`[data-message-id="${tempMsg.id}"]`);
+                        if (tempElement) tempElement.remove();
                     } finally {
                         typingIndicator.textContent = "Online";
                         sendBtnSafe.disabled = false;
@@ -599,6 +625,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         },
 
+        // Optimized insertMessage with reduced retry attempts
         insertMessage: async (senderId, receiverId, content) => {
             try {
                 console.log(`Inserting message from ${senderId} to ${receiverId}`);
@@ -1300,6 +1327,104 @@ document.addEventListener("DOMContentLoaded", async () => {
             } catch (error) {
                 console.error("Error updating message seen status:", error);
             }
+        },
+
+        // NEW: Optimized function to append a single message instead of re-rendering all
+        appendMessage: (chatBox, message, isMe) => {
+            try {
+                if (!chatBox) return;
+                
+                const friendAvatar = isMe ? null : (state.allFriends.get(message.sender_id)?.profile_image_url || AI_ASSISTANT_AVATAR);
+                const messageDiv = ui.createMessageElement(message, isMe, friendAvatar);
+                chatBox.appendChild(messageDiv);
+                
+                // Scroll to bottom
+                setTimeout(() => {
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }, 50);
+            } catch (error) {
+                console.error("Error appending message:", error);
+            }
+        },
+
+        // NEW: Helper function to create a single message element
+        createMessageElement: (message, isMe, friendAvatar) => {
+            const msgDiv = document.createElement("div");
+            msgDiv.className = `message ${isMe ? "sent" : "received"}`;
+            msgDiv.setAttribute("data-message-id", message.id);
+
+            const timeStr = message.created_at ? new Date(message.created_at).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit"
+            }) : "";
+
+            const msgBubble = document.createElement("div");
+            msgBubble.className = "msg-bubble";
+            msgBubble.style.position = "relative";
+
+            const msgText = document.createElement("span");
+            msgText.className = "msg-text";
+            msgText.innerHTML = utils.linkify(message.content);
+
+            const msgMeta = document.createElement("div");
+            msgMeta.className = "msg-meta";
+            msgMeta.innerHTML = `
+                <small class="msg-time">${timeStr}</small>
+                ${isMe ? `<small class="seen-status">${message.seen ? "✓✓" : "✓"}</small>` : ""}
+            `;
+
+            msgBubble.appendChild(msgText);
+            msgBubble.appendChild(msgMeta);
+
+            const copyIcon = document.createElement("span");
+            copyIcon.className = "copy-icon";
+            copyIcon.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                </svg>
+            `;
+
+            const iconColor = isMe ? "#fff" : "#666";
+            copyIcon.style.cssText = `
+                position: relative;
+                top: 5px;
+                right: 5px;
+                opacity: 0;
+                cursor: pointer;
+                transition: opacity 0.2s;
+                color: ${iconColor};
+            `;
+
+            msgBubble.appendChild(copyIcon);
+
+            msgBubble.addEventListener("mouseenter", () => {
+                copyIcon.style.opacity = "1";
+            });
+
+            msgBubble.addEventListener("mouseleave", () => {
+                copyIcon.style.opacity = "0";
+            });
+
+            copyIcon.addEventListener("click", (e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(message.content).then(() => {
+                    ui.showCopyPopup(copyIcon);
+                }).catch(err => {
+                    console.error("Failed to copy text: ", err);
+                });
+            });
+
+            if (!isMe) {
+                const avatarImg = document.createElement("img");
+                avatarImg.src = friendAvatar;
+                avatarImg.className = "msg-avatar";
+                avatarImg.style.cssText = "width:25px;height:25px;border-radius:50%;margin-right:6px;";
+                msgDiv.appendChild(avatarImg);
+            }
+
+            msgDiv.appendChild(msgBubble);
+            return msgDiv;
         },
 
         renderChatMessages: (chatBox, msgs, friendAvatar) => {
@@ -2381,8 +2506,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 }
                                 state.processingMessageIds.add(newMsg.id);
 
-                                oldMessages.push(newMsg);
-                                ui.renderChatMessages(chatBox, oldMessages, friendAvatar);
+                                // Optimized: Append only the new message instead of re-rendering all
+                                ui.appendMessage(chatBox, newMsg, true);
                                 ui.updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
                                 setTimeout(() => {
@@ -2401,8 +2526,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 }
                                 state.processingMessageIds.add(newMsg.id);
 
-                                oldMessages.push(newMsg);
-                                ui.renderChatMessages(chatBox, oldMessages, friendAvatar);
+                                // Optimized: Append only the new message instead of re-rendering all
+                                ui.appendMessage(chatBox, newMsg, false);
                                 ui.updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
                                 if (newMsg.receiver_id === state.currentUserId) {
@@ -2416,7 +2541,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                                         if (idx !== -1) {
                                             oldMessages[idx].seen = true;
                                         }
-                                        ui.renderChatMessages(chatBox, oldMessages, friendAvatar);
+                                        // Update just the seen status instead of re-rendering
+                                        ui.updateMessageSeenStatus(chatBox, newMsg.id);
 
                                         state.unseenCounts[newMsg.sender_id] = 0;
                                         ui.updateUnseenBadge(newMsg.sender_id, 0);
@@ -2442,8 +2568,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                                     const idx = oldMessages.findIndex(m => m.id === updated.id);
                                     if (idx !== -1) {
                                         oldMessages.splice(idx, 1);
-                                        ui.renderChatMessages(chatBox, oldMessages, friendAvatar);
                                     }
+                                    // Remove the message element instead of re-rendering all
+                                    const messageElement = chatBox.querySelector(`.message[data-message-id="${updated.id}"]`);
+                                    if (messageElement) messageElement.remove();
+                                    
                                     ui.updateLastMessageInChatList(updated.sender_id);
                                     ui.updateLastMessageInChatList(updated.receiver_id);
 
@@ -2474,8 +2603,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                                     const idx = oldMessages.findIndex(m => m.id === updated.id);
                                     if (idx !== -1) {
                                         oldMessages.splice(idx, 1);
-                                        ui.renderChatMessages(chatBox, oldMessages, friendAvatar);
                                     }
+                                    // Remove the message element instead of re-rendering all
+                                    const messageElement = chatBox.querySelector(`.message[data-message-id="${updated.id}"]`);
+                                    if (messageElement) messageElement.remove();
+                                    
                                     ui.updateLastMessageInChatList(updated.sender_id);
                                     ui.updateLastMessageInChatList(updated.receiver_id);
 
@@ -2584,13 +2716,41 @@ document.addEventListener("DOMContentLoaded", async () => {
                     }
                 });
 
+                // Optimized message sending with immediate UI feedback
                 async function handleSend() {
                     const content = inputSafe.value.trim();
                     if (!content) return;
 
-                    await utils.sendMessage(friendId, content);
-                    inputSafe.value = "";
                     sendBtnSafe.disabled = true;
+                    inputSafe.value = "";
+                    
+                    // Create temporary message for immediate UI feedback
+                    const tempMsg = {
+                        id: 'temp-' + Date.now(),
+                        sender_id: state.currentUserId,
+                        receiver_id: friendId,
+                        content: content,
+                        created_at: new Date().toISOString(),
+                        seen: false,
+                        temp: true
+                    };
+                    
+                    // Add to UI immediately
+                    ui.appendMessage(chatBox, tempMsg, true);
+                    ui.updateLastMessage(friendId, content, tempMsg.created_at);
+                    
+                    try {
+                        await utils.sendMessage(friendId, content);
+                    } catch (error) {
+                        console.error("Error in handleSend:", error);
+                        ui.showToast("Error sending message", "error");
+                        // Remove temporary message
+                        const tempElement = chatBox.querySelector(`[data-message-id="${tempMsg.id}"]`);
+                        if (tempElement) tempElement.remove();
+                    } finally {
+                        sendBtnSafe.disabled = false;
+                        inputSafe.focus();
+                    }
                 }
 
                 sendBtnSafe.addEventListener("click", handleSend);
