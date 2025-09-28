@@ -354,6 +354,80 @@ document.addEventListener("DOMContentLoaded", async () => {
                     await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, AI_WELCOME_MESSAGE);
                 }
 
+                // Set up real-time subscription for AI chat messages
+                const chatChannelName = `chat:${[state.currentUserId, AI_ASSISTANT_ID].sort().join(":")}`;
+                state.channels.chat = client.channel(chatChannelName);
+
+                state.channels.chat
+                    .on('postgres_changes', {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `sender_id=eq.${state.currentUserId}`
+                    }, (payload) => {
+                        const newMsg = payload.new;
+                        if (newMsg.receiver_id !== AI_ASSISTANT_ID) return;
+
+                        if (state.processingMessageIds.has(newMsg.id)) {
+                            return;
+                        }
+                        state.processingMessageIds.add(newMsg.id);
+
+                        oldMessages.push(newMsg);
+                        ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+                        ui.updateLastMessage(AI_ASSISTANT_ID, newMsg.content, newMsg.created_at);
+
+                        setTimeout(() => {
+                            state.processingMessageIds.delete(newMsg.id);
+                        }, 1000);
+                    })
+                    .on('postgres_changes', {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `sender_id=eq.${AI_ASSISTANT_ID}`
+                    }, (payload) => {
+                        const newMsg = payload.new;
+                        if (newMsg.receiver_id !== state.currentUserId) return;
+
+                        if (state.processingMessageIds.has(newMsg.id)) {
+                            return;
+                        }
+                        state.processingMessageIds.add(newMsg.id);
+
+                        oldMessages.push(newMsg);
+                        ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+                        ui.updateLastMessage(AI_ASSISTANT_ID, newMsg.content, newMsg.created_at);
+
+                        // Mark as seen immediately since we are in the chat
+                        try {
+                            client
+                                .from("messages")
+                                .update({ seen: true })
+                                .eq("id", newMsg.id)
+                                .then(() => {
+                                    const idx = oldMessages.findIndex(m => m.id === newMsg.id);
+                                    if (idx !== -1) {
+                                        oldMessages[idx].seen = true;
+                                    }
+                                    ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+                                });
+                        } catch (err) {
+                            console.error("Error marking AI message as seen:", err);
+                        }
+
+                        setTimeout(() => {
+                            state.processingMessageIds.delete(newMsg.id);
+                        }, 1000);
+                    })
+                    .subscribe((status, err) => {
+                        if (status === 'SUBSCRIBED') {
+                            console.log(`Successfully subscribed to ${chatChannelName}`);
+                        } else if (status === 'CHANNEL_ERROR') {
+                            console.error(`Error subscribing to ${chatChannelName}:`, err);
+                        }
+                    });
+
                 async function handleSend() {
                     const content = inputSafe.value.trim();
                     if (!content) return;
@@ -417,6 +491,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                     backBtn.parentNode.replaceChild(backClone, backBtn);
                     backClone.addEventListener("click", async () => {
                         state.currentOpenChatId = null;
+
+                        // Remove the chat channel
+                        if (state.channels.chat) {
+                            await client.removeChannel(state.channels.chat);
+                            state.channels.chat = null;
+                        }
 
                         document.getElementById('message-notification').classList.remove("hidden");
                         if (window.innerWidth <= 768) {
@@ -1369,6 +1449,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                             <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
                         </svg>
                     `;
+
+                    // Set color based on message type
+                    const iconColor = isMe ? "#fff" : "#666";
                     copyIcon.style.cssText = `
                         position: relative;
                         top: 5px;
@@ -1376,7 +1459,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         opacity: 0;
                         cursor: pointer;
                         transition: opacity 0.2s;
-                        color: #666;
+                        color: ${iconColor};
                     `;
 
                     msgBubble.appendChild(copyIcon);
