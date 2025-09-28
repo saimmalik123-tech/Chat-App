@@ -192,7 +192,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 `;
 
                 aiLi.addEventListener("click", () => {
-                    chat.openAIChat();
+                    aiAssistant.openAIChat(); // Fixed: was calling chat.openAIChat()
                 });
 
                 chatList.insertBefore(aiLi, chatList.firstChild);
@@ -1332,7 +1332,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Show confirm popup
         showConfirmPopup: (message, onConfirm, onCancel) => {
             try {
-                const mainPopupCon = document.querySelector('modal-popup-container')
                 const popup = document.getElementById("notification-popup");
                 const messageEl = document.getElementById("popup-message");
                 const closeBtn = document.getElementById("popup-close");
@@ -1365,7 +1364,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
 
                 messageEl.textContent = message;
-                mainPopupCon.appendChild(buttonsContainer);
+                popup.appendChild(buttonsContainer);
                 popup.classList.remove("hidden", "error", "success", "info");
                 popup.classList.add("show", "confirm");
 
