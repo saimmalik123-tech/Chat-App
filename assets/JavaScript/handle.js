@@ -26,22 +26,49 @@ async function handleGoogleAuth() {
     showLoader();
 
     try {
-        // 1. Get logged in user
-        const {
-            data: { user },
-            error,
-        } = await client.auth.getUser();
-
-        if (error || !user) {
+        // 1. Check for active session after OAuth redirect
+        const { data: { session }, error: sessionError } = await client.auth.getSession();
+        
+        if (sessionError || !session) {
             showPopup("No active session. Redirecting to login...");
-            setTimeout(() => (window.location.href = "login"), 1500);
+            setTimeout(() => (window.location.href = "login.html"), 1500);
             return;
         }
 
-        // 2. Check if profile exists in user_profiles (match user_id, not id)
+        const user = session.user;
+        
+        // 2. Check if user exists in private_users table (create if not exists)
+        const { data: existingUser, error: userCheckError } = await client
+            .from("private_users")
+            .select("id")
+            .eq("id", user.id)
+            .maybeSingle();
+            
+        if (userCheckError) {
+            showPopup("Error checking user: " + userCheckError.message);
+            return;
+        }
+        
+        // Create user in private_users if not exists
+        if (!existingUser) {
+            const { error: insertUserError } = await client
+                .from("private_users")
+                .insert([{
+                    id: user.id,
+                    name: user.user_metadata?.full_name || user.user_metadata?.name || "",
+                    email: user.email
+                }]);
+                
+            if (insertUserError) {
+                showPopup("Error creating user record: " + insertUserError.message);
+                return;
+            }
+        }
+
+        // 3. Check if profile exists in user_profiles
         const { data: profile, error: profileError } = await client
             .from("user_profiles")
-            .select("user_id")
+            .select("*")
             .eq("user_id", user.id)
             .maybeSingle();
 
@@ -50,17 +77,19 @@ async function handleGoogleAuth() {
             return;
         }
 
-        // 3. Redirect based on profile existence
+        // 4. Redirect based on profile existence
         if (profile) {
-            window.location.href = "dashboard";
+            window.location.href = "dashboard.html";
         } else {
-            window.location.href = "setupProfile";
+            window.location.href = "setupProfile.html";
         }
     } catch (err) {
         showPopup("Unexpected error: " + err.message);
+        console.error(err);
     } finally {
         hideLoader();
     }
 }
 
-handleGoogleAuth();
+// Wait for DOM to be fully loaded before executing
+document.addEventListener('DOMContentLoaded', handleGoogleAuth);

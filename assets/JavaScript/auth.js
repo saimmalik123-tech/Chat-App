@@ -23,17 +23,44 @@ function showPopup(message, type = "info") {
 
 /* ------------------ COMMON FUNCTIONS FOR FORM VALIDATION ------------------ */
 
-// Function to check if all given input fields are filled
 function areInputsFilled(inputs) {
     const inputsArray = Array.isArray(inputs) ? inputs : Array.from(inputs);
     return inputsArray.every(input => input.value.trim() !== '');
 }
 
-// Function to handle the button's disabled state based on input
 function handleButtonState(inputs, button) {
     if (button) {
         button.disabled = !areInputsFilled(inputs);
     }
+}
+
+/* ------------------ AUTHENTICATION CHECK ------------------ */
+// This function will be called on page load for protected pages
+async function checkAuthentication() {
+    const { data: { user }, error: userError } = await client.auth.getUser();
+    
+    if (userError || !user) {
+        // If not authenticated, redirect to login
+        if (!window.location.pathname.includes('index.html') && 
+            !window.location.pathname.includes('signup.html')) {
+            window.location.href = 'index.html';
+        }
+        return { user: null, profile: null };
+    }
+    
+    // Check if user has a profile
+    const { data: profile, error: profileError } = await client
+        .from("user_profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+    if (profileError) {
+        console.error("Profile check error:", profileError);
+        return { user, profile: null };
+    }
+
+    return { user, profile };
 }
 
 /* ------------------ SIGN UP ------------------ */
@@ -47,7 +74,7 @@ async function signUp() {
         password: signPassword,
         options: {
             data: { name: signName },
-            emailRedirectTo: 'http://chatrsaim.netlify.app/setupProfile.html',
+            emailRedirectTo: window.location.origin + '/setupProfile.html',
         }
     });
 
@@ -71,16 +98,15 @@ async function signUp() {
         }
     }
 
-    window.location.href = 'verify.html';
+    showPopup("Signup successful! Please check your email to verify your account.");
+    // Don't redirect immediately - wait for email verification
 }
 
 const signUpBtn = document.querySelector('.signUpBtn');
 const signUpInputs = document.querySelectorAll('#name, #email, #password');
 
-// Initially disable the button
 handleButtonState(signUpInputs, signUpBtn);
 
-// Add event listeners to input fields to check for changes
 signUpInputs.forEach(input => {
     input.addEventListener('input', () => handleButtonState(signUpInputs, signUpBtn));
 });
@@ -91,18 +117,26 @@ signUpBtn?.addEventListener('click', async e => {
     await signUp();
 });
 
-/* ------------------ CHECK PROFILE & REDIRECT ------------------ */
-async function checkProfileAndRedirect() {
-    const { data: { user }, error: userError } = await client.auth.getUser();
-    if (userError || !user) {
-        showPopup("User not logged in.");
+/* ------------------ LOGIN ------------------ */
+async function login() {
+    const loginEmail = document.querySelector('#loginEmail').value;
+    const loginPassword = document.querySelector('#loginPassword').value;
+
+    const { data, error } = await client.auth.signInWithPassword({
+        email: loginEmail,
+        password: loginPassword,
+    });
+
+    if (error) {
+        showPopup("Login failed: " + error.message);
         return;
     }
 
+    // Check if user has a profile
     const { data: profile, error: profileError } = await client
         .from("user_profiles")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", data.user.id)
         .maybeSingle();
 
     if (profileError) {
@@ -110,39 +144,19 @@ async function checkProfileAndRedirect() {
         return;
     }
 
-    // FIXED: Only redirect to dashboard if profile exists
-    if (!profile) {
-        window.location.href = "setupProfile.html";
-    } else {
+    // Redirect based on profile existence
+    if (profile) {
         window.location.href = "dashboard.html";
-    }
-}
-
-/* ------------------ LOGIN ------------------ */
-async function login() {
-    const loginEmail = document.querySelector('#loginEmail').value;
-    const loginPassword = document.querySelector('#loginPassword').value;
-
-    const { error } = await client.auth.signInWithPassword({
-        email: loginEmail,
-        password: loginPassword,
-    });
-
-    if (error) {
-        showPopup("Login failed: " + error.message);
     } else {
-        // FIXED: Ensure we check profile after login
-        await checkProfileAndRedirect();
+        window.location.href = "setupProfile.html";
     }
 }
 
 const loginBtn = document.querySelector('.signInBtn');
 const loginInputs = document.querySelectorAll('#loginEmail, #loginPassword');
 
-// Initially disable the button
 handleButtonState(loginInputs, loginBtn);
 
-// Add event listeners to input fields to check for changes
 loginInputs.forEach(input => {
     input.addEventListener('input', () => handleButtonState(loginInputs, loginBtn));
 });
@@ -154,25 +168,31 @@ loginBtn?.addEventListener('click', async e => {
 });
 
 /* ------------------ GOOGLE SIGN UP / LOGIN ------------------ */
-async function handleGoogleAuth(redirectUrl) {
-    await client.auth.signInWithOAuth({
+async function handleGoogleAuth() {
+    const { data, error } = await client.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: redirectUrl }
+        options: {
+            redirectTo: window.location.origin + '/oauthHandler.html'
+        }
     });
+
+    if (error) {
+        showPopup("Google authentication failed: " + error.message);
+    }
 }
 
 const googleSignUpBtn = document.querySelector('.googleSignUpBtn');
 googleSignUpBtn?.addEventListener('click', async e => {
     e.preventDefault();
     googleSignUpBtn.innerHTML = '<div class="loader"></div>';
-    await handleGoogleAuth('http://chatrsaim.netlify.app/oauthHandler.html');
+    await handleGoogleAuth();
 });
 
 const googleLoginBtn = document.querySelector('.googleLoginBtn');
 googleLoginBtn?.addEventListener('click', async e => {
     e.preventDefault();
     googleLoginBtn.innerHTML = '<div class="loader"></div>';
-    await handleGoogleAuth('http://chatrsaim.netlify.app/oauthHandler.html');
+    await handleGoogleAuth();
 });
 
 /* ------------------ SETUP PROFILE ------------------ */
@@ -181,13 +201,10 @@ const avatarInput = document.getElementById("avatar");
 const avatarPreview = document.getElementById("avatarPreview");
 let avatarFile = null;
 
-// New elements for profile setup
 const profileSetupInputs = document.querySelectorAll('#name, #username, #bio');
 
-// Initially disable the button
 handleButtonState(profileSetupInputs, setUpBtn);
 
-// Add event listeners to input fields to check for changes
 profileSetupInputs.forEach(input => {
     input.addEventListener('input', () => handleButtonState(profileSetupInputs, setUpBtn));
 });
@@ -267,30 +284,25 @@ setUpBtn?.addEventListener("click", async e => {
     await setupProfile();
 });
 
-// FIXED: Add this to ensure profile check on page load for protected pages
+/* ------------------ PAGE LOAD AUTHENTICATION CHECK ------------------ */
 document.addEventListener('DOMContentLoaded', async () => {
-    // Only run this check on pages that require authentication
-    if (window.location.pathname.includes('dashboard.html') ||
-        window.location.pathname.includes('setupProfile.html')) {
-
-        const { data: { user }, error: userError } = await client.auth.getUser();
-
-        if (userError || !user) {
-            window.location.href = 'index.html'; // Redirect to login if not authenticated
-            return;
-        }
-
+    // Only run auth check on protected pages
+    const isProtectedPage = window.location.pathname.includes('dashboard.html') || 
+                          window.location.pathname.includes('setupProfile.html');
+    
+    if (isProtectedPage) {
+        const { user, profile } = await checkAuthentication();
+        
+        if (!user) return; // Already redirected to login
+        
         // If on dashboard but no profile, redirect to setup
-        if (window.location.pathname.includes('dashboard.html')) {
-            const { data: profile, error: profileError } = await client
-                .from("user_profiles")
-                .select("*")
-                .eq("user_id", user.id)
-                .maybeSingle();
-
-            if (profileError || !profile) {
-                window.location.href = "setupProfile.html";
-            }
+        if (window.location.pathname.includes('dashboard.html') && !profile) {
+            window.location.href = "setupProfile.html";
+        }
+        
+        // If on setup profile but already has profile, redirect to dashboard
+        if (window.location.pathname.includes('setupProfile.html') && profile) {
+            window.location.href = "dashboard.html";
         }
     }
 });
