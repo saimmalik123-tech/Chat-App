@@ -269,25 +269,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                     throw new Error("Missing chat controls (input/send button/messages container)");
                 }
 
-                function replaceElement(selector) {
-                    const el = chatContainer.querySelector(selector);
-                    if (!el) return null;
-                    const clone = el.cloneNode(true);
-                    el.parentNode.replaceChild(clone, el);
-                    return clone;
-                }
-
-                const emojiBtnSafe = emojiBtn ? replaceElement("#emoji-btn") : null;
-                const emojiPickerSafe = emojiPicker ? replaceElement("#emoji-picker") : null;
-                const inputSafe = replaceElement("input[type='text']") || input;
-                const sendBtnSafe = replaceElement(".sendBtn") || sendBtn;
+                // Use original elements instead of replacing them
+                const emojiBtnSafe = emojiBtn;
+                const emojiPickerSafe = emojiPicker;
+                const inputSafe = input;
+                const sendBtnSafe = sendBtn;
 
                 if (emojiBtnSafe && emojiPickerSafe) {
-                    emojiBtnSafe.addEventListener("click", (e) => {
+                    // Remove existing event listeners
+                    const newEmojiBtn = emojiBtnSafe.cloneNode(true);
+                    emojiBtnSafe.parentNode.replaceChild(newEmojiBtn, emojiBtnSafe);
+
+                    newEmojiBtn.addEventListener("click", (e) => {
                         e.stopPropagation();
                         emojiPickerSafe.style.display =
                             emojiPickerSafe.style.display === "block" ? "none" : "block";
                     });
+
                     emojiPickerSafe.addEventListener("click", (e) => e.stopPropagation());
                     window.addEventListener("click", () => {
                         if (emojiPickerSafe) emojiPickerSafe.style.display = "none";
@@ -432,9 +430,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const content = inputSafe.value.trim();
                     if (!content) return;
 
+                    // Generate a unique ID for this message to track it
+                    const tempId = `temp-${Date.now()}`;
+                    state.processingMessageIds.add(tempId);
+
                     // Add user message to UI
                     const userMsg = {
-                        id: 'user-' + Date.now(),
+                        id: tempId,
                         sender_id: state.currentUserId,
                         receiver_id: AI_ASSISTANT_ID,
                         content: content,
@@ -451,12 +453,41 @@ document.addEventListener("DOMContentLoaded", async () => {
                     // Show typing indicator
                     typingIndicator.textContent = "AI is typing...";
 
+                    // Save user message to database
+                    const { data: savedUserMsg, error: saveError } = await client
+                        .from("messages")
+                        .insert([{
+                            sender_id: state.currentUserId,
+                            receiver_id: AI_ASSISTANT_ID,
+                            content: content
+                        }])
+                        .select()
+                        .single();
+
+                    if (saveError) {
+                        console.error("Error saving user message:", saveError);
+                        state.processingMessageIds.delete(tempId);
+                        return;
+                    }
+
+                    // Replace temporary message with the saved one
+                    const index = oldMessages.findIndex(m => m.id === tempId);
+                    if (index !== -1) {
+                        oldMessages[index] = savedUserMsg;
+                        ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+                    }
+                    state.processingMessageIds.delete(tempId);
+
                     // Get AI response
                     const aiResponse = await aiAssistant.sendMessageToGemini(content);
 
+                    // Generate a unique ID for AI message
+                    const aiTempId = `ai-temp-${Date.now()}`;
+                    state.processingMessageIds.add(aiTempId);
+
                     // Add AI response to UI
                     const aiMsg = {
-                        id: 'ai-' + Date.now(),
+                        id: aiTempId,
                         sender_id: AI_ASSISTANT_ID,
                         receiver_id: state.currentUserId,
                         content: aiResponse,
@@ -469,20 +500,53 @@ document.addEventListener("DOMContentLoaded", async () => {
                     // Reset typing indicator
                     typingIndicator.textContent = "Online";
 
-                    // Save messages to database
-                    await utils.insertMessage(state.currentUserId, AI_ASSISTANT_ID, content);
-                    await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, aiResponse);
+                    // Save AI message to database
+                    const { data: savedAIMsg, error: aiSaveError } = await client
+                        .from("messages")
+                        .insert([{
+                            sender_id: AI_ASSISTANT_ID,
+                            receiver_id: state.currentUserId,
+                            content: aiResponse
+                        }])
+                        .select()
+                        .single();
 
-                    // Update last message in friends list
-                    ui.updateLastMessage(AI_ASSISTANT_ID, content, new Date().toISOString());
+                    if (aiSaveError) {
+                        console.error("Error saving AI message:", aiSaveError);
+                        state.processingMessageIds.delete(aiTempId);
+                        return;
+                    }
+
+                    // Replace temporary AI message with the saved one
+                    const aiIndex = oldMessages.findIndex(m => m.id === aiTempId);
+                    if (aiIndex !== -1) {
+                        oldMessages[aiIndex] = savedAIMsg;
+                        ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+                    }
+                    state.processingMessageIds.delete(aiTempId);
+
+                    // Update last message in friends list with AI response
+                    ui.updateLastMessage(AI_ASSISTANT_ID, aiResponse, new Date().toISOString());
                 }
 
-                sendBtnSafe.addEventListener("click", handleSend);
-                inputSafe.addEventListener("keypress", (e) => {
+                // Remove existing event listeners and add new ones
+                const newSendBtn = sendBtnSafe.cloneNode(true);
+                sendBtnSafe.parentNode.replaceChild(newSendBtn, sendBtnSafe);
+
+                newSendBtn.addEventListener("click", handleSend);
+
+                const newInput = inputSafe.cloneNode(true);
+                inputSafe.parentNode.replaceChild(newInput, inputSafe);
+
+                newInput.addEventListener("keypress", (e) => {
                     if (e.key === "Enter") {
                         e.preventDefault();
                         handleSend();
                     }
+                });
+
+                newInput.addEventListener("input", () => {
+                    newSendBtn.disabled = !newInput.value.trim();
                 });
 
                 const backBtn = chatContainer.querySelector(".backBtn");
@@ -1867,7 +1931,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ui.showTopRightPopup("Friend request accepted!", "success");
 
                 await friendRequests.fetchFriendRequests();
-                await friends.fetchFriends();
+                // Removed explicit friends.fetchFriends() to prevent duplicates
                 await chat.openSpecificChat(senderId);
                 await friends.fetchRecentChats();
 
@@ -2140,6 +2204,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 friendData.forEach(data => {
                     const { friendId, friendName, avatarUrl, isOnline, lastMessageText, lastMessageTime, unseenCount } = data;
+
+                    // Skip if friend is already in the list (prevents duplicates)
+                    if (chatList.querySelector(`.chat[data-friend-id="${friendId}"]`)) {
+                        return;
+                    }
 
                     const li = document.createElement("li");
                     li.classList.add("chat");
@@ -2444,25 +2513,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                     throw new Error("Missing chat controls (input/send button/messages container)");
                 }
 
-                function replaceElement(selector) {
-                    const el = chatContainer.querySelector(selector);
-                    if (!el) return null;
-                    const clone = el.cloneNode(true);
-                    el.parentNode.replaceChild(clone, el);
-                    return clone;
-                }
-
-                const emojiBtnSafe = emojiBtn ? replaceElement("#emoji-btn") : null;
-                const emojiPickerSafe = emojiPicker ? replaceElement("#emoji-picker") : null;
-                const inputSafe = replaceElement("input[type='text']") || input;
-                const sendBtnSafe = replaceElement(".sendBtn") || sendBtn;
+                // Use original elements instead of replacing them
+                const emojiBtnSafe = emojiBtn;
+                const emojiPickerSafe = emojiPicker;
+                const inputSafe = input;
+                const sendBtnSafe = sendBtn;
 
                 if (emojiBtnSafe && emojiPickerSafe) {
-                    emojiBtnSafe.addEventListener("click", (e) => {
+                    // Remove existing event listeners
+                    const newEmojiBtn = emojiBtnSafe.cloneNode(true);
+                    emojiBtnSafe.parentNode.replaceChild(newEmojiBtn, emojiBtnSafe);
+
+                    newEmojiBtn.addEventListener("click", (e) => {
                         e.stopPropagation();
                         emojiPickerSafe.style.display =
                             emojiPickerSafe.style.display === "block" ? "none" : "block";
                     });
+
                     emojiPickerSafe.addEventListener("click", (e) => e.stopPropagation());
                     window.addEventListener("click", () => {
                         if (emojiPickerSafe) emojiPickerSafe.style.display = "none";
@@ -2691,8 +2758,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ui.updateUnseenBadge(friendId, 0);
                 state.unseenCounts[friendId] = 0;
 
-                inputSafe.addEventListener("input", () => {
-                    sendBtnSafe.disabled = !inputSafe.value.trim();
+                // Remove existing event listeners and add new ones
+                const newInput = inputSafe.cloneNode(true);
+                inputSafe.parentNode.replaceChild(newInput, inputSafe);
+
+                newInput.addEventListener("input", () => {
+                    sendBtnSafe.disabled = !newInput.value.trim();
                     try {
                         if (state.channels.typing) {
                             state.channels.typing.send({
@@ -2710,16 +2781,19 @@ document.addEventListener("DOMContentLoaded", async () => {
                 });
 
                 async function handleSend() {
-                    const content = inputSafe.value.trim();
+                    const content = newInput.value.trim();
                     if (!content) return;
 
                     await utils.sendMessage(friendId, content);
-                    inputSafe.value = "";
+                    newInput.value = "";
                     sendBtnSafe.disabled = true;
                 }
 
-                sendBtnSafe.addEventListener("click", handleSend);
-                inputSafe.addEventListener("keypress", (e) => {
+                const newSendBtn = sendBtnSafe.cloneNode(true);
+                sendBtnSafe.parentNode.replaceChild(newSendBtn, sendBtnSafe);
+
+                newSendBtn.addEventListener("click", handleSend);
+                newInput.addEventListener("keypress", (e) => {
                     if (e.key === "Enter") {
                         e.preventDefault();
                         handleSend();
