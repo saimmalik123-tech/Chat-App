@@ -11,8 +11,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const RETRY_MAX_ATTEMPTS = 3;
     const RETRY_INITIAL_DELAY = 500;
 
-    // AI Assistant Constants
-    const AI_ASSISTANT_ID = 'ai-assistant';
+    // AI Assistant Constants - Using valid UUID
+    const AI_ASSISTANT_ID = '00000000-0000-0000-0000-000000000000';
     const AI_ASSISTANT_NAME = 'AI Assistant';
     const AI_ASSISTANT_AVATAR = './assets/icon/ai-avatar.jpg';
     const AI_ASSISTANT_BIO = 'I am an AI assistant powered by Gemini 2.0. Ask me anything!';
@@ -192,7 +192,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 `;
 
                 aiLi.addEventListener("click", () => {
-                    aiAssistant.openAIChat(); // Fixed: was calling chat.openAIChat()
+                    aiAssistant.openAIChat();
                 });
 
                 chatList.insertBefore(aiLi, chatList.firstChild);
@@ -455,7 +455,34 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Ensure user exists in users table
         ensureUserExists: async (userId) => {
             return utils.withRetry(async () => {
-                // Check if user exists
+                // Special handling for AI Assistant
+                if (userId === AI_ASSISTANT_ID) {
+                    // Check if AI Assistant exists
+                    const { data: existingUser, error: checkError } = await client
+                        .from("users")
+                        .select("id")
+                        .eq("id", userId)
+                        .maybeSingle();
+
+                    if (checkError) throw checkError;
+
+                    if (existingUser) return true;
+
+                    // Create AI Assistant
+                    const { error: insertError } = await client
+                        .from("users")
+                        .insert([{
+                            id: userId,
+                            name: AI_ASSISTANT_NAME,
+                            email: `${userId}@assistant.com`
+                        }]);
+
+                    if (insertError) throw insertError;
+                    console.log("AI Assistant user created");
+                    return true;
+                }
+
+                // Regular user handling
                 const { data: existingUser, error: checkError } = await client
                     .from("users")
                     .select("id")
@@ -2738,20 +2765,48 @@ document.addEventListener("DOMContentLoaded", async () => {
             try {
                 console.log("Checking database schema...");
 
-                // Try to add the constraints directly and handle the "already exists" error
+                // First check if users table exists
+                try {
+                    const { data, error } = await client.rpc('exec_sql', {
+                        sql: "SELECT to_regclass('public.users') as table_exists;"
+                    });
+
+                    if (error || !data || !data[0] || !data[0].table_exists) {
+                        console.log("Users table doesn't exist, creating it...");
+
+                        // Create users table
+                        const { error: createError } = await client.rpc('exec_sql', {
+                            sql: `
+                                CREATE TABLE IF NOT EXISTS users (
+                                    id UUID PRIMARY KEY,
+                                    name TEXT,
+                                    email TEXT,
+                                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                                );
+                            `
+                        });
+
+                        if (createError) {
+                            console.error("Error creating users table:", createError);
+                            return false;
+                        }
+
+                        console.log("Users table created successfully");
+                    }
+                } catch (err) {
+                    console.error("Exception when checking users table:", err);
+                    return false;
+                }
+
+                // Now try to add the constraints
                 try {
                     console.log("Attempting to add sender foreign key constraint...");
                     const { error: senderError } = await client.rpc('exec_sql', {
-                        sql: `ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
+                        sql: `ALTER TABLE messages ADD CONSTRAINT IF NOT EXISTS messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE;`
                     });
 
                     if (senderError) {
-                        // Check if the error is because the constraint already exists
-                        if (senderError.code === '42710') {
-                            console.log("Sender foreign key constraint already exists");
-                        } else {
-                            console.error("Error adding sender foreign key constraint:", senderError);
-                        }
+                        console.error("Error adding sender foreign key constraint:", senderError);
                     } else {
                         console.log("Sender foreign key constraint added successfully");
                     }
@@ -2762,16 +2817,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 try {
                     console.log("Attempting to add receiver foreign key constraint...");
                     const { error: receiverError } = await client.rpc('exec_sql', {
-                        sql: `ALTER TABLE messages ADD CONSTRAINT messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE;`
+                        sql: `ALTER TABLE messages ADD CONSTRAINT IF NOT EXISTS messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE;`
                     });
 
                     if (receiverError) {
-                        // Check if the error is because the constraint already exists
-                        if (receiverError.code === '42710') {
-                            console.log("Receiver foreign key constraint already exists");
-                        } else {
-                            console.error("Error adding receiver foreign key constraint:", receiverError);
-                        }
+                        console.error("Error adding receiver foreign key constraint:", receiverError);
                     } else {
                         console.log("Receiver foreign key constraint added successfully");
                     }
