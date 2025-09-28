@@ -11,6 +11,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     const RETRY_MAX_ATTEMPTS = 3;
     const RETRY_INITIAL_DELAY = 500;
 
+    // AI Assistant Constants
+    const AI_ASSISTANT_ID = 'ai-assistant';
+    const AI_ASSISTANT_NAME = 'AI Assistant';
+    const AI_ASSISTANT_AVATAR = './assets/icon/ai-avatar.jpg';
+    const AI_ASSISTANT_BIO = 'I am an AI assistant powered by Gemini 2.0. Ask me anything!';
+    const AI_WELCOME_MESSAGE = "Hello! I'm your AI assistant. How can I help you today?";
+    const AI_ERROR_MESSAGE = "I'm sorry, I'm having trouble responding right now. Please try again later.";
+
     // Global state
     const state = {
         currentUserId: null,
@@ -29,6 +37,393 @@ document.addEventListener("DOMContentLoaded", async () => {
             chat: null,
             typing: null,
             status: null
+        }
+    };
+
+    // AI Assistant Module
+    const aiAssistant = {
+        // Initialize Gemini API
+        initializeGeminiAPI() {
+            // Replace with your actual Gemini 2.0 API key
+            this.apiKey = 'AIzaSyCVqoPntSjTMdrbkhaulp2jhE_i7vootUk';
+            this.apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${this.apiKey}`;
+            console.log("Gemini API initialized");
+        },
+
+        // Send message to Gemini and get response
+        async sendMessageToGemini(message) {
+            try {
+                const response = await fetch(this.apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{
+                                text: message
+                            }]
+                        }]
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.candidates && data.candidates.length > 0) {
+                    return data.candidates[0].content.parts[0].text;
+                } else {
+                    throw new Error('No response from Gemini');
+                }
+            } catch (error) {
+                console.error('Error calling Gemini API:', error);
+                return AI_ERROR_MESSAGE;
+            }
+        },
+
+        // Ensure AI Assistant exists in database
+        async ensureAIAssistantExists() {
+            try {
+                // Check if AI Assistant exists in users table
+                const { data: existingUser, error: userError } = await client
+                    .from("users")
+                    .select("id")
+                    .eq("id", AI_ASSISTANT_ID)
+                    .maybeSingle();
+
+                if (userError) throw userError;
+
+                if (!existingUser) {
+                    // Create AI Assistant in users table
+                    const { error: insertError } = await client
+                        .from("users")
+                        .insert([{
+                            id: AI_ASSISTANT_ID,
+                            name: AI_ASSISTANT_NAME,
+                            email: `${AI_ASSISTANT_ID}@assistant.com`
+                        }]);
+
+                    if (insertError) throw insertError;
+                    console.log("AI Assistant user created");
+                }
+
+                // Check if AI Assistant profile exists
+                const { data: existingProfile, error: profileError } = await client
+                    .from("user_profiles")
+                    .select("user_id")
+                    .eq("user_id", AI_ASSISTANT_ID)
+                    .maybeSingle();
+
+                if (profileError) throw profileError;
+
+                if (!existingProfile) {
+                    // Create AI Assistant profile
+                    const { error: profileInsertError } = await client
+                        .from("user_profiles")
+                        .insert([{
+                            user_id: AI_ASSISTANT_ID,
+                            user_name: AI_ASSISTANT_NAME,
+                            profile_image_url: AI_ASSISTANT_AVATAR,
+                            bio: AI_ASSISTANT_BIO,
+                            is_online: true
+                        }]);
+
+                    if (profileInsertError) throw profileInsertError;
+                    console.log("AI Assistant profile created");
+                }
+            } catch (error) {
+                console.error("Error ensuring AI Assistant exists:", error);
+                throw error;
+            }
+        },
+
+        // Add AI Assistant to friends list
+        async addAIAssistantToFriendsList() {
+            try {
+                // Check if AI Assistant is already a friend
+                const { data: existingFriend, error: friendError } = await client
+                    .from("friends")
+                    .select("*")
+                    .or(`and(user1_id.eq.${state.currentUserId},user2_id.eq.${AI_ASSISTANT_ID}),and(user1_id.eq.${AI_ASSISTANT_ID},user2_id.eq.${state.currentUserId})`)
+                    .maybeSingle();
+
+                if (friendError) throw friendError;
+
+                if (!existingFriend) {
+                    // Add AI Assistant as friend
+                    const { error: insertError } = await client
+                        .from("friends")
+                        .insert([{
+                            user1_id: state.currentUserId,
+                            user2_id: AI_ASSISTANT_ID
+                        }]);
+
+                    if (insertError) throw insertError;
+                    console.log("AI Assistant added as friend");
+                }
+            } catch (error) {
+                console.error("Error adding AI Assistant to friends list:", error);
+                throw error;
+            }
+        },
+
+        // Render AI Assistant in friends list
+        renderInFriendsList() {
+            try {
+                const chatList = document.querySelector(".chat-list");
+                if (!chatList) return;
+
+                // Check if AI Assistant is already in the list
+                const existingAI = chatList.querySelector(`.chat[data-friend-id="${AI_ASSISTANT_ID}"]`);
+                if (existingAI) return;
+
+                const aiLi = document.createElement("li");
+                aiLi.classList.add("chat", "ai-assistant");
+                aiLi.setAttribute("data-friend-id", AI_ASSISTANT_ID);
+                aiLi.innerHTML = `
+                    <div class="avatar-wrapper" style="position:relative;">
+                        <img src="${AI_ASSISTANT_AVATAR}" alt="AI Assistant" style="object-fit: cover; border-radius:50%;">
+                        <span class="online-dot"></span>
+                    </div>
+                    <div class="chat-meta">
+                        <h4>${AI_ASSISTANT_NAME}</h4>
+                        <p class="last-message">How can I help you?</p>
+                    </div>
+                    <span class="time">${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                `;
+
+                aiLi.addEventListener("click", () => {
+                    chat.openAIChat();
+                });
+
+                chatList.insertBefore(aiLi, chatList.firstChild);
+                state.allFriends.set(AI_ASSISTANT_ID, {
+                    user_id: AI_ASSISTANT_ID,
+                    user_name: AI_ASSISTANT_NAME,
+                    profile_image_url: AI_ASSISTANT_AVATAR,
+                    is_online: true
+                });
+            } catch (error) {
+                console.error("Error rendering AI Assistant in friends list:", error);
+            }
+        },
+
+        // Open AI chat
+        async openAIChat() {
+            try {
+                if (state.currentOpenChatId === AI_ASSISTANT_ID) {
+                    return;
+                }
+
+                state.currentOpenChatId = AI_ASSISTANT_ID;
+
+                const chatContainer = document.querySelector("div.chat-area-child");
+                const defaultScreen = document.querySelector(".default");
+                const sidebar = document.querySelector(".sidebar");
+                const messageCon = document.getElementById("message-notification");
+
+                if (!chatContainer || !defaultScreen) {
+                    console.error("Missing necessary HTML elements for chat.");
+                    return;
+                }
+
+                defaultScreen.style.display = "none";
+                chatContainer.style.display = "flex";
+
+                const chatHeaderName = chatContainer.querySelector("#chat-header-name");
+                const chatHeaderImg = chatContainer.querySelector(".chat-header img");
+                if (chatHeaderName) chatHeaderName.textContent = AI_ASSISTANT_NAME;
+                if (chatHeaderImg) chatHeaderImg.src = AI_ASSISTANT_AVATAR;
+
+                const chatHeader = chatContainer.querySelector(".chat-header img");
+                if (chatHeader) {
+                    const newChatHeader = chatHeader.cloneNode(true);
+                    chatHeader.parentNode.replaceChild(newChatHeader, chatHeader);
+                    newChatHeader.addEventListener("click", () => {
+                        ui.showUserModal(AI_ASSISTANT_ID, AI_ASSISTANT_NAME, AI_ASSISTANT_AVATAR);
+                    });
+                }
+
+                if (window.innerWidth <= 768) {
+                    if (sidebar) sidebar.style.display = "none";
+                    if (messageCon) messageCon.style.display = "none";
+                    chatContainer.style.display = "flex";
+                    defaultScreen.style.display = 'none';
+                } else {
+                    if (messageCon) messageCon.display = "flex";
+                    chatContainer.style.display = "flex";
+                }
+
+                ui.showLoading("Loading AI chat...");
+
+                const emojiBtn = chatContainer.querySelector("#emoji-btn");
+                const emojiPicker = chatContainer.querySelector("#emoji-picker");
+                const input = chatContainer.querySelector("input");
+                const sendBtn = chatContainer.querySelector(".sendBtn");
+                const chatBox = chatContainer.querySelector(".messages");
+                const typingIndicator = chatContainer.querySelector("#typing-indicator");
+
+                if (!input || !sendBtn || !chatBox) {
+                    throw new Error("Missing chat controls (input/send button/messages container)");
+                }
+
+                function replaceElement(selector) {
+                    const el = chatContainer.querySelector(selector);
+                    if (!el) return null;
+                    const clone = el.cloneNode(true);
+                    el.parentNode.replaceChild(clone, el);
+                    return clone;
+                }
+
+                const emojiBtnSafe = emojiBtn ? replaceElement("#emoji-btn") : null;
+                const emojiPickerSafe = emojiPicker ? replaceElement("#emoji-picker") : null;
+                const inputSafe = replaceElement("input[type='text']") || input;
+                const sendBtnSafe = replaceElement(".sendBtn") || sendBtn;
+
+                if (emojiBtnSafe && emojiPickerSafe) {
+                    emojiBtnSafe.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        emojiPickerSafe.style.display =
+                            emojiPickerSafe.style.display === "block" ? "none" : "block";
+                    });
+                    emojiPickerSafe.addEventListener("click", (e) => e.stopPropagation());
+                    window.addEventListener("click", () => {
+                        if (emojiPickerSafe) emojiPickerSafe.style.display = "none";
+                    });
+                    emojiPickerSafe.addEventListener("emoji-click", (event) => {
+                        inputSafe.value += event.detail.unicode;
+                        inputSafe.focus();
+                        sendBtnSafe.disabled = !inputSafe.value.trim();
+                    });
+                }
+
+                inputSafe.value = "";
+                sendBtnSafe.disabled = true;
+
+                typingIndicator.textContent = "Online";
+
+                // Fetch previous AI messages
+                const oldMessages = await chat.fetchMessages(AI_ASSISTANT_ID);
+                ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+
+                // Add welcome message if no messages exist
+                if (oldMessages.length === 0) {
+                    const welcomeMsg = {
+                        id: 'welcome-' + Date.now(),
+                        sender_id: AI_ASSISTANT_ID,
+                        receiver_id: state.currentUserId,
+                        content: AI_WELCOME_MESSAGE,
+                        created_at: new Date().toISOString(),
+                        seen: false
+                    };
+                    oldMessages.push(welcomeMsg);
+                    ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+
+                    // Save welcome message to database
+                    await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, AI_WELCOME_MESSAGE);
+                }
+
+                async function handleSend() {
+                    const content = inputSafe.value.trim();
+                    if (!content) return;
+
+                    // Add user message to UI
+                    const userMsg = {
+                        id: 'user-' + Date.now(),
+                        sender_id: state.currentUserId,
+                        receiver_id: AI_ASSISTANT_ID,
+                        content: content,
+                        created_at: new Date().toISOString(),
+                        seen: false
+                    };
+                    oldMessages.push(userMsg);
+                    ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+
+                    // Clear input
+                    inputSafe.value = "";
+                    sendBtnSafe.disabled = true;
+
+                    // Show typing indicator
+                    typingIndicator.textContent = "AI is typing...";
+
+                    // Get AI response
+                    const aiResponse = await aiAssistant.sendMessageToGemini(content);
+
+                    // Add AI response to UI
+                    const aiMsg = {
+                        id: 'ai-' + Date.now(),
+                        sender_id: AI_ASSISTANT_ID,
+                        receiver_id: state.currentUserId,
+                        content: aiResponse,
+                        created_at: new Date().toISOString(),
+                        seen: false
+                    };
+                    oldMessages.push(aiMsg);
+                    ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
+
+                    // Reset typing indicator
+                    typingIndicator.textContent = "Online";
+
+                    // Save messages to database
+                    await utils.insertMessage(state.currentUserId, AI_ASSISTANT_ID, content);
+                    await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, aiResponse);
+
+                    // Update last message in friends list
+                    ui.updateLastMessage(AI_ASSISTANT_ID, content, new Date().toISOString());
+                }
+
+                sendBtnSafe.addEventListener("click", handleSend);
+                inputSafe.addEventListener("keypress", (e) => {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleSend();
+                    }
+                });
+
+                const backBtn = chatContainer.querySelector(".backBtn");
+                if (backBtn) {
+                    const backClone = backBtn.cloneNode(true);
+                    backBtn.parentNode.replaceChild(backClone, backBtn);
+                    backClone.addEventListener("click", async () => {
+                        state.currentOpenChatId = null;
+
+                        document.getElementById('message-notification').classList.remove("hidden");
+                        if (window.innerWidth <= 768) {
+                            if (sidebar) sidebar.style.display = "flex";
+                            if (messageCon) messageCon.style.display = "flex";
+                            chatContainer.style.display = "none";
+                            defaultScreen.style.display = "flex";
+                        } else {
+                            chatContainer.style.display = "none";
+                            defaultScreen.style.display = "flex";
+                        }
+
+                        friends.fetchFriends();
+                    });
+                }
+            } catch (err) {
+                console.error("Error opening AI chat:", err);
+                ui.showToast("Failed to open AI chat.", "error");
+            } finally {
+                ui.hideLoading();
+            }
+        },
+
+        // Initialize AI Assistant
+        async initialize() {
+            try {
+                // Initialize Gemini API
+                this.initializeGeminiAPI();
+
+                // Ensure AI Assistant exists in database
+                await this.ensureAIAssistantExists();
+
+                // Add AI Assistant to friends list
+                await this.addAIAssistantToFriendsList();
+
+                console.log("AI Assistant initialized successfully");
+            } catch (error) {
+                console.error("Error initializing AI Assistant:", error);
+            }
         }
     };
 
@@ -1042,7 +1437,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 modal.querySelector("#user-modal-message-btn").addEventListener("click", () => {
                     closeModal();
-                    chat.openSpecificChat(userId);
+                    if (userId === AI_ASSISTANT_ID) {
+                        aiAssistant.openAIChat();
+                    } else {
+                        chat.openSpecificChat(userId);
+                    }
                 });
             } catch (error) {
                 console.error("Error showing user modal:", error);
@@ -1080,10 +1479,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 const friendId = visibleChats[0].getAttribute('data-friend-id');
                                 const friendName = visibleChats[0].querySelector('h4').textContent;
                                 const friendAvatar = visibleChats[0].querySelector('img').src;
-                                chat.openSpecificChat(friendId, {
-                                    user_name: friendName,
-                                    profile_image_url: friendAvatar
-                                });
+
+                                if (friendId === AI_ASSISTANT_ID) {
+                                    aiAssistant.openAIChat();
+                                } else {
+                                    chat.openSpecificChat(friendId, {
+                                        user_name: friendName,
+                                        profile_image_url: friendAvatar
+                                    });
+                                }
                             }
                         }
                     }, 120);
@@ -1183,10 +1587,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                     `;
 
                     chatElement.addEventListener('click', () => {
-                        chat.openSpecificChat(chat.user_id, {
-                            user_name: chat.user_name,
-                            profile_image_url: chat.avatar_url
-                        });
+                        if (chat.user_id === AI_ASSISTANT_ID) {
+                            aiAssistant.openAIChat();
+                        } else {
+                            chat.openSpecificChat(chat.user_id, {
+                                user_name: chat.user_name,
+                                profile_image_url: chat.avatar_url
+                            });
+                        }
                     });
 
                     recentChatsContainer.appendChild(chatElement);
@@ -1523,10 +1931,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                     `;
 
                     li.addEventListener("click", () => {
-                        chat.openSpecificChat(friendId, {
-                            user_name: friendName,
-                            profile_image_url: avatarUrl
-                        });
+                        if (friendId === AI_ASSISTANT_ID) {
+                            aiAssistant.openAIChat();
+                        } else {
+                            chat.openSpecificChat(friendId, {
+                                user_name: friendName,
+                                profile_image_url: avatarUrl
+                            });
+                        }
 
                         const chatArea = document.querySelector('.chat-area-main');
                         if (window.innerWidth <= 768) {
@@ -1538,6 +1950,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                     chatList.appendChild(li);
                     state.unseenCounts[friendId] = unseenCount || 0;
                 });
+
+                // Add AI Assistant to friends list
+                aiAssistant.renderInFriendsList();
 
                 ui.enableFriendSearch();
             } catch (err) {
@@ -1601,7 +2016,28 @@ document.addEventListener("DOMContentLoaded", async () => {
                     };
                 });
 
-                const recentChats = await Promise.all(recentChatsPromises);
+                let recentChats = await Promise.all(recentChatsPromises);
+
+                // Add AI Assistant to recent chats if there are messages
+                const { data: aiMessages } = await client
+                    .from("messages")
+                    .select("content, created_at")
+                    .or(`and(sender_id.eq.${state.currentUserId},receiver_id.eq.${AI_ASSISTANT_ID}),and(sender_id.eq.${AI_ASSISTANT_ID},receiver_id.eq.${state.currentUserId})`)
+                    .is('deleted_at', null)
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (aiMessages) {
+                    recentChats.unshift({
+                        user_id: AI_ASSISTANT_ID,
+                        user_name: AI_ASSISTANT_NAME,
+                        avatar_url: AI_ASSISTANT_AVATAR,
+                        is_online: true,
+                        last_message: aiMessages.content || "How can I help you?",
+                        last_message_time: aiMessages.created_at || null
+                    });
+                }
 
                 recentChats.sort((a, b) => {
                     if (!a.last_message_time) return 1;
@@ -1701,6 +2137,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                     return;
                 }
 
+                // Check if this is the AI Assistant
+                if (userId === AI_ASSISTANT_ID) {
+                    return aiAssistant.openAIChat();
+                }
+
                 let userProfile = profile;
                 if (!userProfile) {
                     userProfile = await utils.getUserProfileForChat(userId);
@@ -1719,6 +2160,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Open chat function
         openChat: async (friendId, friendName, friendAvatar, fromNotification = false) => {
             try {
+                // Don't open regular chat for AI Assistant
+                if (friendId === AI_ASSISTANT_ID) {
+                    return aiAssistant.openAIChat();
+                }
+
                 state.currentOpenChatId = friendId;
 
                 const chatContainer = document.querySelector("div.chat-area-child");
@@ -2097,15 +2543,19 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const friendId = urlParams.get('chat');
 
                 if (friendId && state.currentUserId) {
-                    client.from("user_profiles")
-                        .select("user_name, profile_image_url")
-                        .eq("user_id", friendId)
-                        .maybeSingle()
-                        .then(({ data, error }) => {
-                            if (!error && data) {
-                                chat.openSpecificChat(friendId, data);
-                            }
-                        });
+                    if (friendId === AI_ASSISTANT_ID) {
+                        aiAssistant.openAIChat();
+                    } else {
+                        client.from("user_profiles")
+                            .select("user_name, profile_image_url")
+                            .eq("user_id", friendId)
+                            .maybeSingle()
+                            .then(({ data, error }) => {
+                                if (!error && data) {
+                                    chat.openSpecificChat(friendId, data);
+                                }
+                            });
+                    }
                 }
             } catch (error) {
                 console.error("Error opening chat from URL:", error);
@@ -2116,16 +2566,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         handleNotificationRedirect: () => {
             try {
                 if (!state.currentOpenChatId && state.notificationData.type === 'message' && state.notificationData.senderId) {
-                    client
-                        .from("user_profiles")
-                        .select("user_name, profile_image_url")
-                        .eq("user_id", state.notificationData.senderId)
-                        .maybeSingle()
-                        .then(({ data, error }) => {
-                            if (!error && data) {
-                                chat.openChat(state.notificationData.senderId, data.user_name, data.profile_image_url, true);
-                            }
-                        });
+                    if (state.notificationData.senderId === AI_ASSISTANT_ID) {
+                        aiAssistant.openAIChat();
+                    } else {
+                        client
+                            .from("user_profiles")
+                            .select("user_name, profile_image_url")
+                            .eq("user_id", state.notificationData.senderId)
+                            .maybeSingle()
+                            .then(({ data, error }) => {
+                                if (!error && data) {
+                                    chat.openChat(state.notificationData.senderId, data.user_name, data.profile_image_url, true);
+                                }
+                            });
+                    }
                 }
 
                 state.notificationData = {};
@@ -2391,7 +2845,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                                     notif.addEventListener('click', () => {
                                         window.focus();
-                                        chat.openSpecificChat(senderId);
+                                        if (senderId === AI_ASSISTANT_ID) {
+                                            aiAssistant.openAIChat();
+                                        } else {
+                                            chat.openSpecificChat(senderId);
+                                        }
                                         notif.close();
                                     });
                                 }
@@ -3141,6 +3599,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             if (!state.currentUserId) return;
 
+            if (userId === AI_ASSISTANT_ID) {
+                aiAssistant.openAIChat();
+                return;
+            }
+
             const { data: profile, error } = await client
                 .from("user_profiles")
                 .select("user_name, profile_image_url")
@@ -3175,6 +3638,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 await database.checkAndFixDatabaseSchema();
                 await database.initializeDatabaseSchema();
+
+                // Initialize AI Assistant
+                await aiAssistant.initialize();
+
                 await friends.fetchFriends();
                 await friendRequests.fetchFriendRequests();
 
