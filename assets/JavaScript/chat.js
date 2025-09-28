@@ -7,9 +7,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     const ADMIN_REQUEST_KEY = "adminRequestShown";
     const MAX_BIO_LENGTH = 150;
     const MAX_USERNAME_LENGTH = 20;
-    const MESSAGE_DELETION_DELAY = 24 * 60 * 60 * 1000;
-    const RETRY_MAX_ATTEMPTS = 1; // Reduced from 3
-    const RETRY_INITIAL_DELAY = 100; // Reduced from 500
+    const MESSAGE_DELETION_DELAY = 30 * 1000; // Changed from 24 hours to 30 seconds
+    const RETRY_MAX_ATTEMPTS = 1;
+    const RETRY_INITIAL_DELAY = 100;
 
     // AI Assistant Constants
     const AI_ASSISTANT_ID = '00000000-0000-0000-0000-000000000000';
@@ -73,23 +73,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                     }),
                     signal: controller.signal
                 })
-                .then(response => {
-                    clearTimeout(timeoutId);
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.candidates && data.candidates.length > 0) {
-                        resolve(data.candidates[0].content.parts[0].text);
-                    } else {
-                        reject(new Error('No response from Gemini'));
-                    }
-                })
-                .catch(error => {
-                    clearTimeout(timeoutId);
-                    console.error('Error calling Gemini API:', error);
-                    reject(error);
-                });
+                    .then(response => {
+                        clearTimeout(timeoutId);
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.candidates && data.candidates.length > 0) {
+                            resolve(data.candidates[0].content.parts[0].text);
+                        } else {
+                            reject(new Error('No response from Gemini'));
+                        }
+                    })
+                    .catch(error => {
+                        clearTimeout(timeoutId);
+                        console.error('Error calling Gemini API:', error);
+                        reject(error);
+                    });
             });
         },
 
@@ -323,6 +323,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (index !== -1) {
                             oldMessages[index].seen = true;
                         }
+                        // Schedule deletion 30 seconds after being seen
+                        utils.scheduleMessageDeletion(msg.id, AI_ASSISTANT_ID);
                     });
 
                     state.unseenCounts[AI_ASSISTANT_ID] = 0;
@@ -362,6 +364,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         // Optimized: Append only the new message instead of re-rendering all
                         ui.appendMessage(chatBox, newMsg, true);
+                        // Only update last message for this specific chat
                         ui.updateLastMessage(AI_ASSISTANT_ID, newMsg.content, newMsg.created_at);
 
                         setTimeout(() => {
@@ -380,6 +383,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         // Optimized: Append only the new message instead of re-rendering all
                         ui.appendMessage(chatBox, newMsg, false);
+                        // Only update last message for this specific chat
                         ui.updateLastMessage(AI_ASSISTANT_ID, newMsg.content, newMsg.created_at);
 
                         try {
@@ -394,6 +398,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                                     }
                                     // Update just the seen status instead of re-rendering
                                     ui.updateMessageSeenStatus(chatBox, newMsg.id);
+                                    // Schedule deletion 30 seconds after being seen
+                                    utils.scheduleMessageDeletion(newMsg.id, AI_ASSISTANT_ID);
                                 });
                         } catch (err) {
                             console.error("Error marking AI message as seen:", err);
@@ -418,7 +424,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     sendBtnSafe.disabled = true;
                     inputSafe.value = "";
-                    
+
                     // Create temporary message for immediate UI feedback
                     const tempMsg = {
                         id: 'temp-' + Date.now(),
@@ -429,30 +435,31 @@ document.addEventListener("DOMContentLoaded", async () => {
                         seen: false,
                         temp: true
                     };
-                    
+
                     // Add to UI immediately
                     ui.appendMessage(chatBox, tempMsg, true);
+                    // Only update last message for this specific chat
                     ui.updateLastMessage(AI_ASSISTANT_ID, content, tempMsg.created_at);
-                    
+
                     // Show AI is typing
                     typingIndicator.textContent = "AI is typing...";
 
                     try {
                         // Send message in background
                         const userMsgSaved = await utils.insertMessage(state.currentUserId, AI_ASSISTANT_ID, content);
-                        
+
                         if (userMsgSaved) {
                             // Get AI response
                             const aiResponse = await Promise.race([
                                 aiAssistant.sendMessageToGemini(content),
-                                new Promise((_, reject) => 
+                                new Promise((_, reject) =>
                                     setTimeout(() => reject(new Error('AI timeout')), 8000)
                                 )
                             ]);
-                            
+
                             // Insert AI response
                             const aiMsgSaved = await utils.insertMessage(AI_ASSISTANT_ID, state.currentUserId, aiResponse);
-                            
+
                             if (aiMsgSaved) {
                                 // AI message will be added via real-time subscription
                                 console.log("AI response sent");
@@ -629,10 +636,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         insertMessage: async (senderId, receiverId, content) => {
             try {
                 console.log(`Inserting message from ${senderId} to ${receiverId}`);
-                
+
                 const senderExists = await utils.ensureUserExists(senderId);
                 const receiverExists = await utils.ensureUserExists(receiverId);
-                
+
                 if (!senderExists || !receiverExists) {
                     console.error("Sender or receiver does not exist in users table");
                     return false;
@@ -650,13 +657,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 if (error) {
                     console.error("Error inserting message:", error);
-                    
+
                     if (error.code === '23503') {
                         console.log("Foreign key error, retrying after ensuring users exist");
-                        
+
                         await utils.ensureUserExists(senderId);
                         await utils.ensureUserExists(receiverId);
-                        
+
                         const { data: retryData, error: retryError } = await client
                             .from("messages")
                             .insert([{
@@ -666,12 +673,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                             }])
                             .select()
                             .single();
-                        
+
                         if (retryError) {
                             console.error("Error inserting message on retry:", retryError);
                             return false;
                         }
-                        
+
                         console.log("Message inserted successfully on retry");
                         return true;
                     } else if (error.code === '42501') {
@@ -701,6 +708,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const success = await utils.insertMessage(state.currentUserId, friendId, content);
 
                 if (success) {
+                    // Only update last message for this specific chat
                     ui.updateLastMessage(friendId, content, new Date().toISOString());
                 } else {
                     ui.showToast("Message failed to send. Please try again.", "error");
@@ -855,6 +863,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             console.error("Error deleting message:", error);
                         } else {
                             console.log(`Message ${messageId} deleted after timeout`);
+                            // Only update last message for this specific chat
                             ui.updateLastMessageInChatList(friendId);
                         }
                     } catch (err) {
@@ -904,6 +913,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     console.error("Error deleting seen messages for chat:", updateError);
                 } else {
                     console.log(`Deleted ${messageIds.length} seen messages for chat with ${friendId}`);
+                    // Only update last message for this specific chat
                     ui.updateLastMessageInChatList(friendId);
                 }
             } catch (err) {
@@ -1333,11 +1343,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         appendMessage: (chatBox, message, isMe) => {
             try {
                 if (!chatBox) return;
-                
+
                 const friendAvatar = isMe ? null : (state.allFriends.get(message.sender_id)?.profile_image_url || AI_ASSISTANT_AVATAR);
                 const messageDiv = ui.createMessageElement(message, isMe, friendAvatar);
                 chatBox.appendChild(messageDiv);
-                
+
                 // Scroll to bottom
                 setTimeout(() => {
                     chatBox.scrollTop = chatBox.scrollHeight;
@@ -2344,6 +2354,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (msgIndex !== -1) {
                             messages[msgIndex].seen = true;
                         }
+                        // Schedule deletion 30 seconds after being seen
+                        utils.scheduleMessageDeletion(unseenMsg.id, friendId);
                     });
 
                     ui.renderChatMessages(chatBox, messages, friendAvatar);
@@ -2508,6 +2520,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                                 // Optimized: Append only the new message instead of re-rendering all
                                 ui.appendMessage(chatBox, newMsg, true);
+                                // Only update last message for this specific chat
                                 ui.updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
                                 setTimeout(() => {
@@ -2528,6 +2541,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                                 // Optimized: Append only the new message instead of re-rendering all
                                 ui.appendMessage(chatBox, newMsg, false);
+                                // Only update last message for this specific chat
                                 ui.updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
                                 if (newMsg.receiver_id === state.currentUserId) {
@@ -2546,6 +2560,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                                         state.unseenCounts[newMsg.sender_id] = 0;
                                         ui.updateUnseenBadge(newMsg.sender_id, 0);
+                                        // Schedule deletion 30 seconds after being seen
                                         utils.scheduleMessageDeletion(newMsg.id, friendId);
                                     } catch (err) {
                                         console.error("Error marking message as seen:", err);
@@ -2572,7 +2587,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                                     // Remove the message element instead of re-rendering all
                                     const messageElement = chatBox.querySelector(`.message[data-message-id="${updated.id}"]`);
                                     if (messageElement) messageElement.remove();
-                                    
+
+                                    // Only update last message for this specific chat
                                     ui.updateLastMessageInChatList(updated.sender_id);
                                     ui.updateLastMessageInChatList(updated.receiver_id);
 
@@ -2607,7 +2623,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                                     // Remove the message element instead of re-rendering all
                                     const messageElement = chatBox.querySelector(`.message[data-message-id="${updated.id}"]`);
                                     if (messageElement) messageElement.remove();
-                                    
+
+                                    // Only update last message for this specific chat
                                     ui.updateLastMessageInChatList(updated.sender_id);
                                     ui.updateLastMessageInChatList(updated.receiver_id);
 
@@ -2723,7 +2740,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     sendBtnSafe.disabled = true;
                     inputSafe.value = "";
-                    
+
                     // Create temporary message for immediate UI feedback
                     const tempMsg = {
                         id: 'temp-' + Date.now(),
@@ -2734,11 +2751,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                         seen: false,
                         temp: true
                     };
-                    
+
                     // Add to UI immediately
                     ui.appendMessage(chatBox, tempMsg, true);
+                    // Only update last message for this specific chat
                     ui.updateLastMessage(friendId, content, tempMsg.created_at);
-                    
+
                     try {
                         await utils.sendMessage(friendId, content);
                     } catch (error) {
@@ -3097,6 +3115,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         if (state.currentOpenChatId !== senderId) {
                             ui.updateUnseenCountForFriend(senderId);
+                            // Only update last message for this specific chat
                             ui.updateLastMessage(senderId, newMsg.content, newMsg.created_at);
 
                             try {
@@ -3145,6 +3164,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (!updatedMsg || !state.currentUserId) return;
 
                         if (updatedMsg.deleted_at) {
+                            // Only update last message for this specific chat
                             ui.updateLastMessageInChatList(updatedMsg.sender_id);
                             ui.updateLastMessageInChatList(updatedMsg.receiver_id);
 
@@ -3852,11 +3872,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         window.addEventListener('beforeunload', () => {
             utils.setUserOnlineStatus(false);
             Object.values(state.deletionTimeouts).forEach(timeoutId => clearTimeout(timeoutId));
-            
+
             Object.values(state.channels).forEach(channel => {
                 if (channel) client.removeChannel(channel);
             });
-            
+
             if (state.statusInterval) {
                 clearInterval(state.statusInterval);
             }
@@ -3925,7 +3945,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
 
                 chat.openChatFromUrl();
-                
+
                 const updateOnlineStatus = async () => {
                     try {
                         await utils.setUserOnlineStatus(true);
@@ -3943,9 +3963,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     };
 
+    initializeApp();
     profile.setupProfileElements();
     setupEventListeners();
     await utils.requestNotificationPermission();
     auth.fetchCurrentUserAvatar();
-    initializeApp();
 });
