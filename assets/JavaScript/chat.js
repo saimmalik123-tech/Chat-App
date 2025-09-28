@@ -1370,7 +1370,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         </svg>
                     `;
                     copyIcon.style.cssText = `
-                        position: absolute;
+                        position: relative;
                         top: 5px;
                         right: 5px;
                         opacity: 0;

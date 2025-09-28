@@ -285,7 +285,7 @@ nav h2 a {
   overflow-x: hidden;
 }
 
-.messages::-webkit-scrollbar{
+.messages::-webkit-scrollbar {
   display: none;
 }
 
@@ -296,6 +296,14 @@ nav h2 a {
   font-size: 14px;
   word-wrap: break-word;
   padding: 20px 40px 20px 10px;
+}
+
+.sent .copy-icon {
+  color: #fff;
+}
+
+.received .copy-icon {
+  color: #666;
 }
 
 .sent {
