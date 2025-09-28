@@ -63,7 +63,7 @@ async function handleGoogleAuth() {
             }
         }
 
-        // Ensure profile exists in user_profiles
+        // Check if user has a profile
         const { data: profile, error: profileError } = await client
             .from("user_profiles")
             .select("user_id")
@@ -75,25 +75,8 @@ async function handleGoogleAuth() {
             return;
         }
 
+        // Always redirect to setup profile if no profile exists
         if (!profile) {
-            const { error: insertProfileError } = await client
-                .from("user_profiles")
-                .insert([{
-                    user_id: user.id,
-                    full_name: user.user_metadata?.full_name || user.user_metadata?.name || "",
-                    user_name: user.user_metadata?.user_name || "",
-                    bio: "",
-                    profile_image_url: user.user_metadata?.avatar_url || "",
-                    is_online: false,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                }]);
-
-            if (insertProfileError) {
-                showPopup("Error creating profile: " + insertProfileError.message);
-                return;
-            }
-
             window.location.href = "setupProfile.html";
             return;
         }

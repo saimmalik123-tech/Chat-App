@@ -93,6 +93,25 @@ async function signUp() {
             showPopup("Error saving user in private_users: " + upsertError.message, "error");
             return;
         }
+
+        // Create a basic profile in user_profiles
+        const { error: profileError } = await client
+            .from("user_profiles")
+            .insert([{
+                user_id: data.user.id,
+                full_name: signName,
+                user_name: "",
+                bio: "",
+                profile_image_url: "",
+                is_online: false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            }]);
+
+        if (profileError) {
+            showPopup("Error creating profile: " + profileError.message, "error");
+            return;
+        }
     }
 
     showPopup("Signup successful! Please check your email to verify your account.", "success");
@@ -123,6 +142,7 @@ async function login() {
         return;
     }
 
+    // Check if user has a profile
     const { data: profile, error: profileError } = await client
         .from("user_profiles")
         .select("*")
@@ -134,11 +154,13 @@ async function login() {
         return;
     }
 
-    if (profile) {
-        window.location.href = "dashboard.html";
-    } else {
+    // Always redirect to setup profile if no profile exists
+    if (!profile) {
         window.location.href = "setupProfile.html";
+        return;
     }
+
+    window.location.href = "dashboard.html";
 }
 
 const loginBtn = document.querySelector('.signInBtn');
