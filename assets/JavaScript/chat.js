@@ -7,7 +7,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const ADMIN_REQUEST_KEY = "adminRequestShown";
     const MAX_BIO_LENGTH = 150;
     const MAX_USERNAME_LENGTH = 20;
-    const MESSAGE_DELETION_DELAY = 30000;
+    const MESSAGE_DELETION_DELAY = 24 * 60 * 60 * 1000; // Changed to 24 hours
     const RETRY_MAX_ATTEMPTS = 3;
     const RETRY_INITIAL_DELAY = 500;
 
@@ -306,6 +306,35 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 // Fetch previous AI messages
                 const oldMessages = await chat.fetchMessages(AI_ASSISTANT_ID);
+
+                // Mark AI messages as seen and update unseen count
+                const unseenAIMessages = oldMessages.filter(msg =>
+                    msg.sender_id === AI_ASSISTANT_ID &&
+                    msg.receiver_id === state.currentUserId &&
+                    !msg.seen
+                );
+
+                if (unseenAIMessages.length > 0) {
+                    // Update seen status in database
+                    const unseenIds = unseenAIMessages.map(msg => msg.id);
+                    await client
+                        .from("messages")
+                        .update({ seen: true })
+                        .in("id", unseenIds);
+
+                    // Update messages in local array
+                    unseenAIMessages.forEach(msg => {
+                        const index = oldMessages.findIndex(m => m.id === msg.id);
+                        if (index !== -1) {
+                            oldMessages[index].seen = true;
+                        }
+                    });
+
+                    // Update unseen count
+                    state.unseenCounts[AI_ASSISTANT_ID] = 0;
+                    ui.updateUnseenBadge(AI_ASSISTANT_ID, 0);
+                }
+
                 ui.renderChatMessages(chatBox, oldMessages, AI_ASSISTANT_AVATAR);
 
                 // Add welcome message if no messages exist
@@ -1126,6 +1155,46 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
 
+        // Show copy popup
+        showCopyPopup: (element) => {
+            try {
+                const popup = document.createElement("div");
+                popup.className = "copy-popup";
+                popup.textContent = "Copied!";
+                popup.style.cssText = `
+                    position: absolute;
+                    background-color: #333;
+                    color: white;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    z-index: 1000;
+                    pointer-events: none;
+                    opacity: 0;
+                    transition: opacity 0.2s;
+                `;
+
+                document.body.appendChild(popup);
+
+                const rect = element.getBoundingClientRect();
+                popup.style.left = `${rect.left + rect.width / 2 - popup.offsetWidth / 2}px`;
+                popup.style.top = `${rect.top - 30}px`;
+
+                setTimeout(() => {
+                    popup.style.opacity = "1";
+                }, 10);
+
+                setTimeout(() => {
+                    popup.style.opacity = "0";
+                    setTimeout(() => {
+                        document.body.removeChild(popup);
+                    }, 200);
+                }, 1500);
+            } catch (error) {
+                console.error("Error showing copy popup:", error);
+            }
+        },
+
         // Create loader
         createLoader: () => {
             const loader = document.createElement('div');
@@ -1275,6 +1344,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     const msgBubble = document.createElement("div");
                     msgBubble.className = "msg-bubble";
+                    msgBubble.style.position = "relative";
 
                     const msgText = document.createElement("span");
                     msgText.className = "msg-text";
@@ -1289,6 +1359,46 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     msgBubble.appendChild(msgText);
                     msgBubble.appendChild(msgMeta);
+
+                    // Add copy icon
+                    const copyIcon = document.createElement("span");
+                    copyIcon.className = "copy-icon";
+                    copyIcon.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                        </svg>
+                    `;
+                    copyIcon.style.cssText = `
+                        position: absolute;
+                        top: 5px;
+                        right: 5px;
+                        opacity: 0;
+                        cursor: pointer;
+                        transition: opacity 0.2s;
+                        color: #666;
+                    `;
+
+                    msgBubble.appendChild(copyIcon);
+
+                    // Show copy icon on hover
+                    msgBubble.addEventListener("mouseenter", () => {
+                        copyIcon.style.opacity = "1";
+                    });
+
+                    msgBubble.addEventListener("mouseleave", () => {
+                        copyIcon.style.opacity = "0";
+                    });
+
+                    // Copy message text on click
+                    copyIcon.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(msg.content).then(() => {
+                            ui.showCopyPopup(copyIcon);
+                        }).catch(err => {
+                            console.error("Failed to copy text: ", err);
+                        });
+                    });
 
                     if (!isMe) {
                         const avatarImg = document.createElement("img");
