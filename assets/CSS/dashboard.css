@@ -286,7 +286,12 @@ nav h2 a {
 }
 
 .messages::-webkit-scrollbar {
-  display: none;
+  width: 6px;
+}
+
+.messages::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 6px;
 }
 
 .message {
