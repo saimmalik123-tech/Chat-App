@@ -1461,7 +1461,7 @@ emoji-picker {
     font-size: 0.78rem;
   }
   .message {
-    max-width: 70%;
+    max-width: 85%;
   }
   #message-notification {
     width: 56px;
