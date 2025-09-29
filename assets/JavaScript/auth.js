@@ -81,6 +81,7 @@ async function signUp() {
     }
 
     if (data?.user) {
+        // Save to private_users
         const { error: upsertError } = await client
             .from("private_users")
             .upsert([{
@@ -90,6 +91,7 @@ async function signUp() {
             }], { onConflict: "id" });
 
         if (upsertError) {
+            console.error("Private_users error:", upsertError);
             showPopup("Error saving user in private_users: " + upsertError.message, "error");
             return;
         }
@@ -109,6 +111,7 @@ async function signUp() {
             }]);
 
         if (profileError) {
+            console.error("User_profiles error:", profileError);
             showPopup("Error creating profile: " + profileError.message, "error");
             return;
         }
@@ -125,6 +128,7 @@ signUpBtn?.addEventListener('click', async e => {
     e.preventDefault();
     signUpBtn.innerHTML = '<div class="loader"></div>';
     await signUp();
+    signUpBtn.innerHTML = "Sign Up";
 });
 
 /* ------------------ LOGIN ------------------ */
@@ -150,6 +154,7 @@ async function login() {
         .maybeSingle();
 
     if (profileError) {
+        console.error("Profile check error:", profileError);
         showPopup("Error checking profile: " + profileError.message, "error");
         return;
     }
@@ -169,6 +174,7 @@ async function login() {
             }]);
 
         if (insertProfileError) {
+            console.error("User_profiles insert error:", insertProfileError);
             showPopup("Error creating profile: " + insertProfileError.message, "error");
             return;
         }
@@ -193,6 +199,7 @@ loginBtn?.addEventListener('click', async e => {
     e.preventDefault();
     loginBtn.innerHTML = '<div class="loader"></div>';
     await login();
+    loginBtn.innerHTML = "Login";
 });
 
 /* ------------------ GOOGLE AUTH ------------------ */
@@ -258,6 +265,7 @@ async function setupProfile() {
         .maybeSingle();
 
     if (userNameError) {
+        console.error("Username check error:", userNameError);
         showPopup("Error checking username: " + userNameError.message, "error");
         return;
     }
@@ -277,11 +285,12 @@ async function setupProfile() {
         }], { onConflict: "id" });
 
     if (upsertError) {
+        console.error("Private_users error:", upsertError);
         showPopup("Error saving user in private_users: " + upsertError.message, "error");
         return;
     }
 
-    let avatar_url = null;
+    let avatar_url = "";
     if (avatarFile) {
         const fileName = `public/${user.id}-${Date.now()}-${avatarFile.name}`;
         const { error: uploadError } = await client.storage
@@ -289,6 +298,7 @@ async function setupProfile() {
             .upload(fileName, avatarFile, { cacheControl: '3600', upsert: true });
 
         if (uploadError) {
+            console.error("Avatar upload error:", uploadError);
             showPopup("Error uploading avatar: " + uploadError.message, "error");
             return;
         }
@@ -305,6 +315,7 @@ async function setupProfile() {
         .maybeSingle();
 
     if (profileCheckError) {
+        console.error("Profile check error:", profileCheckError);
         showPopup("Error checking profile: " + profileCheckError.message, "error");
         return;
     }
@@ -322,6 +333,7 @@ async function setupProfile() {
             .eq("user_id", user.id);
 
         if (updateError) {
+            console.error("Profile update error:", updateError);
             showPopup("Error updating profile: " + updateError.message, "error");
             return;
         }
@@ -340,6 +352,7 @@ async function setupProfile() {
             }]);
 
         if (insertError) {
+            console.error("Profile insert error:", insertError);
             showPopup("Error saving profile: " + insertError.message, "error");
             return;
         }
@@ -353,6 +366,7 @@ setUpBtn?.addEventListener("click", async e => {
     e.preventDefault();
     setUpBtn.innerHTML = '<div class="loader"></div>';
     await setupProfile();
+    setUpBtn.innerHTML = "Save Profile";
 });
 
 /* ------------------ PAGE LOAD AUTH CHECK ------------------ */
