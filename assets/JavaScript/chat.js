@@ -75,33 +75,33 @@ document.addEventListener("DOMContentLoaded", async () => {
                     }),
                     signal: controller.signal
                 })
-                .then(response => {
-                    clearTimeout(timeoutId);
-                    if (!response.ok) {
-                        // More detailed error logging
-                        console.error("Gemini API error response:", response.status, response.statusText);
-                        throw new Error(`Network response was not ok: ${response.status} ${response.statusText}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.candidates && data.candidates.length > 0) {
-                        resolve(data.candidates[0].content.parts[0].text);
-                    } else {
-                        console.error("Unexpected Gemini API response:", data);
-                        reject(new Error('No response from Gemini'));
-                    }
-                })
-                .catch(error => {
-                    clearTimeout(timeoutId);
-                    if (error.name === 'AbortError') {
-                        console.error("Gemini API request was aborted");
-                        reject(new Error('AI response timeout'));
-                    } else {
-                        console.error('Error calling Gemini API:', error);
-                        reject(error);
-                    }
-                });
+                    .then(response => {
+                        clearTimeout(timeoutId);
+                        if (!response.ok) {
+                            // More detailed error logging
+                            console.error("Gemini API error response:", response.status, response.statusText);
+                            throw new Error(`Network response was not ok: ${response.status} ${response.statusText}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.candidates && data.candidates.length > 0) {
+                            resolve(data.candidates[0].content.parts[0].text);
+                        } else {
+                            console.error("Unexpected Gemini API response:", data);
+                            reject(new Error('No response from Gemini'));
+                        }
+                    })
+                    .catch(error => {
+                        clearTimeout(timeoutId);
+                        if (error.name === 'AbortError') {
+                            console.error("Gemini API request was aborted");
+                            reject(new Error('AI response timeout'));
+                        } else {
+                            console.error('Error calling Gemini API:', error);
+                            reject(error);
+                        }
+                    });
             });
         },
 
@@ -178,6 +178,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     if (insertError) throw insertError;
                     console.log("AI Assistant added as friend");
+                } else {
+                    console.log("AI Assistant already in friends list");
                 }
             } catch (error) {
                 console.error("Error adding AI Assistant to friends list:", error);
@@ -506,14 +508,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     } catch (error) {
                         console.error("Error in handleSend:", error);
-                        
+
                         // Show appropriate error message based on the error type
                         if (error.message === 'AI response timeout' || error.message === 'AI timeout') {
                             ui.showToast("AI is taking too long to respond. Please try again later.", "error");
                         } else {
                             ui.showToast("Error sending message", "error");
                         }
-                        
+
                         // Remove temporary message if still exists
                         const tempElement = chatBox.querySelector(`[data-message-id="${tempMsgId}"]`);
                         if (tempElement) tempElement.remove();
@@ -1924,7 +1926,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ui.showTopRightPopup("Friend request accepted!", "success");
 
                 await friendRequests.fetchFriendRequests();
-                await friends.fetchFriends();
+                // Removed: await friends.fetchFriends();
                 await chat.openSpecificChat(senderId);
                 await friends.fetchRecentChats();
 
@@ -2539,25 +2541,26 @@ document.addEventListener("DOMContentLoaded", async () => {
                         state.channels.chat = client.channel(chatChannelName);
 
                         state.channels.chat
-                            .on('postgres_changes', {
-                                event: 'INSERT',
-                                schema: 'public',
-                                table: 'messages',
-                                filter: `sender_id=eq.${state.currentUserId}`
-                            }, (payload) => {
-                                const newMsg = payload.new;
-                                if (state.processingMessageIds.has(newMsg.id)) {
-                                    return;
-                                }
-                                state.processingMessageIds.add(newMsg.id);
+                            // Removed subscription for own messages to prevent duplicates
+                            // .on('postgres_changes', {
+                            //     event: 'INSERT',
+                            //     schema: 'public',
+                            //     table: 'messages',
+                            //     filter: `sender_id=eq.${state.currentUserId}`
+                            // }, (payload) => {
+                            //     const newMsg = payload.new;
+                            //     if (state.processingMessageIds.has(newMsg.id)) {
+                            //         return;
+                            //     }
+                            //     state.processingMessageIds.add(newMsg.id);
 
-                                ui.appendMessage(chatBox, newMsg, true);
-                                ui.updateLastMessage(friendId, newMsg.content, newMsg.created_at);
+                            //     ui.appendMessage(chatBox, newMsg, true);
+                            //     ui.updateLastMessage(friendId, newMsg.content, newMsg.created_at);
 
-                                setTimeout(() => {
-                                    state.processingMessageIds.delete(newMsg.id);
-                                }, 1000);
-                            })
+                            //     setTimeout(() => {
+                            //         state.processingMessageIds.delete(newMsg.id);
+                            //     }, 1000);
+                            // })
                             .on('postgres_changes', {
                                 event: 'INSERT',
                                 schema: 'public',
@@ -3077,7 +3080,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 try {
                     console.log("Attempting to add sender foreign key constraint...");
-                    
+
                     // First check if the constraint already exists
                     const { data: constraintCheck, error: checkError } = await client.rpc('exec_sql', {
                         sql: `
@@ -3087,7 +3090,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             AND constraint_name = 'messages_sender_id_fkey';
                         `
                     });
-                    
+
                     if (checkError) {
                         console.error("Error checking for sender constraint:", checkError);
                     } else if (!constraintCheck || constraintCheck.length === 0) {
@@ -3110,7 +3113,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 try {
                     console.log("Attempting to add receiver foreign key constraint...");
-                    
+
                     // First check if the constraint already exists
                     const { data: constraintCheck, error: checkError } = await client.rpc('exec_sql', {
                         sql: `
@@ -3120,7 +3123,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             AND constraint_name = 'messages_receiver_id_fkey';
                         `
                     });
-                    
+
                     if (checkError) {
                         console.error("Error checking for receiver constraint:", checkError);
                     } else if (!constraintCheck || constraintCheck.length === 0) {
