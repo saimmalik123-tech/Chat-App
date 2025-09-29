@@ -1415,7 +1415,7 @@ emoji-picker {
   }
   .chat-area-main {
     width: 100%;
-    display: none !important;
+    display: none;
     height: 100%;
     flex-direction: column;
     flex: 1;
