@@ -454,6 +454,7 @@ emoji-picker {
 .modal-popup {
   position: fixed;
   top: 0;
+  flex-direction: column;
   left: 0;
   width: 100%;
   height: 100%;
