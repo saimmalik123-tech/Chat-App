@@ -15,19 +15,6 @@ body {
   justify-content: space-between;
 }
 
-header nav {
-  background-color: var(--bg);
-  border-bottom: 1px solid var(--input-border);
-}
-
-nav h2 a {
-  color: var(--text-primary);
-}
-
-#themeToggle {
-  color: var(--text-primary);
-}
-
 main {
   flex: 1;
   display: flex;
