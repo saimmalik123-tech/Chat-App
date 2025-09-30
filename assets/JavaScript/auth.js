@@ -60,6 +60,75 @@ async function checkAuthentication() {
     return { user, profile };
 }
 
+/* ------------------ CHECK IF USER EXISTS ------------------ */
+async function checkUserExists(email) {
+    try {
+        // Try to sign in with the email to check if user exists
+        // We don't need the password, just checking existence
+        const { data, error } = await client.auth.signInWithPassword({
+            email: email,
+            password: 'dummy-password-that-should-fail'
+        });
+
+        // If we get an error that says "Invalid login credentials", user doesn't exist
+        if (error && error.message === "Invalid login credentials") {
+            return false;
+        }
+        
+        // If we get any other error, we can't determine, so assume exists
+        if (error) {
+            console.error("Error checking user existence:", error);
+            return true;
+        }
+        
+        // If we get a user, they exist
+        return !!data.user;
+    } catch (error) {
+        console.error("Error checking user existence:", error);
+        return true; // Assume exists to prevent duplicate signups
+    }
+}
+
+/* ------------------ ENSURE PROFILE EXISTS ------------------ */
+async function ensureProfileExists(user) {
+    try {
+        // Check if profile exists
+        const { data: existingProfile, error: checkError } = await client
+            .from("user_profiles")
+            .select("user_id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+        if (checkError) throw checkError;
+
+        // If profile doesn't exist, create it
+        if (!existingProfile) {
+            const { error: insertError } = await client
+                .from("user_profiles")
+                .insert([{
+                    user_id: user.id,
+                    full_name: user.user_metadata?.name || "",
+                    user_name: "",
+                    bio: "",
+                    profile_image_url: "",
+                    is_online: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }]);
+
+            if (insertError) throw insertError;
+            
+            console.log("Created new profile for user:", user.id);
+            return false; // Profile was created
+        }
+        
+        return true; // Profile already existed
+    } catch (error) {
+        console.error("Error ensuring profile exists:", error);
+        return false;
+    }
+}
+
 /* ------------------ SIGN UP ------------------ */
 async function signUp() {
     const signName = document.querySelector('#name').value;
@@ -67,6 +136,13 @@ async function signUp() {
     const signPassword = document.querySelector('#password').value;
 
     try {
+        // First check if user already exists
+        const userExists = await checkUserExists(signEmail);
+        if (userExists) {
+            showPopup("This email is already registered. Please login instead.", "error");
+            return;
+        }
+
         const { data, error } = await client.auth.signUp({
             email: signEmail,
             password: signPassword,
@@ -76,45 +152,36 @@ async function signUp() {
             }
         });
 
-        if (error) throw error;
-
-        if (data?.user) {
-            // Save to private_users with proper error handling
-            const { error: upsertError } = await client
-                .from("private_users")
-                .upsert([{
-                    id: data.user.id,
-                    name: signName,
-                    email: signEmail
-                }], { onConflict: "id" });
-
-            if (upsertError) {
-                console.error("Private_users error:", upsertError);
-                // Continue with signup even if private_users fails
-                showPopup("Account created but profile setup incomplete. Please contact support.", "warning");
+        if (error) {
+            // Handle rate limiting error specifically
+            if (error.status === 429 || error.code === 'over_email_send_rate_limit') {
+                throw new Error("Too many signup attempts. Please wait a few minutes before trying again.");
             }
-
-            // Create a basic profile in user_profiles
-            const { error: profileError } = await client
-                .from("user_profiles")
-                .insert([{
-                    user_id: data.user.id,
-                    full_name: signName,
-                    user_name: "",
-                    bio: "",
-                    profile_image_url: "",
-                    is_online: false,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                }]);
-
-            if (profileError) {
-                console.error("User_profiles error:", profileError);
-                showPopup("Account created but profile setup incomplete. Please contact support.", "warning");
-            }
+            throw error;
         }
 
-        showPopup("Signup successful! Please check your email to verify your account.", "success");
+        if (data?.user) {
+            // Try to save to private_users but don't fail if it doesn't work
+            try {
+                await client
+                    .from("private_users")
+                    .upsert([{
+                        id: data.user.id,
+                        name: signName,
+                        email: signEmail
+                    }], { onConflict: "id" });
+            } catch (privateError) {
+                console.error("Private_users error (non-critical):", privateError);
+            }
+
+            // Create profile in user_profiles
+            const profileCreated = await ensureProfileExists(data.user);
+            if (!profileCreated) {
+                console.log("Profile created successfully during signup");
+            }
+
+            showPopup("Signup successful! Please check your email to verify your account.", "success");
+        }
     } catch (error) {
         console.error("Signup error:", error);
         showPopup("Error signing up: " + error.message, "error");
@@ -125,11 +192,26 @@ const signUpBtn = document.querySelector('.signUpBtn');
 const signUpInputs = document.querySelectorAll('#name, #email, #password');
 handleButtonState(signUpInputs, signUpBtn);
 signUpInputs.forEach(input => input.addEventListener('input', () => handleButtonState(signUpInputs, signUpBtn)));
+
+// Add debounce to prevent rapid successive signup attempts
+let signupInProgress = false;
 signUpBtn?.addEventListener('click', async e => {
     e.preventDefault();
+    
+    if (signupInProgress) {
+        showPopup("Please wait, signup is in progress.", "info");
+        return;
+    }
+    
+    signupInProgress = true;
     signUpBtn.innerHTML = '<div class="loader"></div>';
+    signUpBtn.disabled = true;
+    
     await signUp();
+    
     signUpBtn.innerHTML = "Sign Up";
+    signUpBtn.disabled = false;
+    signupInProgress = false;
 });
 
 /* ------------------ LOGIN ------------------ */
@@ -145,7 +227,10 @@ async function login() {
 
         if (error) throw error;
 
-        // Check if user has a profile
+        // Ensure profile exists after login
+        const profileExists = await ensureProfileExists(data.user);
+        
+        // Get the updated profile data
         const { data: profile, error: profileError } = await client
             .from("user_profiles")
             .select("*")
@@ -154,24 +239,17 @@ async function login() {
 
         if (profileError) throw profileError;
 
-        if (!profile) {
-            const { error: insertProfileError } = await client
-                .from("user_profiles")
-                .insert([{
-                    user_id: data.user.id,
-                    full_name: data.user.user_metadata?.name || "",
-                    user_name: "",
-                    bio: "",
-                    profile_image_url: "",
-                    is_online: false,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                }]);
-
-            if (insertProfileError) throw insertProfileError;
-
-            window.location.href = "setupProfile.html";
-            return;
+        // Try to save to private_users but don't fail if it doesn't work
+        try {
+            await client
+                .from("private_users")
+                .upsert([{
+                    id: data.user.id,
+                    name: data.user.user_metadata?.name || "",
+                    email: data.user.email
+                }], { onConflict: "id" });
+        } catch (privateError) {
+            console.error("Private_users error (non-critical):", privateError);
         }
 
         if (!profile.user_name || profile.user_name.trim() === "") {
@@ -190,11 +268,26 @@ const loginBtn = document.querySelector('.signInBtn');
 const loginInputs = document.querySelectorAll('#loginEmail, #loginPassword');
 handleButtonState(loginInputs, loginBtn);
 loginInputs.forEach(input => input.addEventListener('input', () => handleButtonState(loginInputs, loginBtn)));
+
+// Add debounce to prevent rapid successive login attempts
+let loginInProgress = false;
 loginBtn?.addEventListener('click', async e => {
     e.preventDefault();
+    
+    if (loginInProgress) {
+        showPopup("Please wait, login is in progress.", "info");
+        return;
+    }
+    
+    loginInProgress = true;
     loginBtn.innerHTML = '<div class="loader"></div>';
+    loginBtn.disabled = true;
+    
     await login();
+    
     loginBtn.innerHTML = "Login";
+    loginBtn.disabled = false;
+    loginInProgress = false;
 });
 
 /* ------------------ GOOGLE AUTH ------------------ */
@@ -258,30 +351,26 @@ async function setupProfile() {
             .from("user_profiles")
             .select("user_id")
             .eq("user_name", user_name)
+            .neq("user_id", user.id) // Exclude current user
             .maybeSingle();
 
         if (userNameError) throw userNameError;
 
-        if (existingUserName && existingUserName.user_id !== user.id) {
+        if (existingUserName) {
             throw new Error("Username already taken. Please choose another.");
         }
 
-        // Save to private_users with error handling
+        // Try to save to private_users but don't fail if it doesn't work
         try {
-            const { error: upsertError } = await client
+            await client
                 .from("private_users")
                 .upsert([{
                     id: user.id,
                     name: user.user_metadata?.name || full_name || "",
                     email: user.email
                 }], { onConflict: "id" });
-
-            if (upsertError) {
-                console.error("Private_users error:", upsertError);
-                // Continue with profile setup even if private_users fails
-            }
         } catch (privateError) {
-            console.error("Private_users operation failed:", privateError);
+            console.error("Private_users error (non-critical):", privateError);
         }
 
         let avatar_url = "";
@@ -297,44 +386,19 @@ async function setupProfile() {
             avatar_url = urlData.publicUrl;
         }
 
-        // Update or insert profile
-        const { data: existingProfile, error: profileCheckError } = await client
+        // Use upsert to handle both insert and update cases
+        const { error: profileError } = await client
             .from("user_profiles")
-            .select("user_id")
-            .eq("user_id", user.id)
-            .maybeSingle();
+            .upsert([{
+                user_id: user.id,
+                full_name,
+                user_name,
+                bio,
+                profile_image_url: avatar_url,
+                updated_at: new Date().toISOString()
+            }], { onConflict: "user_id" });
 
-        if (profileCheckError) throw profileCheckError;
-
-        if (existingProfile) {
-            const { error: updateError } = await client
-                .from("user_profiles")
-                .update({
-                    full_name,
-                    user_name,
-                    bio,
-                    profile_image_url: avatar_url,
-                    updated_at: new Date().toISOString()
-                })
-                .eq("user_id", user.id);
-
-            if (updateError) throw updateError;
-        } else {
-            const { error: insertError } = await client
-                .from("user_profiles")
-                .insert([{
-                    user_id: user.id,
-                    full_name,
-                    user_name,
-                    bio,
-                    profile_image_url: avatar_url,
-                    is_online: false,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                }]);
-
-            if (insertError) throw insertError;
-        }
+        if (profileError) throw profileError;
 
         showPopup("Profile saved successfully!", "success");
         window.location.href = "dashboard.html";
@@ -344,11 +408,25 @@ async function setupProfile() {
     }
 }
 
+// Add debounce to prevent rapid successive profile setup attempts
+let profileSetupInProgress = false;
 setUpBtn?.addEventListener("click", async e => {
     e.preventDefault();
+    
+    if (profileSetupInProgress) {
+        showPopup("Please wait, profile setup is in progress.", "info");
+        return;
+    }
+    
+    profileSetupInProgress = true;
     setUpBtn.innerHTML = '<div class="loader"></div>';
+    setUpBtn.disabled = true;
+    
     await setupProfile();
+    
     setUpBtn.innerHTML = "Save Profile";
+    setUpBtn.disabled = false;
+    profileSetupInProgress = false;
 });
 
 /* ------------------ PAGE LOAD AUTH CHECK ------------------ */
