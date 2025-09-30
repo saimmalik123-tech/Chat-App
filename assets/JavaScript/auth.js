@@ -40,7 +40,8 @@ async function checkAuthentication() {
 
     if (userError || !user) {
         if (!window.location.pathname.includes('index.html') &&
-            !window.location.pathname.includes('signup.html')) {
+            !window.location.pathname.includes('signup.html') &&
+            !window.location.pathname.includes('verify.html')) {
             window.location.href = 'index.html';
         }
         return { user: null, profile: null };
@@ -202,7 +203,13 @@ async function signUp() {
                 console.log("Profile created successfully during signup");
             }
 
+            // Show success message
             showPopup("Signup successful! Please check your email to verify your account.", "success");
+            
+            // Redirect to verify.html after 2 seconds
+            setTimeout(() => {
+                window.location.href = 'verify.html';
+            }, 2000);
         }
     } catch (error) {
         console.error("Signup error:", error);
@@ -451,6 +458,41 @@ setUpBtn?.addEventListener("click", async e => {
     profileSetupInProgress = false;
 });
 
+/* ------------------ RESEND VERIFICATION EMAIL ------------------ */
+async function resendVerificationEmail() {
+    try {
+        const { data: { user }, error: userError } = await client.auth.getUser();
+        
+        if (userError || !user) {
+            showPopup("No user session found. Please sign up again.", "error");
+            return;
+        }
+        
+        const { error } = await client.auth.resend({
+            type: 'signup',
+            email: user.email,
+            options: {
+                emailRedirectTo: window.location.origin + '/setupProfile.html',
+            }
+        });
+        
+        if (error) throw error;
+        
+        showPopup("Verification email resent successfully!", "success");
+    } catch (error) {
+        console.error("Error resending verification email:", error);
+        showPopup("Error resending verification email: " + error.message, "error");
+    }
+}
+
+// Add event listener for resend verification button if it exists
+document.getElementById('resendVerificationBtn')?.addEventListener('click', async e => {
+    e.preventDefault();
+    resendVerificationBtn.innerHTML = '<div class="loader"></div>';
+    await resendVerificationEmail();
+    resendVerificationBtn.innerHTML = "Resend Email";
+});
+
 /* ------------------ PAGE LOAD AUTH CHECK ------------------ */
 document.addEventListener('DOMContentLoaded', async () => {
     const isProtectedPage = window.location.pathname.includes('dashboard.html') ||
@@ -468,6 +510,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (window.location.pathname.includes('setupProfile.html') &&
             profile && profile.user_name && profile.user_name.trim() !== "") {
             window.location.href = "dashboard.html";
+        }
+    }
+    
+    // Special handling for verify.html page
+    if (window.location.pathname.includes('verify.html')) {
+        const { user } = await checkAuthentication();
+        
+        // If user is already verified, redirect to setup profile or dashboard
+        if (user && user.email_confirmed_at) {
+            const { profile } = await checkAuthentication();
+            
+            if (!profile || !profile.user_name || profile.user_name.trim() === "") {
+                window.location.href = "setupProfile.html";
+            } else {
+                window.location.href = "dashboard.html";
+            }
         }
     }
 });
