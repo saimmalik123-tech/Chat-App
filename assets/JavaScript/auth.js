@@ -64,28 +64,36 @@ async function checkAuthentication() {
 /* ------------------ CHECK IF USER EXISTS ------------------ */
 async function checkUserExists(email) {
     try {
-        // Try to sign in with the email to check if user exists
-        const { data, error } = await client.auth.signInWithPassword({
-            email: email,
-            password: 'dummy-password-that-should-fail'
-        });
+        // Use admin API to check if user exists
+        const { data, error } = await client.auth.admin.listUsers();
+        if (error) throw error;
 
-        // If we get an error that says "Invalid login credentials", user doesn't exist
-        if (error && error.message === "Invalid login credentials") {
-            return false;
-        }
-        
-        // If we get any other error, we can't determine, so assume exists
-        if (error) {
-            console.error("Error checking user existence:", error);
-            return true;
-        }
-        
-        // If we get a user, they exist
-        return !!data.user;
+        return data.users.some(user => user.email === email);
     } catch (error) {
         console.error("Error checking user existence:", error);
-        return true; // Assume exists to prevent duplicate signups
+        // Fallback: try to sign in with the email to check if user exists
+        try {
+            const { data, error } = await client.auth.signInWithPassword({
+                email: email,
+                password: 'dummy-password-that-should-fail'
+            });
+
+            // If we get an error that says "Invalid login credentials", user doesn't exist
+            if (error && error.message === "Invalid login credentials") {
+                return false;
+            }
+
+            // If we get any other error, we can't determine, so assume exists
+            if (error) {
+                return true;
+            }
+
+            // If we get a user, they exist
+            return !!data.user;
+        } catch (fallbackError) {
+            console.error("Fallback check failed:", fallbackError);
+            return true; // Assume exists to prevent duplicate signups
+        }
     }
 }
 
@@ -117,11 +125,11 @@ async function ensureProfileExists(user) {
                 }]);
 
             if (insertError) throw insertError;
-            
+
             console.log("Created new profile for user:", user.id);
             return false; // Profile was created
         }
-        
+
         return true; // Profile already existed
     } catch (error) {
         console.error("Error ensuring profile exists:", error);
@@ -135,7 +143,7 @@ async function saveToPrivateUsers(userData) {
         const { error } = await client
             .from("private_users")
             .upsert([userData], { onConflict: "id" });
-            
+
         if (error) {
             // Check if it's a permission error (403)
             if (error.code === '42501') {
@@ -144,7 +152,7 @@ async function saveToPrivateUsers(userData) {
             }
             throw error;
         }
-        
+
         return { success: true };
     } catch (error) {
         console.error("Error saving to private_users:", error);
@@ -154,9 +162,28 @@ async function saveToPrivateUsers(userData) {
 
 /* ------------------ SIGN UP ------------------ */
 async function signUp() {
-    const signName = document.querySelector('#name').value;
-    const signEmail = document.querySelector('#email').value;
+    const signName = document.querySelector('#name').value.trim();
+    const signEmail = document.querySelector('#email').value.trim();
     const signPassword = document.querySelector('#password').value;
+
+    // Basic validation
+    if (!signName || !signEmail || !signPassword) {
+        showPopup("Please fill in all fields.", "error");
+        return;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(signEmail)) {
+        showPopup("Please enter a valid email address.", "error");
+        return;
+    }
+
+    // Password validation (at least 6 characters)
+    if (signPassword.length < 6) {
+        showPopup("Password must be at least 6 characters long.", "error");
+        return;
+    }
 
     try {
         // First check if user already exists
@@ -176,11 +203,17 @@ async function signUp() {
         });
 
         if (error) {
-            // Handle rate limiting error specifically
-            if (error.status === 429 || error.code === 'over_email_send_rate_limit') {
-                throw new Error("Too many signup attempts. Please wait a few minutes before trying again.");
+            // Handle specific error cases
+            if (error.message.includes("already registered")) {
+                showPopup("This email is already registered. Please login instead.", "error");
+            } else if (error.message.includes("password")) {
+                showPopup("Password is too weak. Please choose a stronger password.", "error");
+            } else if (error.status === 429 || error.code === 'over_email_send_rate_limit') {
+                showPopup("Too many signup attempts. Please wait a few minutes before trying again.", "error");
+            } else {
+                showPopup("Error signing up: " + error.message, "error");
             }
-            throw error;
+            return;
         }
 
         if (data?.user) {
@@ -190,7 +223,7 @@ async function signUp() {
                 name: signName,
                 email: signEmail
             });
-            
+
             if (!privateUsersResult.success && privateUsersResult.isPermissionError) {
                 console.warn("Skipping private_users update due to permission error");
             } else if (!privateUsersResult.success) {
@@ -205,7 +238,7 @@ async function signUp() {
 
             // Show success message
             showPopup("Signup successful! Please check your email to verify your account.", "success");
-            
+
             // Redirect to verify.html after 2 seconds
             setTimeout(() => {
                 window.location.href = 'verify.html';
@@ -226,18 +259,18 @@ signUpInputs.forEach(input => input.addEventListener('input', () => handleButton
 let signupInProgress = false;
 signUpBtn?.addEventListener('click', async e => {
     e.preventDefault();
-    
+
     if (signupInProgress) {
         showPopup("Please wait, signup is in progress.", "info");
         return;
     }
-    
+
     signupInProgress = true;
     signUpBtn.innerHTML = '<div class="loader"></div>';
     signUpBtn.disabled = true;
-    
+
     await signUp();
-    
+
     signUpBtn.innerHTML = "Sign Up";
     signUpBtn.disabled = false;
     signupInProgress = false;
@@ -245,8 +278,14 @@ signUpBtn?.addEventListener('click', async e => {
 
 /* ------------------ LOGIN ------------------ */
 async function login() {
-    const loginEmail = document.querySelector('#loginEmail').value;
+    const loginEmail = document.querySelector('#loginEmail').value.trim();
     const loginPassword = document.querySelector('#loginPassword').value;
+
+    // Basic validation
+    if (!loginEmail || !loginPassword) {
+        showPopup("Please enter both email and password.", "error");
+        return;
+    }
 
     try {
         const { data, error } = await client.auth.signInWithPassword({
@@ -254,11 +293,26 @@ async function login() {
             password: loginPassword,
         });
 
-        if (error) throw error;
+        if (error) {
+            // Handle specific error cases
+            if (error.message.includes("Invalid login credentials")) {
+                showPopup("Invalid email or password. Please try again.", "error");
+            } else if (error.message.includes("Email not confirmed")) {
+                showPopup("Please verify your email before logging in.", "error");
+                // Show resend verification button
+                const resendBtn = document.getElementById('resendVerificationBtn');
+                if (resendBtn) {
+                    resendBtn.style.display = 'block';
+                }
+            } else {
+                showPopup("Login failed: " + error.message, "error");
+            }
+            return;
+        }
 
         // Ensure profile exists after login
         const profileExists = await ensureProfileExists(data.user);
-        
+
         // Get the updated profile data
         const { data: profile, error: profileError } = await client
             .from("user_profiles")
@@ -274,7 +328,7 @@ async function login() {
             name: data.user.user_metadata?.name || "",
             email: data.user.email
         });
-        
+
         if (!privateUsersResult.success && privateUsersResult.isPermissionError) {
             console.warn("Skipping private_users update due to permission error");
         } else if (!privateUsersResult.success) {
@@ -302,18 +356,18 @@ loginInputs.forEach(input => input.addEventListener('input', () => handleButtonS
 let loginInProgress = false;
 loginBtn?.addEventListener('click', async e => {
     e.preventDefault();
-    
+
     if (loginInProgress) {
         showPopup("Please wait, login is in progress.", "info");
         return;
     }
-    
+
     loginInProgress = true;
     loginBtn.innerHTML = '<div class="loader"></div>';
     loginBtn.disabled = true;
-    
+
     await login();
-    
+
     loginBtn.innerHTML = "Login";
     loginBtn.disabled = false;
     loginInProgress = false;
@@ -395,7 +449,7 @@ async function setupProfile() {
             name: user.user_metadata?.name || full_name || "",
             email: user.email
         });
-        
+
         if (!privateUsersResult.success && privateUsersResult.isPermissionError) {
             console.warn("Skipping private_users update due to permission error");
         } else if (!privateUsersResult.success) {
@@ -441,18 +495,18 @@ async function setupProfile() {
 let profileSetupInProgress = false;
 setUpBtn?.addEventListener("click", async e => {
     e.preventDefault();
-    
+
     if (profileSetupInProgress) {
         showPopup("Please wait, profile setup is in progress.", "info");
         return;
     }
-    
+
     profileSetupInProgress = true;
     setUpBtn.innerHTML = '<div class="loader"></div>';
     setUpBtn.disabled = true;
-    
+
     await setupProfile();
-    
+
     setUpBtn.innerHTML = "Save Profile";
     setUpBtn.disabled = false;
     profileSetupInProgress = false;
@@ -462,12 +516,12 @@ setUpBtn?.addEventListener("click", async e => {
 async function resendVerificationEmail() {
     try {
         const { data: { user }, error: userError } = await client.auth.getUser();
-        
+
         if (userError || !user) {
             showPopup("No user session found. Please sign up again.", "error");
             return;
         }
-        
+
         const { error } = await client.auth.resend({
             type: 'signup',
             email: user.email,
@@ -475,9 +529,9 @@ async function resendVerificationEmail() {
                 emailRedirectTo: window.location.origin + '/setupProfile.html',
             }
         });
-        
+
         if (error) throw error;
-        
+
         showPopup("Verification email resent successfully!", "success");
     } catch (error) {
         console.error("Error resending verification email:", error);
@@ -488,9 +542,10 @@ async function resendVerificationEmail() {
 // Add event listener for resend verification button if it exists
 document.getElementById('resendVerificationBtn')?.addEventListener('click', async e => {
     e.preventDefault();
-    resendVerificationBtn.innerHTML = '<div class="loader"></div>';
+    const resendBtn = e.target;
+    resendBtn.innerHTML = '<div class="loader"></div>';
     await resendVerificationEmail();
-    resendVerificationBtn.innerHTML = "Resend Email";
+    resendBtn.innerHTML = "Resend Email";
 });
 
 /* ------------------ PAGE LOAD AUTH CHECK ------------------ */
@@ -512,15 +567,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.location.href = "dashboard.html";
         }
     }
-    
+
     // Special handling for verify.html page
     if (window.location.pathname.includes('verify.html')) {
         const { user } = await checkAuthentication();
-        
+
         // If user is already verified, redirect to setup profile or dashboard
         if (user && user.email_confirmed_at) {
             const { profile } = await checkAuthentication();
-            
+
             if (!profile || !profile.user_name || profile.user_name.trim() === "") {
                 window.location.href = "setupProfile.html";
             } else {
