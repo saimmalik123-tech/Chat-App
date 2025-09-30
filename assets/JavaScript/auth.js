@@ -64,7 +64,6 @@ async function checkAuthentication() {
 async function checkUserExists(email) {
     try {
         // Try to sign in with the email to check if user exists
-        // We don't need the password, just checking existence
         const { data, error } = await client.auth.signInWithPassword({
             email: email,
             password: 'dummy-password-that-should-fail'
@@ -129,6 +128,29 @@ async function ensureProfileExists(user) {
     }
 }
 
+/* ------------------ SAVE TO PRIVATE USERS ------------------ */
+async function saveToPrivateUsers(userData) {
+    try {
+        const { error } = await client
+            .from("private_users")
+            .upsert([userData], { onConflict: "id" });
+            
+        if (error) {
+            // Check if it's a permission error (403)
+            if (error.code === '42501') {
+                console.warn("Permission denied for private_users table. This is a non-critical error.");
+                return { success: false, isPermissionError: true };
+            }
+            throw error;
+        }
+        
+        return { success: true };
+    } catch (error) {
+        console.error("Error saving to private_users:", error);
+        return { success: false, error: error.message };
+    }
+}
+
 /* ------------------ SIGN UP ------------------ */
 async function signUp() {
     const signName = document.querySelector('#name').value;
@@ -161,17 +183,17 @@ async function signUp() {
         }
 
         if (data?.user) {
-            // Try to save to private_users but don't fail if it doesn't work
-            try {
-                await client
-                    .from("private_users")
-                    .upsert([{
-                        id: data.user.id,
-                        name: signName,
-                        email: signEmail
-                    }], { onConflict: "id" });
-            } catch (privateError) {
-                console.error("Private_users error (non-critical):", privateError);
+            // Try to save to private_users
+            const privateUsersResult = await saveToPrivateUsers({
+                id: data.user.id,
+                name: signName,
+                email: signEmail
+            });
+            
+            if (!privateUsersResult.success && privateUsersResult.isPermissionError) {
+                console.warn("Skipping private_users update due to permission error");
+            } else if (!privateUsersResult.success) {
+                console.warn("Non-critical error saving to private_users:", privateUsersResult.error);
             }
 
             // Create profile in user_profiles
@@ -239,17 +261,17 @@ async function login() {
 
         if (profileError) throw profileError;
 
-        // Try to save to private_users but don't fail if it doesn't work
-        try {
-            await client
-                .from("private_users")
-                .upsert([{
-                    id: data.user.id,
-                    name: data.user.user_metadata?.name || "",
-                    email: data.user.email
-                }], { onConflict: "id" });
-        } catch (privateError) {
-            console.error("Private_users error (non-critical):", privateError);
+        // Try to save to private_users
+        const privateUsersResult = await saveToPrivateUsers({
+            id: data.user.id,
+            name: data.user.user_metadata?.name || "",
+            email: data.user.email
+        });
+        
+        if (!privateUsersResult.success && privateUsersResult.isPermissionError) {
+            console.warn("Skipping private_users update due to permission error");
+        } else if (!privateUsersResult.success) {
+            console.warn("Non-critical error saving to private_users:", privateUsersResult.error);
         }
 
         if (!profile.user_name || profile.user_name.trim() === "") {
@@ -360,17 +382,17 @@ async function setupProfile() {
             throw new Error("Username already taken. Please choose another.");
         }
 
-        // Try to save to private_users but don't fail if it doesn't work
-        try {
-            await client
-                .from("private_users")
-                .upsert([{
-                    id: user.id,
-                    name: user.user_metadata?.name || full_name || "",
-                    email: user.email
-                }], { onConflict: "id" });
-        } catch (privateError) {
-            console.error("Private_users error (non-critical):", privateError);
+        // Try to save to private_users
+        const privateUsersResult = await saveToPrivateUsers({
+            id: user.id,
+            name: user.user_metadata?.name || full_name || "",
+            email: user.email
+        });
+        
+        if (!privateUsersResult.success && privateUsersResult.isPermissionError) {
+            console.warn("Skipping private_users update due to permission error");
+        } else if (!privateUsersResult.success) {
+            console.warn("Non-critical error saving to private_users:", privateUsersResult.error);
         }
 
         let avatar_url = "";
