@@ -66,58 +66,59 @@ async function signUp() {
     const signEmail = document.querySelector('#email').value;
     const signPassword = document.querySelector('#password').value;
 
-    const { data, error } = await client.auth.signUp({
-        email: signEmail,
-        password: signPassword,
-        options: {
-            data: { name: signName },
-            emailRedirectTo: window.location.origin + '/setupProfile.html',
-        }
-    });
+    try {
+        const { data, error } = await client.auth.signUp({
+            email: signEmail,
+            password: signPassword,
+            options: {
+                data: { name: signName },
+                emailRedirectTo: window.location.origin + '/setupProfile.html',
+            }
+        });
 
-    if (error) {
+        if (error) throw error;
+
+        if (data?.user) {
+            // Save to private_users with proper error handling
+            const { error: upsertError } = await client
+                .from("private_users")
+                .upsert([{
+                    id: data.user.id,
+                    name: signName,
+                    email: signEmail
+                }], { onConflict: "id" });
+
+            if (upsertError) {
+                console.error("Private_users error:", upsertError);
+                // Continue with signup even if private_users fails
+                showPopup("Account created but profile setup incomplete. Please contact support.", "warning");
+            }
+
+            // Create a basic profile in user_profiles
+            const { error: profileError } = await client
+                .from("user_profiles")
+                .insert([{
+                    user_id: data.user.id,
+                    full_name: signName,
+                    user_name: "",
+                    bio: "",
+                    profile_image_url: "",
+                    is_online: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }]);
+
+            if (profileError) {
+                console.error("User_profiles error:", profileError);
+                showPopup("Account created but profile setup incomplete. Please contact support.", "warning");
+            }
+        }
+
+        showPopup("Signup successful! Please check your email to verify your account.", "success");
+    } catch (error) {
+        console.error("Signup error:", error);
         showPopup("Error signing up: " + error.message, "error");
-        return;
     }
-
-    if (data?.user) {
-        // Save to private_users
-        const { error: upsertError } = await client
-            .from("private_users")
-            .upsert([{
-                id: data.user.id,
-                name: signName,
-                email: signEmail
-            }], { onConflict: "id" });
-
-        if (upsertError) {
-            console.error("Private_users error:", upsertError);
-            showPopup("Error saving user in private_users: " + upsertError.message, "error");
-            return;
-        }
-
-        // Create a basic profile in user_profiles
-        const { error: profileError } = await client
-            .from("user_profiles")
-            .insert([{
-                user_id: data.user.id,
-                full_name: signName,
-                user_name: "",
-                bio: "",
-                profile_image_url: "",
-                is_online: false,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            }]);
-
-        if (profileError) {
-            console.error("User_profiles error:", profileError);
-            showPopup("Error creating profile: " + profileError.message, "error");
-            return;
-        }
-    }
-
-    showPopup("Signup successful! Please check your email to verify your account.", "success");
 }
 
 const signUpBtn = document.querySelector('.signUpBtn');
@@ -136,59 +137,53 @@ async function login() {
     const loginEmail = document.querySelector('#loginEmail').value;
     const loginPassword = document.querySelector('#loginPassword').value;
 
-    const { data, error } = await client.auth.signInWithPassword({
-        email: loginEmail,
-        password: loginPassword,
-    });
+    try {
+        const { data, error } = await client.auth.signInWithPassword({
+            email: loginEmail,
+            password: loginPassword,
+        });
 
-    if (error) {
-        showPopup("Login failed: " + error.message, "error");
-        return;
-    }
+        if (error) throw error;
 
-    // Check if user has a profile
-    const { data: profile, error: profileError } = await client
-        .from("user_profiles")
-        .select("*")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
-
-    if (profileError) {
-        console.error("Profile check error:", profileError);
-        showPopup("Error checking profile: " + profileError.message, "error");
-        return;
-    }
-
-    if (!profile) {
-        const { error: insertProfileError } = await client
+        // Check if user has a profile
+        const { data: profile, error: profileError } = await client
             .from("user_profiles")
-            .insert([{
-                user_id: data.user.id,
-                full_name: data.user.user_metadata?.name || "",
-                user_name: "",
-                bio: "",
-                profile_image_url: "",
-                is_online: false,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            }]);
+            .select("*")
+            .eq("user_id", data.user.id)
+            .maybeSingle();
 
-        if (insertProfileError) {
-            console.error("User_profiles insert error:", insertProfileError);
-            showPopup("Error creating profile: " + insertProfileError.message, "error");
+        if (profileError) throw profileError;
+
+        if (!profile) {
+            const { error: insertProfileError } = await client
+                .from("user_profiles")
+                .insert([{
+                    user_id: data.user.id,
+                    full_name: data.user.user_metadata?.name || "",
+                    user_name: "",
+                    bio: "",
+                    profile_image_url: "",
+                    is_online: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }]);
+
+            if (insertProfileError) throw insertProfileError;
+
+            window.location.href = "setupProfile.html";
             return;
         }
 
-        window.location.href = "setupProfile.html";
-        return;
-    }
+        if (!profile.user_name || profile.user_name.trim() === "") {
+            window.location.href = "setupProfile.html";
+            return;
+        }
 
-    if (!profile.user_name || profile.user_name.trim() === "") {
-        window.location.href = "setupProfile.html";
-        return;
+        window.location.href = "dashboard.html";
+    } catch (error) {
+        console.error("Login error:", error);
+        showPopup("Login failed: " + error.message, "error");
     }
-
-    window.location.href = "dashboard.html";
 }
 
 const loginBtn = document.querySelector('.signInBtn');
@@ -204,14 +199,17 @@ loginBtn?.addEventListener('click', async e => {
 
 /* ------------------ GOOGLE AUTH ------------------ */
 async function handleGoogleAuth() {
-    const { data, error } = await client.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-            redirectTo: window.location.origin + '/oauthHandler.html'
-        }
-    });
+    try {
+        const { data, error } = await client.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: window.location.origin + '/oauthHandler.html'
+            }
+        });
 
-    if (error) {
+        if (error) throw error;
+    } catch (error) {
+        console.error("Google auth error:", error);
         showPopup("Google authentication failed: " + error.message, "error");
     }
 }
@@ -251,115 +249,99 @@ async function setupProfile() {
     const user_name = document.getElementById("username").value.trim();
     const bio = document.getElementById("bio").value.trim();
 
-    const { data: { user }, error: userError } = await client.auth.getUser();
-    if (userError || !user) {
-        showPopup("User not logged in.", "error");
-        return;
-    }
+    try {
+        const { data: { user }, error: userError } = await client.auth.getUser();
+        if (userError || !user) throw new Error("User not logged in.");
 
-    // Check if username is already taken
-    const { data: existingUserName, error: userNameError } = await client
-        .from("user_profiles")
-        .select("user_id")
-        .eq("user_name", user_name)
-        .maybeSingle();
-
-    if (userNameError) {
-        console.error("Username check error:", userNameError);
-        showPopup("Error checking username: " + userNameError.message, "error");
-        return;
-    }
-
-    if (existingUserName && existingUserName.user_id !== user.id) {
-        showPopup("Username already taken. Please choose another.", "error");
-        return;
-    }
-
-    // Save to private_users
-    const { error: upsertError } = await client
-        .from("private_users")
-        .upsert([{
-            id: user.id,
-            name: user.user_metadata?.name || full_name || "",
-            email: user.email
-        }], { onConflict: "id" });
-
-    if (upsertError) {
-        console.error("Private_users error:", upsertError);
-        showPopup("Error saving user in private_users: " + upsertError.message, "error");
-        return;
-    }
-
-    let avatar_url = "";
-    if (avatarFile) {
-        const fileName = `public/${user.id}-${Date.now()}-${avatarFile.name}`;
-        const { error: uploadError } = await client.storage
-            .from("avatars")
-            .upload(fileName, avatarFile, { cacheControl: '3600', upsert: true });
-
-        if (uploadError) {
-            console.error("Avatar upload error:", uploadError);
-            showPopup("Error uploading avatar: " + uploadError.message, "error");
-            return;
-        }
-
-        const { data: urlData } = client.storage.from("avatars").getPublicUrl(fileName);
-        avatar_url = urlData.publicUrl;
-    }
-
-    // Update or insert profile
-    const { data: existingProfile, error: profileCheckError } = await client
-        .from("user_profiles")
-        .select("user_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-    if (profileCheckError) {
-        console.error("Profile check error:", profileCheckError);
-        showPopup("Error checking profile: " + profileCheckError.message, "error");
-        return;
-    }
-
-    if (existingProfile) {
-        const { error: updateError } = await client
+        // Check if username is already taken
+        const { data: existingUserName, error: userNameError } = await client
             .from("user_profiles")
-            .update({
-                full_name,
-                user_name,
-                bio,
-                profile_image_url: avatar_url,
-                updated_at: new Date().toISOString()
-            })
-            .eq("user_id", user.id);
+            .select("user_id")
+            .eq("user_name", user_name)
+            .maybeSingle();
 
-        if (updateError) {
-            console.error("Profile update error:", updateError);
-            showPopup("Error updating profile: " + updateError.message, "error");
-            return;
+        if (userNameError) throw userNameError;
+
+        if (existingUserName && existingUserName.user_id !== user.id) {
+            throw new Error("Username already taken. Please choose another.");
         }
-    } else {
-        const { error: insertError } = await client
+
+        // Save to private_users with error handling
+        try {
+            const { error: upsertError } = await client
+                .from("private_users")
+                .upsert([{
+                    id: user.id,
+                    name: user.user_metadata?.name || full_name || "",
+                    email: user.email
+                }], { onConflict: "id" });
+
+            if (upsertError) {
+                console.error("Private_users error:", upsertError);
+                // Continue with profile setup even if private_users fails
+            }
+        } catch (privateError) {
+            console.error("Private_users operation failed:", privateError);
+        }
+
+        let avatar_url = "";
+        if (avatarFile) {
+            const fileName = `public/${user.id}-${Date.now()}-${avatarFile.name}`;
+            const { error: uploadError } = await client.storage
+                .from("avatars")
+                .upload(fileName, avatarFile, { cacheControl: '3600', upsert: true });
+
+            if (uploadError) throw uploadError;
+
+            const { data: urlData } = client.storage.from("avatars").getPublicUrl(fileName);
+            avatar_url = urlData.publicUrl;
+        }
+
+        // Update or insert profile
+        const { data: existingProfile, error: profileCheckError } = await client
             .from("user_profiles")
-            .insert([{
-                user_id: user.id,
-                full_name,
-                user_name,
-                bio,
-                profile_image_url: avatar_url,
-                is_online: false,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            }]);
+            .select("user_id")
+            .eq("user_id", user.id)
+            .maybeSingle();
 
-        if (insertError) {
-            console.error("Profile insert error:", insertError);
-            showPopup("Error saving profile: " + insertError.message, "error");
-            return;
+        if (profileCheckError) throw profileCheckError;
+
+        if (existingProfile) {
+            const { error: updateError } = await client
+                .from("user_profiles")
+                .update({
+                    full_name,
+                    user_name,
+                    bio,
+                    profile_image_url: avatar_url,
+                    updated_at: new Date().toISOString()
+                })
+                .eq("user_id", user.id);
+
+            if (updateError) throw updateError;
+        } else {
+            const { error: insertError } = await client
+                .from("user_profiles")
+                .insert([{
+                    user_id: user.id,
+                    full_name,
+                    user_name,
+                    bio,
+                    profile_image_url: avatar_url,
+                    is_online: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }]);
+
+            if (insertError) throw insertError;
         }
-    }
 
-    showPopup("Profile saved successfully!", "success");
-    window.location.href = "dashboard.html";
+        showPopup("Profile saved successfully!", "success");
+        window.location.href = "dashboard.html";
+    } catch (error) {
+        console.error("Profile setup error:", error);
+        showPopup("Error saving profile: " + error.message, "error");
+    }
 }
 
 setUpBtn?.addEventListener("click", async e => {
